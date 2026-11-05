@@ -155,6 +155,13 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Custom, left (mint, navy, magenta, near-black)",
          [&](Settings& s) { always(s); custom(s); s.percentTextAlignment = PercentTextAlignment::Left; }},
         {L"Stale marker off", [&](Settings& s) { always(s); s.showStaleWarning = false; }},
+        {L"Provider outages off", [&](Settings& s) { always(s); s.showProviderOutages = false; }},
+        {L"Label 15, logo 50%, outage mark (colorblind)", [&](Settings& s) {
+             always(s);
+             s.labelFontSize = 15;
+             s.logoScale = 50;
+             s.usagePalette = UsagePalette::Colorblind;
+         }},
         {L"Thresholds 20 / 40 / 60", [&](Settings& s) { always(s); thresholds(s, 20, 40, 60); }},
         {L"Unordered 80 / 30 / 20", [&](Settings& s) { always(s); thresholds(s, 80, 30, 20); }},
         {L"Thresholds 0 / 0 / 0", [&](Settings& s) { always(s); thresholds(s, 0, 0, 0); }},
@@ -171,6 +178,8 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Ring", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; }},
         {L"Ring, stale marker off",
          [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.showStaleWarning = false; }},
+        {L"Ring 24, provider outages off",
+         [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.ringSize = 24; s.showProviderOutages = false; }},
         {L"Ring, colorblind", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; s.usagePalette = UsagePalette::Colorblind; }},
         {L"Ring, custom", [&](Settings& s) { s.barLayout = BarLayout::SegmentedRing; custom(s); }},
         {L"Usage graph, custom", [&](Settings& s) { s.barLayout = BarLayout::Sparkline; custom(s); }},

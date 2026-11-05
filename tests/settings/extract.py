@@ -1,4 +1,4 @@
-"""Extract production fragments and named definitions verbatim for the settings suite."""
+"""Extract production fragments, named definitions and constants verbatim for the settings suite."""
 import argparse
 import hashlib
 import json
@@ -68,9 +68,24 @@ HOST = [
     ("fragment", "history/modal.h"),
 ]
 
+# Provider status pages: their parser, on Windows.Data.Json (the one WinRT API allowed here), and
+# the read rules. No network, globals or windows.
+STATUS = [
+    ("fragment", "core/model.h"),
+    ("constant", "kFileTimeUnixEpochOffsetMs"),
+    ("definition", "Utf8ToWide"),
+    ("definition", "ParseIso8601Ms"),
+    ("definition", "GetObj"),
+    ("definition", "GetNum"),
+    ("definition", "GetStr"),
+    ("definition", "GetBool"),
+    ("fragment", "fetch/status-feeds.h"),
+]
+
 TARGETS = {
     "model": (MODEL, "harness.hpp", "fixtures/main.inc"),
     "history": (HISTORY, "harness.hpp", "fixtures/history-main.inc"),
+    "status": (STATUS, "status.hpp", "fixtures/status-main.inc"),
     "host": (HOST, "host.hpp", "fixtures/host-dll.inc"),
     # The same host as the owner window of the capture/foreground popup probe.
     "popup": (HOST, "host.hpp", "fixtures/popup-probe.inc"),
@@ -106,6 +121,14 @@ def definition(text, name):
     return start, balanced(text, start)
 
 
+def constant(text, name):
+    """A one-line `static constexpr` constant, with its line break."""
+    matches = list(re.finditer(r"(?m)^static constexpr [^\n=;{}]+?\b" + re.escape(name) + r" = [^\n;{}]+;\n", text))
+    if len(matches) != 1:
+        raise ValueError(f"Expected one constant {name}, found {len(matches)}")
+    return matches[0].start(), matches[0].end()
+
+
 def fragment(text, path):
     """A whole fragment: after its `// src/<path>` marker line, up to the next marker line."""
     starts = [m.end() for m in re.finditer(r"(?m)^// src/" + re.escape(path) + r"\n", text)]
@@ -131,7 +154,7 @@ def generate(source, output, expected_hash, target="model"):
     chunks = ["// GENERATED: production sections below are extracted verbatim.\n",
               f'#include "{header}"\n']
     for kind, name in sections:
-        a, b = fragment(text, name) if kind == "fragment" else definition(text, name)
+        a, b = {"fragment": fragment, "definition": definition, "constant": constant}[kind](text, name)
         code = text[a:b]
         line = text.count("\n", 0, a) + 1
         manifest["extractions"].append({"kind": kind, "name": name, "line": line,

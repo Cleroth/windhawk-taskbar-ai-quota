@@ -54,7 +54,8 @@ static void RunDisplayPageTests() {
             {SettingsField::ShowExtraBarAmounts, 1}, {SettingsField::UsagePalette, 2},
             {SettingsField::UsageColorBelowYellow, 0x102030}, {SettingsField::UsageColorRed, 0xFFFFFF},
             {kYellow, 30}, {kOrange, 60}, {kRed, 80},
-            {SettingsField::ShowStaleWarning, 0}, {SettingsField::ShowOpenAiExtraLimits, 1}};
+            {SettingsField::ShowStaleWarning, 0}, {SettingsField::ShowProviderOutages, 0},
+            {SettingsField::ShowOpenAiExtraLimits, 1}};
         for (auto [field, value] : values) {
             SettingsAssign(s, field, value);
             CHECK(SettingsFieldValue(s, field) == value);
@@ -62,7 +63,8 @@ static void RunDisplayPageTests() {
         CHECK(s.material == Material::TintedWallpaper && s.barMode == BarMode::Remaining &&
               s.percentTextVisibility == PercentTextVisibility::Always &&
               s.percentTextAlignment == PercentTextAlignment::Right && s.showExtraBarAmounts &&
-              s.usagePalette == UsagePalette::Custom && !s.showStaleWarning && s.showOpenAiExtraLimits);
+              s.usagePalette == UsagePalette::Custom && !s.showStaleWarning && !s.showProviderOutages &&
+              s.showOpenAiExtraLimits);
         // Each color field sets its band's custom color only.
         CHECK((s.customUsageColors == std::array<COLORREF, 4>{0x102030, kDefaultUsageColors[1], kDefaultUsageColors[2],
                                                               0xFFFFFF}));
@@ -99,7 +101,7 @@ static void RunDisplayPageTests() {
               !SettingsFieldRange(SettingsField::UsagePalette) && !SettingsFieldRange(SettingsField::UsageColorRed));
     });
 
-    Run("display reset: the fifteen Display fields back to defaults; every scalar setting in one page reset", [] {
+    Run("display reset: the sixteen Display fields back to defaults; every scalar setting in one page reset", [] {
         const Settings defaults;
         Settings changed;
         // Any material but the default.
@@ -114,6 +116,7 @@ static void RunDisplayPageTests() {
         changed.orangeThreshold = 40;
         changed.redThreshold = 60;
         changed.showStaleWarning = false;
+        changed.showProviderOutages = false;
         changed.showOpenAiExtraLimits = true;
         // Other pages' fields stay.
         changed.barLength = 220;
@@ -132,18 +135,19 @@ static void RunDisplayPageTests() {
         expected.orangeThreshold = defaults.orangeThreshold;
         expected.redThreshold = defaults.redThreshold;
         expected.showStaleWarning = defaults.showStaleWarning;
+        expected.showProviderOutages = defaults.showProviderOutages;
         expected.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetDisplay, 0);
         CHECK(reset == expected);
         std::vector<SettingsField> display = SettingsGroupFields(SettingsField::ResetDisplay);
-        CHECK(display.size() == 15 && display[0] == SettingsField::Material);
+        CHECK(display.size() == 16 && display[0] == SettingsField::Material);
         for (SettingsField field : display) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
             CHECK(SettingsFieldValue(changed, field) != SettingsFieldValue(defaults, field));
         }
 
-        // All 65 scalar settings changed: the four page resets restore every one, and no field
+        // All 66 scalar settings changed: the four page resets restore every one, and no field
         // belongs to two groups (Show on holds the monitor mode and number; Keep history and its
         // custom days both set the retention).
         Settings every = changed;
@@ -206,7 +210,7 @@ static void RunDisplayPageTests() {
         fresh.accounts = every.accounts;
         CHECK(restored == fresh);
         std::sort(seen.begin(), seen.end());
-        CHECK(seen.size() == 65 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+        CHECK(seen.size() == 66 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     });
 
     Run("projection: thresholds stay ordered while typing; out-of-range and bad text", [] {
@@ -349,6 +353,7 @@ static void RunDisplayPageTests() {
             CHECK_NEAR(slider.rect.right - slider.rect.left, 220);
         }
         CHECK(Control(frame, SettingsField::ShowStaleWarning).selected);
+        CHECK(Control(frame, SettingsField::ShowProviderOutages).selected);
         CHECK(!Control(frame, SettingsField::ShowOpenAiExtraLimits).selected);
         CHECK(Control(frame, SettingsField::ResetDisplay).text == L"Reset");
         for (PCWSTR text : {L"Appearance", L"Values", L"Usage colors", L"Status", L"Details flyout",
@@ -357,7 +362,8 @@ static void RunDisplayPageTests() {
                             L"Also the level for threshold notifications."}) {
             CHECK(HasText(frame, text));
         }
-        CHECK(TextCount(frame, L"Material, values, usage colors, stale marker and flyout details.") == 1);
+        CHECK(TextCount(frame, L"Material, values, usage colors, status marks and flyout details.") == 1);
+        CHECK(HasText(frame, L"Show provider outages"));
         CHECK(!HasText(frame, L"Stacked and Vertical bars only") && !HasText(frame, L"Show percentage text"));
 
         // Threshold dots: the usage colors, 14 DIP after the card padding with the title 16 DIP
@@ -651,13 +657,14 @@ static void RunDisplayPageTests() {
     });
 
     Run("preview: usage colors follow the palette and the thresholds; the stale account greys and marks", [] {
-        // Go is stale: grey in either palette.
+        // Go is stale: grey in either palette. The orange band's color also paints the OpenAI
+        // sample's outage glyph.
         auto fills = [](const Settings& s, uint32_t color) { return OpsOfColor(Strip(s), color).size(); };
         Settings s = StackedSettings();
-        CHECK(fills(s, 0xFF43A047) == 5 && fills(s, 0xFFFDD835) == 2 && fills(s, 0xFFFB8C00) == 1 &&
+        CHECK(fills(s, 0xFF43A047) == 5 && fills(s, 0xFFFDD835) == 2 && fills(s, 0xFFFB8C00) == 1 + 1 &&
               fills(s, 0xFFE53935) == 1 && fills(s, 0xFF9E9E9E) == 1);
         s.usagePalette = UsagePalette::Colorblind;
-        CHECK(fills(s, 0xFF0072B2) == 5 && fills(s, 0xFF56B4E9) == 2 && fills(s, 0xFFE69F00) == 1 &&
+        CHECK(fills(s, 0xFF0072B2) == 5 && fills(s, 0xFF56B4E9) == 2 && fills(s, 0xFFE69F00) == 1 + 1 &&
               fills(s, 0xFFD55E00) == 1 && fills(s, 0xFF9E9E9E) == 1);
         CHECK(fills(s, 0xFF43A047) == 0 && fills(s, 0xFFE53935) == 0);
         s.barLayout = BarLayout::SegmentedRing;
@@ -668,7 +675,7 @@ static void RunDisplayPageTests() {
         s.customUsageColors = {RGB(0x11, 0x22, 0x33), RGB(0x44, 0x55, 0x66), RGB(0x77, 0x88, 0x99), RGB(0xAA, 0xBB, 0xCC)};
         CHECK(fills(s, 0xFF112233) == 0 && fills(s, 0xFF43A047) == 5);
         s.usagePalette = UsagePalette::Custom;
-        CHECK(fills(s, 0xFF112233) == 5 && fills(s, 0xFF445566) == 2 && fills(s, 0xFF778899) == 1 &&
+        CHECK(fills(s, 0xFF112233) == 5 && fills(s, 0xFF445566) == 2 && fills(s, 0xFF778899) == 1 + 1 &&
               fills(s, 0xFFAABBCC) == 1 && fills(s, 0xFF9E9E9E) == 1);
         CHECK(fills(s, 0xFF43A047) == 0 && fills(s, 0xFFE53935) == 0);
         // The samples sit mid-band (red past the quota): thresholds move their values, every band
@@ -712,5 +719,127 @@ static void RunDisplayPageTests() {
             s.showStaleWarning = false;
             CHECK(marks(Strip(s), L"!") == 0);
         }
+    });
+
+    Run("preview: provider outages mark the OpenAI sample in the stale mark's place; off, none", [] {
+        // The outage glyphs in the mark's colors, or its halos in the dark taskbar's color.
+        const uint32_t haloColor = TilePaletteFor(false).badgeHalo;
+        auto glyphOps = [](const SettingsPreviewStrip& strip, bool halo, uint32_t haloColor) {
+            std::vector<SettingsPreviewOp> ops;
+            for (const SettingsPreviewOp& op : strip.ops) {
+                if (op.kind == SettingsPreviewOp::Kind::Text && op.text == kOutageGlyph &&
+                    (op.color == haloColor) == halo) {
+                    ops.push_back(op);
+                }
+            }
+            return ops;
+        };
+        auto glyphs = [&](const SettingsPreviewStrip& strip) { return glyphOps(strip, false, haloColor); };
+        auto halos = [&](const SettingsPreviewStrip& strip) { return glyphOps(strip, true, haloColor); };
+        auto marks = [](const SettingsPreviewStrip& strip) {
+            return std::count_if(strip.ops.begin(), strip.ops.end(), [](const SettingsPreviewOp& op) {
+                return op.kind == SettingsPreviewOp::Kind::Text && op.text == L"!";
+            });
+        };
+        // Bars: OAI's label and a thin space, then the glyph in the icon font at the label's 11 DIPs,
+        // in the palette's orange at the label's opacity; the label's box holds both, then the label
+        // gap.
+        Settings s = StackedSettings();
+        for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
+            s.barLayout = layout;
+            SettingsPreviewStrip strip = Strip(s);
+            std::vector<SettingsPreviewOp> glyph = glyphs(strip);
+            std::vector<SettingsPreviewOp> label = TextOps(strip, L"OAI\u2009");
+            CHECK(glyph.size() == 1 && label.size() == 1 && marks(strip) == 1 && halos(strip).empty());
+            CHECK(glyph[0].color == 0xFFFB8C00 && glyph[0].style.family == UiFamily::Icons);
+            CHECK_NEAR(glyph[0].style.size, 11);
+            CHECK_NEAR(glyph[0].opacity, 0.8);
+            CHECK_NEAR(glyph[0].rect.left, label[0].rect.right);
+            CHECK(glyph[0].rect.right - glyph[0].rect.left > 10 && glyph[0].rect.right - glyph[0].rect.left < 12);
+            CHECK(glyph[0].rect.top >= label[0].rect.top && glyph[0].rect.bottom <= label[0].rect.bottom + 0.5f);
+            if (layout == BarLayout::Stacked) {
+                CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, glyph[0].rect.right + 3);
+            }
+            s.showProviderOutages = false;
+            strip = Strip(s);
+            CHECK(glyphs(strip).empty() && marks(strip) == 1 && TextOps(strip, L"OAI").size() == 1);
+            s.showProviderOutages = true;
+        }
+        // Tiles: OAI's text identity takes the glyph at its top-right corner, as Go's logo the "!":
+        // on the 32 DIP ring a third of it, beside the meters 3/4 of the 16 DIP logo it stands for;
+        // over its halo, a ninth of its size larger on each side.
+        const std::pair<BarLayout, double> tileMarks[] = {
+            {BarLayout::SegmentedRing, 32.0 / 3}, {BarLayout::LogoHeadline, 12}, {BarLayout::Sparkline, 12}};
+        for (auto [layout, size] : tileMarks) {
+            s.barLayout = layout;
+            SettingsPreviewStrip strip = Strip(s);
+            std::vector<SettingsPreviewOp> glyph = glyphs(strip), halo = halos(strip);
+            CHECK(glyph.size() == 1 && halo.size() == 1 && marks(strip) == 1);
+            CHECK(glyph[0].color == 0xFFFB8C00);
+            CHECK_NEAR(glyph[0].style.size, size);
+            CHECK_NEAR(halo[0].style.size, size * 11 / 9);
+            CHECK_NEAR(halo[0].rect.right, glyph[0].rect.right + size / 9);
+            CHECK_NEAR(halo[0].rect.top, glyph[0].rect.top - size / 9);
+            CHECK(glyph[0].rect.right <= strip.columns[0].right);
+            s.showProviderOutages = false;
+            CHECK(glyphs(Strip(s)).empty() && halos(Strip(s)).empty());
+            s.showProviderOutages = true;
+        }
+        // A test account's outage takes the place of its stale "!", red for a major outage. On its
+        // 15 DIP logo the mark is 11.25 DIPs, its box's top-right corner 4/9 of that (5) right of the
+        // logo and 3/9 (3.75) above, its halo 1.25 DIPs larger on each side; the identity's right
+        // margin takes the 5 DIPs (the "!": 4), so the box is a DIP wider and the bars move with it.
+        std::vector<AccountConfig> accounts = {Account(L"anthropic", L"CC", {true, true, false, false})};
+        accounts[0].tileIdentity = TileIdentity::Logo;
+        AccountData failed = Fresh({30, 40, -1, -1});
+        failed.stale = true;
+        failed.error = L"HTTP 500";
+        std::vector<AccountData> data = {failed};
+        std::vector<OutageLevel> major = {OutageLevel::Major};
+        s = StackedSettings();
+        SettingsPreviewStrip marked = StripOf(s, accounts, data);
+        SettingsPreviewStrip outage = StripOf(s, accounts, data, 48, &major);
+        CHECK(marks(marked) == 1 && glyphs(marked).empty());
+        CHECK(marks(outage) == 0 && glyphs(outage).size() == 1 && glyphs(outage)[0].color == 0xFFE53935);
+        const SettingsPreviewOp logo = OpsOfKind(outage, SettingsPreviewOp::Kind::Logo)[0];
+        CHECK_NEAR(glyphs(outage)[0].style.size, 11.25);
+        CHECK_NEAR(glyphs(outage)[0].rect.right, logo.rect.right + 5);
+        CHECK_NEAR(glyphs(outage)[0].rect.top, logo.rect.top - 3.75);
+        CHECK(halos(outage).size() == 1);
+        CHECK_NEAR(halos(outage)[0].style.size, 13.75);
+        CHECK_NEAR(halos(outage)[0].rect.right, logo.rect.right + 6.25);
+        CHECK_NEAR(halos(outage)[0].rect.top, logo.rect.top - 5);
+        // The halo is drawn first, under the glyph.
+        auto at = [&](const SettingsPreviewOp& op) {
+            return std::find_if(outage.ops.begin(), outage.ops.end(), [&](const SettingsPreviewOp& o) {
+                return o.kind == op.kind && o.text == op.text && o.color == op.color && o.rect.left == op.rect.left;
+            });
+        };
+        CHECK(at(halos(outage)[0]) < at(glyphs(outage)[0]));
+        CHECK_NEAR(outage.columns[0].right - outage.columns[0].left, marked.columns[0].right - marked.columns[0].left + 1);
+        CHECK_NEAR(outage.columns[0].bottom - outage.columns[0].top, marked.columns[0].bottom - marked.columns[0].top);
+        CHECK_NEAR(OpsOfColor(outage, 0x46808080)[0].rect.left, OpsOfColor(marked, 0x46808080)[0].rect.left + 1);
+        // At 50% the 7.5 DIP logo takes the 7 DIP minimum: 3.11 DIPs right (the box 0.89 narrower
+        // than with the "!"), 2.33 above; at 200% the 30 DIP logo the 14 DIP cap: 6.22 right (2.22
+        // wider), 4.67 above. A 96 DIP taskbar holds the largest.
+        const std::tuple<int, double, double, double> scales[] = {{50, 7, 28.0 / 9, 21.0 / 9}, {200, 14, 56.0 / 9, 42.0 / 9}};
+        for (auto [scale, size, right, top] : scales) {
+            s.logoScale = scale;
+            SettingsPreviewStrip scaledMarked = StripOf(s, accounts, data, 96);
+            SettingsPreviewStrip scaled = StripOf(s, accounts, data, 96, &major);
+            const SettingsPreviewOp scaledLogo = OpsOfKind(scaled, SettingsPreviewOp::Kind::Logo)[0];
+            CHECK(glyphs(scaled).size() == 1 && halos(scaled).size() == 1);
+            // Fractional DIPs, summed in floats.
+            CHECK_NEAR(glyphs(scaled)[0].style.size, size);
+            CHECK(NearDip(glyphs(scaled)[0].rect.right, scaledLogo.rect.right + right));
+            CHECK(NearDip(glyphs(scaled)[0].rect.top, scaledLogo.rect.top - top));
+            CHECK(NearDip(halos(scaled)[0].rect.right, scaledLogo.rect.right + right + size / 9));
+            CHECK(NearDip(halos(scaled)[0].rect.top, scaledLogo.rect.top - top - size / 9));
+            CHECK(NearDip(scaled.columns[0].right - scaled.columns[0].left,
+                          scaledMarked.columns[0].right - scaledMarked.columns[0].left + right - 4));
+        }
+        s.logoScale = 100;
+        s.showProviderOutages = false;
+        CHECK(glyphs(StripOf(s, accounts, data, 48, &major)).empty() && marks(StripOf(s, accounts, data, 48, &major)) == 1);
     });
 }

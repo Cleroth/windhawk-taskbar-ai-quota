@@ -46,9 +46,15 @@ static bool DisableRedirects(HINTERNET req) {
     return WinHttpSetOption(req, WINHTTP_OPTION_REDIRECT_POLICY, &policy, sizeof(policy)) != FALSE;
 }
 
+// `timeoutMs` (0: the defaults) bounds each of resolving, connecting, sending and every receive,
+// and gives up on a response still arriving twice that long after the request began. It can't
+// interrupt a stage already waiting.
 static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR userAgent,
-                              const std::wstring& headers, const std::string& body = {}) {
+                              const std::wstring& headers, const std::string& body = {},
+                              DWORD timeoutMs = 0) {
     HttpResult res;
+    const ULONGLONG deadline = timeoutMs ? GetTickCount64() + 2ULL * timeoutMs : 0;
+    auto late = [&] { return deadline && GetTickCount64() > deadline; };
     HINTERNET ses = WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS,
                                 0);
@@ -57,7 +63,11 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
     HINTERNET req = nullptr;
 
     if (ses && !g_unloading) {
-        WinHttpSetTimeouts(ses, 5000, 5000, 5000, 10000);
+        if (timeoutMs) {
+            WinHttpSetTimeouts(ses, (int)timeoutMs, (int)timeoutMs, (int)timeoutMs, (int)timeoutMs);
+        } else {
+            WinHttpSetTimeouts(ses, 5000, 5000, 5000, 10000);
+        }
         con = WinHttpConnect(ses, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
         if (con && !TrackHttpHandle(con)) con = nullptr;
         req = con ? WinHttpOpenRequest(con, method, path, nullptr,
@@ -72,7 +82,7 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
         WinHttpSendRequest(req, headers.c_str(), (DWORD)headers.size(),
                            body.empty() ? WINHTTP_NO_REQUEST_DATA : (LPVOID)body.data(),
                            (DWORD)body.size(), (DWORD)body.size(), 0) &&
-        WinHttpReceiveResponse(req, nullptr)) {
+        !late() && WinHttpReceiveResponse(req, nullptr)) {
         DWORD status = 0, sz = sizeof(status);
         WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
                             WINHTTP_HEADER_NAME_BY_INDEX, &status, &sz,
@@ -120,7 +130,7 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
         bool bodyOk = true;
         for (;;) {
             DWORD available = 0;
-            if (!WinHttpQueryDataAvailable(req, &available)) {
+            if (late() || !WinHttpQueryDataAvailable(req, &available)) {
                 bodyOk = false;
                 break;
             }
@@ -134,7 +144,7 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
             }
             res.body.resize(prev + available);
             DWORD read = 0;
-            if (!WinHttpReadData(req, res.body.data() + prev, available, &read)) {
+            if (late() || !WinHttpReadData(req, res.body.data() + prev, available, &read)) {
                 res.body.resize(prev);
                 bodyOk = false;
                 break;

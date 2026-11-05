@@ -310,6 +310,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         // Builds before palettes read only this switch; they show Custom as the default palette.
         setBool(L"colorblind", s.usagePalette == UsagePalette::Colorblind);
         setBool(L"staleWarning", s.showStaleWarning);
+        setBool(L"providerOutages", s.showProviderOutages);
         setString(L"material", s.material == Material::Mica ? L"mica" :
                                s.material == Material::MicaAlt ? L"micaAlt" :
                                s.material == Material::TintedWallpaper ? L"tintedWallpaper" :
@@ -563,6 +564,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
             }
         }
         s.showStaleWarning = getBoolDefault(L"staleWarning", true);
+        s.showProviderOutages = getBoolDefault(L"providerOutages", true);
         // A missing or unknown material keeps the default.
         std::wstring material = GetStr(root, L"material");
         s.material = material == L"acrylic" ? Material::Acrylic :
@@ -812,6 +814,7 @@ static void PublishSettings(Settings s, uint64_t oldIdentity, uint64_t newIdenti
         ++g_burnUpPolicyGeneration;
         ResetBurnUpCurvesLocked();
     }
+    if (s.showProviderOutages != g_settings.showProviderOutages) ++g_providerStatusPolicy;
     std::vector<AccountData> newData(s.accounts.size());
     std::vector<bool> oldDataUsed(g_data.size(), false);
     for (size_t i = 0; i < s.accounts.size(); i++) {

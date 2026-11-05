@@ -1,5 +1,5 @@
 // Settings > Display: the material of the details flyout and the windows, what the meters show,
-// their usage colors and thresholds, the stale marker and the OpenAI details (approved mockup
+// their usage colors and thresholds, the stale and outage marks and the OpenAI details (approved mockup
 // display.png, Appearance aside). The preview card is in the shell's pinned header
 // (settings/preview.h). Pure builder.
 
@@ -142,6 +142,14 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
         spec.description = {{L"Adds ! when a refresh failed or is overdue."}};
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowStaleWarning);
     }
+    {
+        UiCardSpec spec;
+        spec.title = L"Show provider outages";
+        spec.description = {{L"A warning triangle on an account while its provider's status page reports a problem "
+                             L"with a service it uses: in the orange usage color for degraded service, a partial "
+                             L"outage or maintenance, the red one for a major outage. Off: no status pages are read."}};
+        y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowProviderOutages);
+    }
 
     y = UiAddSection(items, id, x, y + 20, width, L"Details flyout");
     {
@@ -154,6 +162,6 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
 
     UiCardSpec reset;
     reset.title = L"Reset Display to defaults";
-    reset.description = {{L"Material, values, usage colors, stale marker and flyout details."}};
+    reset.description = {{L"Material, values, usage colors, status marks and flyout details."}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetDisplay, L"Reset");
 }

@@ -22,11 +22,13 @@ static SettingsPreviewStrip Strip(const Settings& settings, double taskbar = 48,
     return SettingsPreviewLayout(TestGraphics(), settings, taskbar, scale, kNow, gallery, false, 0xFFFFFFFF);
 }
 
-// The preview of `accounts` with their `data` in place of the sample accounts.
+// The preview of `accounts` with their `data` (and their providers' outage levels) in place of the
+// sample accounts.
 static SettingsPreviewStrip StripOf(const Settings& settings, const std::vector<AccountConfig>& accounts,
-                                    const std::vector<AccountData>& data, double taskbar = 48) {
+                                    const std::vector<AccountData>& data, double taskbar = 48,
+                                    const std::vector<OutageLevel>* outages = nullptr) {
     return SettingsPreviewLayout(TestGraphics(), settings, taskbar, 1, kNow, false, false, 0xFFFFFFFF, &accounts,
-                                 &data);
+                                 &data, outages);
 }
 
 // The bar label's line at `size` DIPs, from Segoe UI Variable's design metrics (2048 units per em:
@@ -434,15 +436,24 @@ static void RunLayoutTests() {
         CHECK(always.size() == 10 && always[0].hover == -1);
         s.percentTextVisibility = PercentTextVisibility::Never;
         CHECK(percents(Strip(s)).empty());
-        // Left labels: the box's padding (the 3 DIP account margin) into it, the label, the label
-        // gap, then the 100 DIP bars, the padding before its end.
+        // Left labels: the box's padding (the 3 DIP account margin) into it, the label (OAI's with
+        // its sample outage glyph after it), the label gap, then the 100 DIP bars, the padding
+        // before its end.
         s = StackedSettings();
         strip = Strip(s);
         const SettingsPreviewOp label = FirstText(strip);
-        CHECK(label.text == L"OAI");
+        const SettingsPreviewOp glyph = TextOps(strip, kOutageGlyph).at(0);
+        CHECK(label.text == L"OAI\u2009");
         CHECK_NEAR(label.rect.left, strip.columns[0].left + 3);
-        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, label.rect.right + 3);
-        CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 3 + label.rect.right - label.rect.left + 3 + 100 + 3);
+        CHECK_NEAR(glyph.rect.left, label.rect.right);
+        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, glyph.rect.right + 3);
+        CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 3 + glyph.rect.right - label.rect.left + 3 + 100 + 3);
+        // Without the glyph, the label alone.
+        s.showProviderOutages = false;
+        strip = Strip(s);
+        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, FirstText(strip).rect.right + 3);
+        CHECK_NEAR(strip.columns[0].right - strip.columns[0].left,
+                   3 + FirstText(strip).rect.right - FirstText(strip).rect.left + 3 + 100 + 3);
         // Quota keys add a ceil(9 * 1.4) + 3 DIP column before each track.
         s.showBarLabels = true;
         strip = Strip(s);

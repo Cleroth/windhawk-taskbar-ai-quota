@@ -8,6 +8,9 @@
 // every column takes the tiles' hover and open-flyout background. Values, identity text and
 // geometry come from the meter model (meter-model.h).
 
+// The icon font of the outage mark, as the details flyout's glyphs use it.
+static constexpr PCWSTR kTaskbarIconFont = L"Segoe Fluent Icons, Segoe MDL2 Assets";
+
 // A tile shape (meter-model.h), moved `offset` DIPs right and down: closed figures to fill, or
 // open ones to stroke. PathGeometry fills even-odd by default, as the outline expects.
 static Geometry TileOutlineGeometry(TileOutline const& outline, double offset, bool closed = true) {
@@ -108,7 +111,7 @@ static double TileTextWidthPerPt(TextBlock const& text) {
 
 // Builds account `index`'s identity into `tile`: the provider logo (in its brand colors when
 // chosen), with a number badge when another configured account, hidden or not, shares the
-// provider, or text, and the stale-warning mark. Ring tiles
+// provider, or text, and the stale and outage marks. Ring tiles
 // resize the logo to their hole and place the badge; other tiles take a 16 DIP logo, bar
 // columns 15 DIP, at the logo size. UpdateTileIdentity applies its state.
 static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t index,
@@ -216,6 +219,23 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
     tile.warn.Margin({0, -3, -4, 0});
     tile.warn.Visibility(Visibility::Collapsed);
     identity.Children().Append(tile.warn);
+    // The outage mark in the same corner, over its halo, in its own color: the stale mark's
+    // inherited text color tells UpdateQuotaUi the taskbar's theme. The icon font's cap height is
+    // its em, so tight line bounds keep the whole triangle. UpdateTileIdentity sizes and places
+    // them.
+    auto outageGlyph = [&] {
+        TextBlock glyph;
+        glyph.Text(kOutageGlyph);
+        glyph.FontFamily(FontFamily(kTaskbarIconFont));
+        glyph.TextLineBounds(TextLineBounds::Tight);
+        glyph.HorizontalAlignment(HorizontalAlignment::Right);
+        glyph.VerticalAlignment(VerticalAlignment::Top);
+        glyph.Visibility(Visibility::Collapsed);
+        identity.Children().Append(glyph);
+        return glyph;
+    };
+    tile.outageHalo = outageGlyph();
+    tile.outage = outageGlyph();
     return identity;
 }
 
@@ -445,8 +465,8 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     return column;
 }
 
-// The identity's state: dimmed while stale, like a label; the warning mark in place of the
-// label's "!"; the badge's halo color for a light (`light`) or dark taskbar.
+// The identity's state: dimmed while stale, like a label; the stale or outage mark in place of the
+// label's "!" or glyph; the badge's halo color for a light (`light`) or dark taskbar.
 static void UpdateTileIdentity(TileUiRefs const& tile, AppliedState& ap, AccountMeters const& meters,
                                MeterDisplay const& display, bool light) {
     if (!tile.identity) return;
@@ -454,9 +474,39 @@ static void UpdateTileIdentity(TileUiRefs const& tile, AppliedState& ap, Account
         tile.identity.Opacity(meters.identityOpacity);
         ap.identityOpacity = meters.identityOpacity;
     }
-    if ((meters.warn ? 1 : 0) != ap.tileWarn) {
-        tile.warn.Visibility(meters.warn ? Visibility::Visible : Visibility::Collapsed);
-        ap.tileWarn = meters.warn ? 1 : 0;
+    if ((int)meters.mark != ap.tileMark) {
+        tile.warn.Visibility(meters.mark == IdentityMark::Stale ? Visibility::Visible : Visibility::Collapsed);
+        Visibility outage = meters.mark == IdentityMark::Outage ? Visibility::Visible : Visibility::Collapsed;
+        if (tile.outage) tile.outage.Visibility(outage);
+        if (tile.outageHalo) tile.outageHalo.Visibility(outage);
+        ap.tileMark = (int)meters.mark;
+    }
+    if (tile.outage && meters.markColor && meters.markColor != ap.tileMarkColor) {
+        tile.outage.Foreground(SolidColorBrush(ArgbColor(meters.markColor)));
+        ap.tileMarkColor = meters.markColor;
+    }
+    if (tile.outageHalo && (light ? 1 : 0) != ap.tileMarkLight) {
+        tile.outageHalo.Foreground(SolidColorBrush(ArgbColor(TilePaletteFor(light).badgeHalo)));
+        ap.tileMarkLight = light ? 1 : 0;
+    }
+    // The outage mark's size and place (meter-model.h): past the identity's top-right corner, or
+    // on ring tiles where the "!" goes; its halo centred under it. The left and bottom margins take
+    // each box out of the identity's size, as the "!" is, so it never grows a small text identity.
+    if (tile.outage && tile.outageHalo && meters.markSize > 0) {
+        bool ring = IsRingTile(tile.layout);
+        double size = meters.markSize;
+        double right = ring ? -3 : -kOutageMarkRight * size, top = ring ? meters.ringWarnTop : -kOutageMarkTop * size;
+        if (size != ap.tileMarkSize || top != ap.tileMarkTop) {
+            auto place = [](TextBlock const& glyph, double size, double right, double top) {
+                glyph.FontSize(size);
+                glyph.Margin({-right - size, top, right, -top - size});
+            };
+            double grow = size * kOutageHaloShare;
+            place(tile.outage, size, right, top);
+            place(tile.outageHalo, size + 2 * grow, right - grow, top - grow);
+            ap.tileMarkSize = size;
+            ap.tileMarkTop = top;
+        }
     }
     if (tile.badgeHalo && (light ? 1 : 0) != ap.badgeLight) {
         tile.badgeHalo.Color(ArgbColor(BadgeColorsFor(display.badgeColor, light).halo));

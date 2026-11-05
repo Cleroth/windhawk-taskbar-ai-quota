@@ -314,6 +314,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     const uint64_t historySession = NowUnixMs();
     bool curvesRecording = false;  // Recording was active last round, so curves may be published.
     BurnUpSampleCache curveSamples;  // Journal tails of recorded accounts, kept between rounds.
+    ProviderStatusPoll providerStatus;  // Status page reads, on their own cadence.
     ULONGLONG fastRecheckUntilMs = GetTickCount64() + 60000;
     bool waitingForTaskbar = false;
     while (!g_unloading) {
@@ -811,6 +812,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         } else if (curvesPublished) {
             PostUiUpdate();
         }
+        // Status pages after the round's polls and notifications, so they never hold them up.
+        ULONGLONG statusDueTick = PollProviderStatuses(providerStatus);
 
         DWORD waitMs = (DWORD)intervalMin * 60000;
         if (anyError) waitMs = std::min(waitMs, (DWORD)120000);
@@ -828,6 +831,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         if (nextHistoryMaintenanceMs) {
             waitMs = (DWORD)std::min<ULONGLONG>(waitMs,
                 nextHistoryMaintenanceMs > nowMs ? nextHistoryMaintenanceMs - nowMs : 0);
+        }
+        if (statusDueTick) {
+            ULONGLONG tick = GetTickCount64();
+            waitMs = (DWORD)std::min<ULONGLONG>(waitMs, statusDueTick > tick ? statusDueTick - tick : 0);
         }
 
         HANDLE handles[2] = {g_stopEvent, g_refreshEvent};

@@ -83,6 +83,7 @@ enum class SettingsField : uint8_t {
     OrangeThreshold,
     RedThreshold,
     ShowStaleWarning,
+    ShowProviderOutages,
     ShowOpenAiExtraLimits,
     // Accounts: fields of the account a draft's key names
     AccountLabel,         // Text, trimmed; unique per provider
@@ -202,7 +203,7 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::UsageColorOrange,    SettingsField::UsageColorRed,
                     SettingsField::YellowThreshold,     SettingsField::OrangeThreshold,
                     SettingsField::RedThreshold,        SettingsField::ShowStaleWarning,
-                    SettingsField::ShowOpenAiExtraLimits};
+                    SettingsField::ShowProviderOutages, SettingsField::ShowOpenAiExtraLimits};
         default: return {};
     }
 }
@@ -277,6 +278,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::OrangeThreshold: return s.orangeThreshold;
         case SettingsField::RedThreshold: return s.redThreshold;
         case SettingsField::ShowStaleWarning: return s.showStaleWarning;
+        case SettingsField::ShowProviderOutages: return s.showProviderOutages;
         case SettingsField::ShowOpenAiExtraLimits: return s.showOpenAiExtraLimits;
         default: return 0;
     }
@@ -402,6 +404,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::OrangeThreshold: s.orangeThreshold = value; break;
         case SettingsField::RedThreshold: s.redThreshold = value; break;
         case SettingsField::ShowStaleWarning: s.showStaleWarning = value != 0; break;
+        case SettingsField::ShowProviderOutages: s.showProviderOutages = value != 0; break;
         case SettingsField::ShowOpenAiExtraLimits: s.showOpenAiExtraLimits = value != 0; break;
         case SettingsField::ResetDisplay:
             s.material = defaults.material;
@@ -415,6 +418,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.orangeThreshold = defaults.orangeThreshold;
             s.redThreshold = defaults.redThreshold;
             s.showStaleWarning = defaults.showStaleWarning;
+            s.showProviderOutages = defaults.showProviderOutages;
             s.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
             break;
         case SettingsField::ResetLayout:

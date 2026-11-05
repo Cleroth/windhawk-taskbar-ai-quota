@@ -50,17 +50,17 @@ class ToolingTests(unittest.TestCase):
         results = json.loads(saved.call_args.args[0])
         return code, results, [step["name"] for step in results["phases"]]
 
-    EXTRACTS = ["extract", "extract-history", "extract-host", "extract-popup"]
-    BUILDS = ["model-compile", "history-compile", "host-compile", "probe-compile", "popup-compile"]
-    TESTS = ["model", "render", "history", "history-render", "host-probe", "popup-probe"]
+    EXTRACTS = ["extract", "extract-history", "extract-status", "extract-host", "extract-popup"]
+    BUILDS = ["model-compile", "history-compile", "status-compile", "host-compile", "probe-compile", "popup-compile"]
+    TESTS = ["model", "render", "history", "history-render", "status", "host-probe", "popup-probe"]
 
     def test_default_phases_and_summary_required(self):
         reads = []
         code, results, names = self.invoke_runner(model_output=self.PASSING, reads=reads)
         self.assertEqual(code, 0)
         self.assertEqual(names, ["tooling", "freshness", *self.EXTRACTS, *self.BUILDS, "mod-check", *self.TESTS])
-        self.assertEqual(reads, ["settings.manifest.json", "history.manifest.json", "ui-host.manifest.json",
-                                 "popup.manifest.json"])
+        self.assertEqual(reads, ["settings.manifest.json", "history.manifest.json", "status.manifest.json",
+                                 "ui-host.manifest.json", "popup.manifest.json"])
         self.assertEqual(results["phases"][-1]["tests"], {"passed": 3, "failed": 0, "assertions": 9})
         # Both render phases report theirs: the settings window's, then the history window's.
         self.assertEqual(results["renders"], ["render-a.png", "render-a.png"])
@@ -148,6 +148,15 @@ class ToolingTests(unittest.TestCase):
                      "// src/a.hx\n// src/b.h\n"):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 extract.fragment(text, "a.h")
+
+    def test_constant_takes_one_line_and_refuses_ambiguity(self):
+        text = "static constexpr int kOther = 2;\nstatic constexpr ULONGLONG kValue = 11ULL;\nint after;\n"
+        a, b = extract.constant(text, "kValue")
+        self.assertEqual(text[a:b], "static constexpr ULONGLONG kValue = 11ULL;\n")
+        for text in ("", "static constexpr int kValue = 1;\nstatic constexpr int kValue = 2;\n",
+                     "static constexpr int kValueX = 1;\n"):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                extract.constant(text, "kValue")
 
     def test_definition_ignores_quoted_braces_and_refuses_ambiguity(self):
         code = 'static int Example() {\n const char* s = "}"; /* { */ return 1;\n}'

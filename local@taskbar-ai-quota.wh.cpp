@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
-// @version         2.14.2
+// @version         2.15.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -36,6 +36,11 @@ Supported providers and quotas:
 Optional notifications, under the mod's own name and icon, warn when usage reaches the yellow,
 orange or red threshold you choose, and say when it is projected to reach the limit.
 
+While a provider's public status page (Claude, OpenAI's Codex, GitHub Copilot, OpenCode Go)
+reports a problem, its accounts show a warning triangle, and the details flyout names the
+component and incident, with a link to the page. Nothing shows while all is well; turn it off
+under Display.
+
 ![Quota tooltip](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/ss1.png)
 
 ![Compact taskbar bars](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/ss2.png)
@@ -66,7 +71,7 @@ signed-in local app or CLI session, which must remain running.
 - **Display:** Material of the details flyout and the settings and history windows (Acrylic,
   Mica, Mica Alt, Tinted wallpaper or Solid; needs Windows transparency effects), used or
   remaining, percentage text, usage colors (default, colorblind or your own) and thresholds,
-  stale marker.
+  stale marker, provider outages.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
   default) or for a number of days, and choose recording per account independently of taskbar
@@ -152,6 +157,7 @@ Have a suggestion or found a bug?
 #include <winrt/Windows.UI.Xaml.Automation.Provider.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Documents.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Interop.h>
@@ -488,6 +494,9 @@ struct Settings {
     // The Custom palette's colors, kept while another palette is chosen.
     std::array<COLORREF, 4> customUsageColors = kDefaultUsageColors;
     bool showStaleWarning = true;
+    // Reads the providers' public status pages and marks their accounts while a watched component
+    // isn't operational (fetch/provider-status.h).
+    bool showProviderOutages = true;
     NotificationLevel notificationLevel = NotificationLevel::Red;
     Material material = Material::Acrylic;
 
@@ -560,6 +569,28 @@ struct AccountData {
     ULONGLONG retryDeadlineMs = 0;
     bool stale = true;
     bool needsLogin = false;  // Sign-in required; left-click signs in instead of refreshing.
+};
+
+// A provider's status page state, by severity: its worst watched component that isn't operational.
+enum class OutageLevel : uint8_t {
+    None,
+    Maintenance,
+    Degraded,
+    Partial,
+    Major,
+};
+
+// What a provider's accounts show of its status page (fetch/status-feeds.h): the worst watched
+// component's name and level, how many other watched components aren't operational, and the
+// incident or reason behind it with its start (Unix ms, 0 when unknown) when the page says.
+struct ProviderOutage {
+    OutageLevel level = OutageLevel::None;
+    std::wstring component;
+    int others = 0;
+    std::wstring title;
+    ULONGLONG sinceMs = 0;
+
+    bool operator==(const ProviderOutage&) const = default;
 };
 
 // Adds a reported quota to the account's extra quotas, its name followed by its window's length
@@ -702,6 +733,7 @@ struct AppliedState {
     std::array<std::wstring, kQuotaBarCount> percentTexts;
     std::wstring labelText;
     double labelOpacity = -1;
+    uint32_t labelMarkColor = 0;  // The Label identity's outage glyph color; 0: plain text.
     Thickness identityMargin{-1, -1, -1, -1};  // Bar columns' identity, label or logo.
     double columnOpacity = -1;
     int barMask = -1;
@@ -712,7 +744,12 @@ struct AppliedState {
     TileShapeKey tileShape;
     // Identity (tiles, a bar column's logo identity).
     double identityOpacity = -1;
-    int tileWarn = -1;
+    int tileMark = -1;  // An IdentityMark; -1 unset.
+    uint32_t tileMarkColor = 0;
+    int tileMarkLight = -1;  // The outage mark's halo for a light (1) or dark (0) taskbar.
+    // The outage mark's size and top margin as placed; -1: not yet.
+    double tileMarkSize = -1;
+    double tileMarkTop = 0;
     int badgeLight = -1;  // Badge halo color for a light (1) or dark (0) taskbar.
     // Every column: 0 none; hover (2) or open flyout (4), plus 1 on a light taskbar.
     int highlight = -1;
@@ -768,7 +805,7 @@ struct TileUiRefs {
     Grid face{nullptr};
     // Meter shapes, regenerated whenever their TileShapeKey changes.
     Panel meters{nullptr};
-    // Logo (with an optional number badge) or text, plus the stale-warning mark.
+    // Logo (with an optional number badge) or text, plus the stale mark and the outage mark.
     Grid identity{nullptr};
     FrameworkElement logo{nullptr};
     TextBlock text{nullptr};
@@ -778,6 +815,8 @@ struct TileUiRefs {
     TextBlock badgeText{nullptr};
     SolidColorBrush badgeHalo{nullptr};
     TextBlock warn{nullptr};
+    TextBlock outage{nullptr};
+    TextBlock outageHalo{nullptr};
     // Logo + headline and gauges: the most-used quota's number and window key; headline tiles
     // with the countdown show it instead of their segments.
     TextBlock headline{nullptr};
@@ -952,6 +991,12 @@ struct FlyoutPopup {
 
     TextBlock title{nullptr};
     FrameworkElement staleMarker{nullptr};
+    // The provider status line under the header, its button (opening the status page; its tooltip
+    // the whole line), glyph and text; none for providers without a status page.
+    FrameworkElement outage{nullptr};
+    Button outageButton{nullptr};
+    TextBlock outageGlyph{nullptr};
+    TextBlock outageText{nullptr};
     FrameworkElement planChip{nullptr};
     TextBlock plan{nullptr};
     std::array<FlyoutQuotaRow, kFlyoutRowCount> rows;
@@ -1694,9 +1739,15 @@ static bool DisableRedirects(HINTERNET req) {
     return WinHttpSetOption(req, WINHTTP_OPTION_REDIRECT_POLICY, &policy, sizeof(policy)) != FALSE;
 }
 
+// `timeoutMs` (0: the defaults) bounds each of resolving, connecting, sending and every receive,
+// and gives up on a response still arriving twice that long after the request began. It can't
+// interrupt a stage already waiting.
 static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR userAgent,
-                              const std::wstring& headers, const std::string& body = {}) {
+                              const std::wstring& headers, const std::string& body = {},
+                              DWORD timeoutMs = 0) {
     HttpResult res;
+    const ULONGLONG deadline = timeoutMs ? GetTickCount64() + 2ULL * timeoutMs : 0;
+    auto late = [&] { return deadline && GetTickCount64() > deadline; };
     HINTERNET ses = WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS,
                                 0);
@@ -1705,7 +1756,11 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
     HINTERNET req = nullptr;
 
     if (ses && !g_unloading) {
-        WinHttpSetTimeouts(ses, 5000, 5000, 5000, 10000);
+        if (timeoutMs) {
+            WinHttpSetTimeouts(ses, (int)timeoutMs, (int)timeoutMs, (int)timeoutMs, (int)timeoutMs);
+        } else {
+            WinHttpSetTimeouts(ses, 5000, 5000, 5000, 10000);
+        }
         con = WinHttpConnect(ses, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
         if (con && !TrackHttpHandle(con)) con = nullptr;
         req = con ? WinHttpOpenRequest(con, method, path, nullptr,
@@ -1720,7 +1775,7 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
         WinHttpSendRequest(req, headers.c_str(), (DWORD)headers.size(),
                            body.empty() ? WINHTTP_NO_REQUEST_DATA : (LPVOID)body.data(),
                            (DWORD)body.size(), (DWORD)body.size(), 0) &&
-        WinHttpReceiveResponse(req, nullptr)) {
+        !late() && WinHttpReceiveResponse(req, nullptr)) {
         DWORD status = 0, sz = sizeof(status);
         WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
                             WINHTTP_HEADER_NAME_BY_INDEX, &status, &sz,
@@ -1768,7 +1823,7 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
         bool bodyOk = true;
         for (;;) {
             DWORD available = 0;
-            if (!WinHttpQueryDataAvailable(req, &available)) {
+            if (late() || !WinHttpQueryDataAvailable(req, &available)) {
                 bodyOk = false;
                 break;
             }
@@ -1782,7 +1837,7 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
             }
             res.body.resize(prev + available);
             DWORD read = 0;
-            if (!WinHttpReadData(req, res.body.data() + prev, available, &read)) {
+            if (late() || !WinHttpReadData(req, res.body.data() + prev, available, &read)) {
                 res.body.resize(prev);
                 bodyOk = false;
                 break;
@@ -5549,6 +5604,582 @@ static std::optional<BurnUpCurve> CopyBurnUpCurve(uint64_t historyId, int flyout
     return copy;
 }
 
+// src/fetch/status-feeds.h
+// Provider status pages: where each provider publishes its public status, which of its components
+// the mod watches, the parser that turns a page into what the provider's accounts show, and the
+// read rules (OpenCode's confirmation, the age past which a reading shows nothing). Windows.Data.Json
+// only: no network, globals or windows (tests/settings extracts this fragment).
+
+enum class StatusFeedKind : uint8_t {
+    Statuspage,  // Atlassian Statuspage's summary.json: the watched component ids
+    IncidentIo,  // incident.io's page feed: every component of the watched group
+    OpenCode,    // OpenCode's status API: the watched service's component
+};
+
+struct ProviderStatusSource {
+    PCWSTR provider;  // AccountConfig::provider
+    PCWSTR host;
+    PCWSTR path;
+    PCWSTR pageUrl;   // The page the details flyout opens
+    StatusFeedKind kind;
+    // Statuspage: component ids; incident.io: the group's id, then its name (when the id is gone);
+    // OpenCode: the service, then the name the flyout gives its component.
+    std::array<PCWSTR, 3> watched;
+    // Between reads; a reading older than two intervals shows nothing.
+    ULONGLONG intervalMs;
+    // A non-operational page shows only once a second read, kStatusConfirmReadMs later, agrees.
+    bool confirm;
+};
+
+static constexpr ULONGLONG kStatusIntervalMs = 5ULL * 60 * 1000;
+static constexpr ULONGLONG kOpenCodeStatusIntervalMs = 10ULL * 60 * 1000;
+static constexpr ULONGLONG kStatusConfirmReadMs = 3ULL * 60 * 1000;
+
+static constexpr ProviderStatusSource kProviderStatusSources[] = {
+    {L"anthropic", L"status.claude.com", L"/api/v2/summary.json", L"https://status.claude.com",
+     StatusFeedKind::Statuspage, {L"rwppv331jlwc", L"k8w3r06qmzrp", L"yyzkbfz2thpt"}, kStatusIntervalMs, false},
+    {L"openai", L"status.openai.com", L"/proxy/status.openai.com", L"https://status.openai.com",
+     StatusFeedKind::IncidentIo, {L"01KMKF9EBTCD8BN9PG8DJZXRSQ", L"Codex", nullptr}, kStatusIntervalMs, false},
+    {L"copilot", L"www.githubstatus.com", L"/api/v2/summary.json", L"https://www.githubstatus.com",
+     StatusFeedKind::Statuspage, {L"pjmpxvq2cmr2", L"cnnb39dkkk82", nullptr}, kStatusIntervalMs, false},
+    {L"opencode", L"status.opencode.ai", L"/api/status", L"https://status.opencode.ai",
+     StatusFeedKind::OpenCode, {L"go", L"OpenCode Go", nullptr}, kOpenCodeStatusIntervalMs, true},
+};
+
+// The provider's status source; none for Antigravity.
+static const ProviderStatusSource* FindProviderStatusSource(std::wstring_view provider) {
+    for (const ProviderStatusSource& source : kProviderStatusSources) {
+        if (provider == source.provider) return &source;
+    }
+    return nullptr;
+}
+
+// What a status page shows `source`'s accounts: nothing (OutageLevel::None) while every watched
+// component is operational. None (no value) when the page can't be trusted: invalid JSON, a missing
+// or mistyped part that names a level, no watched component listed, or OpenCode's own stale flag.
+// Status strings it doesn't know name no level. `problem` gets why a read failed, or the first
+// unknown status of a watched component.
+static std::optional<ProviderOutage> ParseProviderStatus(const ProviderStatusSource& source,
+                                                         const std::string& body,
+                                                         std::wstring* problem = nullptr) {
+    auto fail = [&](PCWSTR why) -> std::optional<ProviderOutage> {
+        if (problem) *problem = why;
+        return std::nullopt;
+    };
+    auto levelOf = [&](const std::wstring& status) {
+        if (status == L"operational") return OutageLevel::None;
+        if (status == L"degraded_performance" || status == L"degraded") return OutageLevel::Degraded;
+        if (status == L"partial_outage") return OutageLevel::Partial;
+        if (status == L"major_outage" || status == L"full_outage" || status == L"outage") return OutageLevel::Major;
+        if (status == L"under_maintenance" || status == L"maintenance") return OutageLevel::Maintenance;
+        if (problem && problem->empty() && !status.empty()) *problem = L"unknown status \"" + status.substr(0, 40) + L"\"";
+        return OutageLevel::None;
+    };
+    auto array = [](JsonObject const& o, PCWSTR name) -> JsonArray {
+        if (!o || !o.HasKey(name)) return nullptr;
+        IJsonValue value = o.GetNamedValue(name);
+        return value.ValueType() == JsonValueType::Array ? value.GetArray() : nullptr;
+    };
+    auto object = [](IJsonValue const& value) -> JsonObject {
+        return value.ValueType() == JsonValueType::Object ? value.GetObject() : nullptr;
+    };
+    auto isString = [](JsonObject const& o, PCWSTR name) {
+        return o && o.HasKey(name) && o.GetNamedValue(name).ValueType() == JsonValueType::String;
+    };
+    // Provider dates, accepted only in a plausible range: Unix ms, or ISO 8601 with seconds and a
+    // zone ("Z" or "+hh:mm"); anything else is an unknown time.
+    constexpr double kEarliestMs = 1577836800000.0, kLatestMs = 4102444800000.0;  // 2020, 2100
+    auto plausible = [&](double ms) -> ULONGLONG {
+        return std::isfinite(ms) && ms >= kEarliestMs && ms < kLatestMs ? (ULONGLONG)ms : 0;
+    };
+    auto isoMs = [&](const std::wstring& s) -> ULONGLONG {
+        auto digits = [&](size_t at, size_t count, int maximum) {
+            if (at + count > s.size()) return false;
+            int value = 0;
+            for (size_t k = at; k < at + count; k++) {
+                if (s[k] < L'0' || s[k] > L'9') return false;
+                value = value * 10 + (s[k] - L'0');
+            }
+            return value <= maximum;
+        };
+        if (!digits(0, 4, 9999) || s.size() < 20 || s[4] != L'-' || !digits(5, 2, 12) || s[7] != L'-' ||
+            !digits(8, 2, 31) || s[10] != L'T' || !digits(11, 2, 23) || s[13] != L':' || !digits(14, 2, 59) ||
+            s[16] != L':' || !digits(17, 2, 60)) {
+            return 0;
+        }
+        size_t zone = 19;
+        if (s[zone] == L'.') {
+            do zone++; while (zone < s.size() && s[zone] >= L'0' && s[zone] <= L'9');
+            if (zone == 20) return 0;
+        }
+        bool valid = zone + 1 == s.size() ? s[zone] == L'Z' :
+                     zone + 6 == s.size() && (s[zone] == L'+' || s[zone] == L'-') && digits(zone + 1, 2, 23) &&
+                         s[zone + 3] == L':' && digits(zone + 4, 2, 59);
+        return valid ? plausible((double)ParseIso8601Ms(s)) : 0;
+    };
+
+    try {
+        JsonObject root = JsonObject::Parse(Utf8ToWide(body));
+        ProviderOutage outage;
+
+        if (source.kind == StatusFeedKind::Statuspage) {
+            // Levels from the watched components; the title and start from an unresolved incident or
+            // a maintenance in progress listing the worst one, else its last status change.
+            JsonArray components = array(root, L"components");
+            if (!components) return fail(L"no components");
+            struct Watched {
+                std::wstring id, name;
+                OutageLevel level = OutageLevel::None;
+                std::wstring updatedAt;
+                bool found = false;
+            };
+            std::vector<Watched> watched;
+            for (PCWSTR id : source.watched) {
+                if (!id) continue;
+                watched.emplace_back();
+                watched.back().id = id;
+            }
+            for (IJsonValue const& value : components) {
+                JsonObject component = object(value);
+                if (!isString(component, L"id")) continue;
+                std::wstring id = GetStr(component, L"id");
+                auto entry = std::find_if(watched.begin(), watched.end(),
+                                          [&](const Watched& w) { return w.id == id && !w.found; });
+                if (entry == watched.end()) continue;
+                if (!isString(component, L"status")) return fail(L"component status not a string");
+                entry->found = true;
+                entry->name = GetStr(component, L"name");
+                if (entry->name.empty()) entry->name = id;
+                entry->level = levelOf(GetStr(component, L"status"));
+                entry->updatedAt = GetStr(component, L"updated_at");
+            }
+            const Watched* worst = nullptr;
+            int nonOperational = 0;
+            bool any = false;
+            for (const Watched& w : watched) {
+                any |= w.found;
+                if (w.level == OutageLevel::None) continue;
+                nonOperational++;
+                if (!worst || w.level > worst->level) worst = &w;
+            }
+            if (!any) return fail(L"no watched component");
+            if (!worst) return outage;
+            outage.level = worst->level;
+            outage.component = worst->name;
+            outage.others = nonOperational - 1;
+            auto lists = [&](JsonObject const& event) {
+                JsonArray listed = array(event, L"components");
+                if (!listed) return false;
+                for (IJsonValue const& value : listed) {
+                    JsonObject component = object(value);
+                    if (component && GetStr(component, L"id") == worst->id) return true;
+                }
+                return false;
+            };
+            bool titled = false;
+            if (JsonArray incidents = array(root, L"incidents")) {
+                for (IJsonValue const& value : incidents) {
+                    JsonObject incident = object(value);
+                    std::wstring status = GetStr(incident, L"status");
+                    if (!incident || status.empty() || status == L"resolved" || status == L"postmortem" ||
+                        status == L"completed" || !lists(incident)) {
+                        continue;
+                    }
+                    outage.title = GetStr(incident, L"name");
+                    outage.sinceMs = isoMs(GetStr(incident, L"started_at"));
+                    if (!outage.sinceMs) outage.sinceMs = isoMs(GetStr(incident, L"created_at"));
+                    titled = true;
+                    break;
+                }
+            }
+            if (JsonArray maintenances = !titled ? array(root, L"scheduled_maintenances") : nullptr) {
+                for (IJsonValue const& value : maintenances) {
+                    JsonObject maintenance = object(value);
+                    std::wstring status = GetStr(maintenance, L"status");
+                    if (!maintenance || (status != L"in_progress" && status != L"verifying") || !lists(maintenance)) {
+                        continue;
+                    }
+                    outage.title = GetStr(maintenance, L"name");
+                    outage.sinceMs = isoMs(GetStr(maintenance, L"started_at"));
+                    if (!outage.sinceMs) outage.sinceMs = isoMs(GetStr(maintenance, L"scheduled_for"));
+                    titled = true;
+                    break;
+                }
+            }
+            if (!titled) outage.sinceMs = isoMs(worst->updatedAt);
+            return outage;
+        }
+
+        if (source.kind == StatusFeedKind::IncidentIo) {
+            // The watched group's components, by id or else by name, hidden ones (or ones whose
+            // hidden flag isn't false) aside. Levels only from the components the page lists as
+            // currently affected; an incident's own component statuses keep its worst impact after
+            // recovery. The title from an unresolved incident, or a maintenance in progress, whose
+            // current impact covers the worst component; the start from that impact.
+            JsonObject summary = GetObj(root, L"summary");
+            JsonArray items = array(GetObj(summary, L"structure"), L"items");
+            if (!items) return fail(L"no structure");
+            JsonObject group = nullptr;
+            for (IJsonValue const& value : items) {
+                JsonObject candidate = GetObj(object(value), L"group");
+                if (!candidate) continue;
+                if (GetStr(candidate, L"id") == source.watched[0]) {
+                    group = candidate;
+                    break;
+                }
+                if (!group && source.watched[1] && _wcsicmp(GetStr(candidate, L"name").c_str(), source.watched[1]) == 0) {
+                    group = candidate;
+                }
+            }
+            JsonArray members = array(group, L"components");
+            if (!members) return fail(L"no watched group");
+            struct Watched {
+                std::wstring id, name;
+                OutageLevel level = OutageLevel::None;
+            };
+            std::vector<Watched> watched;
+            for (IJsonValue const& value : members) {
+                JsonObject member = object(value);
+                bool shown = member && (!member.HasKey(L"hidden") ||
+                                        (member.GetNamedValue(L"hidden").ValueType() == JsonValueType::Boolean &&
+                                         !member.GetNamedBoolean(L"hidden")));
+                std::wstring id = GetStr(member, L"component_id");
+                if (!shown || id.empty()) continue;
+                if (std::any_of(watched.begin(), watched.end(), [&](const Watched& w) { return w.id == id; })) continue;
+                watched.emplace_back();
+                watched.back().id = id;
+                watched.back().name = GetStr(member, L"name");
+            }
+            if (watched.empty()) return fail(L"no watched component");
+            if (JsonArray named = array(summary, L"components")) {
+                for (IJsonValue const& value : named) {
+                    JsonObject component = object(value);
+                    std::wstring id = GetStr(component, L"id");
+                    for (Watched& w : watched) {
+                        if (w.id == id && w.name.empty()) w.name = GetStr(component, L"name");
+                    }
+                }
+            }
+            JsonArray affected = array(summary, L"affected_components");
+            if (!affected) return fail(L"no affected components");
+            for (IJsonValue const& value : affected) {
+                JsonObject entry = object(value);
+                std::wstring id = GetStr(entry, L"component_id");
+                if (id.empty()) continue;
+                auto w = std::find_if(watched.begin(), watched.end(), [&](const Watched& w) { return w.id == id; });
+                if (w == watched.end()) continue;
+                if (!isString(entry, L"status")) return fail(L"affected component status not a string");
+                w->level = std::max(w->level, levelOf(GetStr(entry, L"status")));
+            }
+            const Watched* worst = nullptr;
+            int nonOperational = 0;
+            for (const Watched& w : watched) {
+                if (w.level == OutageLevel::None) continue;
+                nonOperational++;
+                if (!worst || w.level > worst->level) worst = &w;
+            }
+            if (!worst) return outage;
+            outage.level = worst->level;
+            outage.component = worst->name.empty() ? worst->id : worst->name;
+            outage.others = nonOperational - 1;
+            for (PCWSTR list : {L"ongoing_incidents", L"scheduled_maintenances"}) {
+                JsonArray events = array(summary, list);
+                for (uint32_t k = 0; events && k < events.Size() && outage.title.empty(); k++) {
+                    JsonObject event = object(events.GetAt(k));
+                    std::wstring status = GetStr(event, L"status");
+                    bool maintenance = GetStr(event, L"type") == L"maintenance" ||
+                                       std::wstring_view(list) == L"scheduled_maintenances";
+                    if (maintenance ? status != L"maintenance_in_progress" :
+                                      status.empty() || status == L"resolved" || status == L"closed" ||
+                                          status == L"postmortem" || status.starts_with(L"maintenance")) {
+                        continue;
+                    }
+                    bool current = false;
+                    if (JsonArray components = array(event, L"affected_components")) {
+                        for (IJsonValue const& value : components) {
+                            JsonObject component = object(value);
+                            current |= GetStr(component, L"component_id") == worst->id &&
+                                       levelOf(GetStr(component, L"current_status")) != OutageLevel::None;
+                        }
+                    }
+                    if (!current) continue;
+                    outage.title = GetStr(event, L"name");
+                    // The worst component's open impact (a maintenance in progress: its planned one):
+                    // when it began, not when the event was posted.
+                    if (JsonArray impacts = array(event, L"component_impacts")) {
+                        for (IJsonValue const& value : impacts) {
+                            JsonObject impact = object(value);
+                            bool open = maintenance || !impact || !impact.HasKey(L"end_at") ||
+                                        impact.GetNamedValue(L"end_at").ValueType() == JsonValueType::Null;
+                            if (impact && open && GetStr(impact, L"component_id") == worst->id) {
+                                outage.sinceMs = std::max(outage.sinceMs, isoMs(GetStr(impact, L"start_at")));
+                            }
+                        }
+                    }
+                }
+            }
+            return outage;
+        }
+
+        // OpenCode: the watched service's component, unless the page says its data is stale. Its
+        // start and reason, or those of an ongoing incident of the service, with the models that
+        // aren't operational.
+        if (root.HasKey(L"stale")) {
+            IJsonValue stale = root.GetNamedValue(L"stale");
+            if (stale.ValueType() != JsonValueType::Boolean) return fail(L"stale flag not a boolean");
+            if (stale.GetBoolean()) return fail(L"page reports stale data");
+        }
+        JsonArray components = array(root, L"components");
+        if (!components) return fail(L"no components");
+        JsonObject service = nullptr;
+        for (IJsonValue const& value : components) {
+            JsonObject component = object(value);
+            if (component && GetStr(component, L"service") == source.watched[0]) {
+                service = component;
+                break;
+            }
+        }
+        if (!service) return fail(L"no watched component");
+        if (!isString(service, L"status")) return fail(L"component status not a string");
+        outage.level = levelOf(GetStr(service, L"status"));
+        if (outage.level == OutageLevel::None) return outage;
+        outage.component = source.watched[1] ? source.watched[1] : source.watched[0];
+        outage.sinceMs = plausible(GetNum(service, L"since"));
+        std::wstring reason = GetStr(service, L"reason");
+        std::vector<std::wstring> models;
+        auto addModels = [&](JsonArray const& list, bool checkStatus) {
+            for (uint32_t k = 0; list && k < list.Size() && models.size() < 3; k++) {
+                JsonObject model = object(list.GetAt(k));
+                std::wstring id = GetStr(model, L"id");
+                if (id.empty() || (checkStatus && levelOf(GetStr(model, L"status")) == OutageLevel::None)) continue;
+                if (std::find(models.begin(), models.end(), id) == models.end()) models.push_back(id);
+            }
+        };
+        addModels(array(service, L"breakdown"), true);
+        if (JsonArray incidents = array(root, L"incidents")) {
+            for (IJsonValue const& value : incidents) {
+                JsonObject incident = object(value);
+                if (!incident || GetStr(incident, L"service") != source.watched[0]) continue;
+                // Ongoing: no resolution time yet.
+                if (incident.HasKey(L"resolvedAt") &&
+                    incident.GetNamedValue(L"resolvedAt").ValueType() != JsonValueType::Null) {
+                    continue;
+                }
+                if (!outage.sinceMs) outage.sinceMs = plausible(GetNum(incident, L"startedAt"));
+                if (reason.empty() || reason == L"none") reason = GetStr(incident, L"reason");
+                if (models.empty()) addModels(array(incident, L"models"), false);
+                break;
+            }
+        }
+        if (reason == L"latency") {
+            outage.title = L"Slow responses";
+        } else if (reason == L"errors") {
+            outage.title = L"Elevated errors";
+        } else if (reason == L"upstream") {
+            outage.title = L"Upstream provider issues";
+        } else if (reason == L"availability") {
+            outage.title = L"Availability issues";
+        } else if (reason != L"none") {
+            outage.title = reason.substr(0, 40);
+        }
+        if (!models.empty()) {
+            std::wstring list;
+            for (const std::wstring& model : models) list += (list.empty() ? L"" : L", ") + model.substr(0, 40);
+            outage.title += (outage.title.empty() ? L"" : L": ") + list;
+        }
+        return outage;
+    } catch (...) {
+        return fail(L"invalid JSON");
+    }
+}
+
+// The fetch thread's record of one provider's reads.
+struct ProviderStatusTrack {
+    int streak = 0;            // Consecutive non-operational reads, at most 2
+    ULONGLONG streakTick = 0;  // When the latest of them was read (GetTickCount64)
+    ULONGLONG delayMs = 0;     // Until the next read, unless the provider asks for longer
+};
+
+// What a provider shows after a read at `tick` (GetTickCount64): `read` is the parsed page, none for
+// a failed read. A failed read or an operational page shows nothing at once. A non-operational page
+// shows, unless its source confirms: then only from the second such read in a row, taken within two
+// intervals of the first, which comes kStatusConfirmReadMs after it.
+static ProviderOutage ShownAfterRead(const ProviderStatusSource& source, ProviderStatusTrack& track,
+                                     const std::optional<ProviderOutage>& read, ULONGLONG tick) {
+    track.delayMs = source.intervalMs;
+    if (!read || read->level == OutageLevel::None) {
+        track.streak = 0;
+        return {};
+    }
+    bool recent = track.streak > 0 && tick - track.streakTick <= 2 * source.intervalMs;
+    track.streak = recent ? std::min(track.streak + 1, 2) : 1;
+    track.streakTick = tick;
+    if (!source.confirm || track.streak >= 2) return *read;
+    track.delayMs = kStatusConfirmReadMs;
+    return {};
+}
+
+// Whether a reading taken at `readTick` (GetTickCount64; 0: none) still shows at `tick`.
+static bool ProviderStatusCurrent(const ProviderStatusSource& source, ULONGLONG readTick, ULONGLONG tick) {
+    return readTick && tick >= readTick && tick - readTick <= 2 * source.intervalMs;
+}
+
+// src/fetch/provider-status.h
+// Provider status reads on the fetch thread, and what the taskbar shows of them. A read is an
+// unauthenticated GET of a public status page (fetch/status-feeds.h), made only by the taskbar's
+// process, only while Show provider outages is on and only for a provider with a visible account.
+// Nothing is notified.
+
+// Bumped by settings publication when Show provider outages changes: what was read before shows
+// nothing, and the next poll starts over, as if it had seen the setting off.
+static std::atomic<uint64_t> g_providerStatusPolicy{0};
+
+// What each provider's accounts show, indexed like kProviderStatusSources: the shown state, the
+// read it comes from (GetTickCount64; 0: none) and the policy generation it was read under.
+// g_providerStatusMutex is a leaf: copy in or out, never acquire another lock while holding it.
+struct ProviderStatusEntry {
+    ProviderOutage shown;
+    ULONGLONG readTick = 0;
+    uint64_t policy = 0;
+};
+static std::mutex g_providerStatusMutex;
+static std::array<ProviderStatusEntry, std::size(kProviderStatusSources)> g_providerStatus;
+
+static constexpr DWORD kStatusRequestTimeoutMs = 3000;
+static constexpr ULONGLONG kStatusRetryAfterCapMs = 60ULL * 60 * 1000;
+
+// Taskbar UI threads: what `provider`'s accounts show now; nothing once its reading is older than
+// two of its intervals, or from before the setting last changed. Takes only the leaf lock.
+static ProviderOutage CurrentProviderOutage(std::wstring_view provider) {
+    const ProviderStatusSource* source = FindProviderStatusSource(provider);
+    if (!source) return {};
+    ProviderStatusEntry entry;
+    {
+        std::lock_guard<std::mutex> lock(g_providerStatusMutex);
+        entry = g_providerStatus[size_t(source - kProviderStatusSources)];
+    }
+    bool current = entry.policy == g_providerStatusPolicy.load() &&
+                   ProviderStatusCurrent(*source, entry.readTick, GetTickCount64());
+    return current ? entry.shown : ProviderOutage{};
+}
+
+// The fetch thread's state of every provider's reads: their records, when each is due
+// (GetTickCount64; 0: now), the problem last logged, and the policy generation they belong to.
+struct ProviderStatusPoll {
+    std::array<ProviderStatusTrack, std::size(kProviderStatusSources)> tracks;
+    std::array<ULONGLONG, std::size(kProviderStatusSources)> dueTick{};
+    std::array<std::wstring, std::size(kProviderStatusSources)> logged;
+    uint64_t policy = 0;
+};
+
+// Fetch thread, once per round after the quota polls: reads each eligible provider's page that is
+// due, publishes what its accounts show, and updates the taskbars when that changed. A provider that
+// isn't eligible shows nothing and is read as soon as it is again. A pending manual refresh ends the
+// round's reads early: they resume right after it. Returns when the next read is due
+// (GetTickCount64; 0: none).
+static ULONGLONG PollProviderStatuses(ProviderStatusPoll& poll) {
+    constexpr size_t kCount = std::size(kProviderStatusSources);
+    // On, and a visible account of the provider, from the current settings.
+    auto eligible = [](const ProviderStatusSource& source) {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        return g_settings.showProviderOutages &&
+               std::any_of(g_settings.accounts.begin(), g_settings.accounts.end(), [&](const AccountConfig& account) {
+                   return !account.hidden && account.provider == source.provider;
+               });
+    };
+    bool changed = false;
+    const uint64_t policy = g_providerStatusPolicy.load();
+    auto publish = [&](size_t i, const ProviderOutage& shown, ULONGLONG readTick) {
+        const ProviderStatusSource& source = kProviderStatusSources[i];
+        std::lock_guard<std::mutex> lock(g_providerStatusMutex);
+        ProviderStatusEntry& entry = g_providerStatus[i];
+        bool shownBefore = entry.policy == policy && ProviderStatusCurrent(source, entry.readTick, GetTickCount64());
+        if ((shownBefore ? entry.shown : ProviderOutage{}) != shown) changed = true;
+        entry = {shown, readTick, policy};
+    };
+    auto log = [&](size_t i, const std::wstring& problem) {
+        if (problem == poll.logged[i]) return;
+        if (problem.empty()) {
+            Wh_Log(L"Provider status %s: readable again", kProviderStatusSources[i].provider);
+        } else {
+            Wh_Log(L"Provider status %s: %s", kProviderStatusSources[i].provider, problem.c_str());
+        }
+        poll.logged[i] = problem;
+    };
+    auto reset = [&](size_t i) {
+        publish(i, {}, 0);
+        poll.tracks[i] = {};
+        poll.dueTick[i] = 0;
+    };
+
+    if (policy != poll.policy) {
+        for (size_t i = 0; i < kCount; i++) reset(i);
+        poll.policy = policy;
+    }
+    ULONGLONG next = 0;
+    auto due = [&](ULONGLONG tick) {
+        if (!next || tick < next) next = tick;
+    };
+    for (size_t i = 0; i < kCount && !g_unloading; i++) {
+        const ProviderStatusSource& source = kProviderStatusSources[i];
+        if (!eligible(source)) {
+            reset(i);
+            continue;
+        }
+        ULONGLONG now = GetTickCount64();
+        if (poll.dueTick[i] > now) {
+            due(poll.dueTick[i]);
+            continue;
+        }
+        // A pending manual refresh, a changed setting or a lost taskbar ends the round's reads; the
+        // next round goes on, starting over after a setting change.
+        bool refreshPending;
+        {
+            std::lock_guard<std::mutex> refreshLock(g_refreshMutex);
+            refreshPending = !g_refreshRequests.empty();
+        }
+        if (refreshPending || policy != g_providerStatusPolicy.load() || !IsTaskbarOwnerProcess()) {
+            due(now);
+            break;
+        }
+
+        HttpResult response = HttpRequest(L"GET", source.host, source.path, L"taskbar-ai-quota",
+                                          L"Accept: application/json\r\n", {}, kStatusRequestTimeoutMs);
+        if (g_unloading) break;
+        std::wstring problem;
+        std::optional<ProviderOutage> read;
+        if (!response.ok) {
+            problem = L"network error";
+        } else if (response.status != 200) {
+            problem = L"HTTP " + std::to_wstring(response.status);
+        } else {
+            read = ParseProviderStatus(source, response.body, &problem);
+        }
+        // Turned off, or its last visible account hidden, while the page was read: discarded. A
+        // change after this check stamps the reading with an older policy, which shows nothing.
+        if (policy != g_providerStatusPolicy.load()) {
+            due(GetTickCount64());
+            break;
+        }
+        if (!eligible(source)) {
+            reset(i);
+            continue;
+        }
+        ULONGLONG tick = GetTickCount64();
+        ProviderStatusTrack& track = poll.tracks[i];
+        publish(i, ShownAfterRead(source, track, read, tick), read ? tick : 0);
+        log(i, problem);
+        ULONGLONG delay = track.delayMs;
+        if (response.ok && (response.status == 429 || response.status == 503) && response.retryAfterSec > 0) {
+            delay = std::max(delay, std::min((ULONGLONG)response.retryAfterSec * 1000, kStatusRetryAfterCapMs));
+        }
+        poll.dueTick[i] = tick + delay;
+        due(poll.dueTick[i]);
+    }
+    if (changed) PostUiUpdate();
+    return next;
+}
+
 // src/fetch/notifications.h
 // Fetch-thread threshold notifications: a toast under the mod's own name and icon, or, when the
 // toast fails, the balloon of a hidden tray icon, which Windows attributes to Explorer.
@@ -6057,6 +6688,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     const uint64_t historySession = NowUnixMs();
     bool curvesRecording = false;  // Recording was active last round, so curves may be published.
     BurnUpSampleCache curveSamples;  // Journal tails of recorded accounts, kept between rounds.
+    ProviderStatusPoll providerStatus;  // Status page reads, on their own cadence.
     ULONGLONG fastRecheckUntilMs = GetTickCount64() + 60000;
     bool waitingForTaskbar = false;
     while (!g_unloading) {
@@ -6554,6 +7186,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         } else if (curvesPublished) {
             PostUiUpdate();
         }
+        // Status pages after the round's polls and notifications, so they never hold them up.
+        ULONGLONG statusDueTick = PollProviderStatuses(providerStatus);
 
         DWORD waitMs = (DWORD)intervalMin * 60000;
         if (anyError) waitMs = std::min(waitMs, (DWORD)120000);
@@ -6571,6 +7205,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         if (nextHistoryMaintenanceMs) {
             waitMs = (DWORD)std::min<ULONGLONG>(waitMs,
                 nextHistoryMaintenanceMs > nowMs ? nextHistoryMaintenanceMs - nowMs : 0);
+        }
+        if (statusDueTick) {
+            ULONGLONG tick = GetTickCount64();
+            waitMs = (DWORD)std::min<ULONGLONG>(waitMs, statusDueTick > tick ? statusDueTick - tick : 0);
         }
 
         HANDLE handles[2] = {g_stopEvent, g_refreshEvent};
@@ -7934,8 +8572,8 @@ struct TilePalette {
     uint32_t track;
     uint32_t hover;
     uint32_t open;       // Tile whose flyout is open.
-    // The taskbar's own color: the number badge's outline, and the cut-out around a sparkline's
-    // current reading.
+    // The taskbar's own color: the number badge's outline, the cut-out around a sparkline's current
+    // reading, and the outage mark's halo on a logo, text or ring identity.
     uint32_t badgeHalo;
     uint32_t plot;     // A sparkline chart's background, darker than the taskbar,
     uint32_t lit;      // over it the window's elapsed part,
@@ -8112,8 +8750,8 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
     const ULONGLONG now = display.now;
     // One to four taskbar quotas, each from slots its provider reports; two Anthropic accounts
     // share a provider so tiles show number badges. A negative value is a quota not reported.
-    // Antigravity is stale, with an error. Identities mix: OAI shows its label, the Anthropic pair
-    // their logo and number badge, Go its logo alone, with the stale mark.
+    // Antigravity is stale, with an error. Identities mix: OAI shows its label (with VisualTestOutage's
+    // mark), the Anthropic pair their logo and number badge, Go its logo alone, with the stale mark.
     struct Sample {
         PCWSTR provider;
         PCWSTR label;
@@ -8212,6 +8850,13 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
         }
         data->push_back(std::move(accountData));
     }
+}
+
+// The visual test accounts' provider status, while outage marks are on: OpenAI's (the OAI sample's
+// provider) degraded since 25 minutes before `now`; the others operational.
+static ProviderOutage VisualTestOutage(std::wstring_view provider, ULONGLONG now) {
+    if (provider != L"openai") return {};
+    return {OutageLevel::Degraded, L"Codex API", 0, L"Elevated error rates", now - 25 * 60000};
 }
 
 // A recorded reading of a quota in its current window (the burn-up curve's), oldest first.
@@ -8502,12 +9147,37 @@ static BadgeBox LogoBadgeBox(const MeterDisplay& display, double side, int chars
     return {x - width / 2, y - height / 2, width, height};
 }
 
+// The mark beside an account's identity (a logo's or text's top-right corner, a ring tile's
+// corner, after a Label identity): the stale "!", or a provider outage's filled warning triangle
+// (kOutageGlyph in Segoe Fluent Icons), which takes its place. The outage mark is
+// kOutageMarkShare of a logo's side (a text identity's: its logo's), clamped to kOutageMarkMin-
+// kOutageMarkMax DIPs, its box kOutageMarkRight of its size past the identity's right edge and
+// kOutageMarkTop above its top; on ring tiles kOutageRingMarkShare of the ring, clamped likewise,
+// where the "!" goes (AccountMeters::markSize). Under it, the same glyph kOutageHaloShare of its size
+// larger on each side, in the taskbar's color (TilePalette::badgeHalo), so it stands clear of a
+// logo. After a label and a thin space: the glyph at the label's font size.
+enum class IdentityMark : uint8_t {
+    None,
+    Stale,
+    Outage,
+};
+static constexpr PCWSTR kOutageGlyph = L"\uE814";
+static constexpr double kOutageMarkShare = 0.75, kOutageMarkMin = 7, kOutageMarkMax = 14;
+static constexpr double kOutageRingMarkShare = 1.0 / 3, kOutageRingMarkMin = 8, kOutageRingMarkMax = 13;
+static constexpr double kOutageMarkRight = 4.0 / 9, kOutageMarkTop = 3.0 / 9, kOutageHaloShare = 1.0 / 9;
+
+// The outage mark's size beside a `side` DIP logo.
+static double OutageMarkSize(double side) {
+    return std::clamp(side * kOutageMarkShare, kOutageMarkMin, kOutageMarkMax);
+}
+
 // A bar column's identity margins in DIPs, which make its box: the identity gap (`gap`; 0
 // without bars) on the side facing the bars. A Label identity beside them sits 2 DIPs high. A
 // `side` DIP logo's box takes the overhangs of its badge (`badge`, from the logo's top-left) and
-// its stale mark (4 DIPs right, 3 above) while they show, and above or below the bars the label
-// line's space beyond its text at the label font size (`aboveCap`, over its cap height;
-// `belowBaseline`), so the logo keeps a label's distance from them. Across the bars (vertically
+// its mark (the stale "!" 4 DIPs right and 3 above, the outage mark its own) while they show, and
+// above or below the bars the label line's space beyond its text at the label font size
+// (`aboveCap`, over its cap height; `belowBaseline`), so the logo keeps a label's distance from
+// them. Across the bars (vertically
 // beside them, horizontally above or below them) an overhang counts on both sides, so the logo
 // stays centred on the bars wherever its badge sits.
 struct BarIdentityMargin {
@@ -8522,16 +9192,19 @@ static LabelPosition BarIdentityPositionFor(LabelPosition position, const MeterD
 }
 
 static BarIdentityMargin BarIdentityMarginFor(LabelPosition position, bool label, double side, BadgeBox badge,
-                                              bool warn, double gap, double aboveCap, double belowBaseline) {
+                                              IdentityMark mark, double gap, double aboveCap, double belowBaseline) {
     BarIdentityMargin m;
     bool across = position == LabelPosition::Top || position == LabelPosition::Bottom;
     if (label) {
         m.top = across ? 0 : -2;
     } else {
         bool shown = badge.width > 0;
+        bool outage = mark == IdentityMark::Outage;
+        double markTop = outage ? kOutageMarkTop * OutageMarkSize(side) : mark == IdentityMark::Stale ? 3 : 0;
+        double markRight = outage ? kOutageMarkRight * OutageMarkSize(side) : mark == IdentityMark::Stale ? 4 : 0;
         m.left = shown ? std::max(-badge.left, 0.0) : 0;
-        m.top = std::max({warn ? 3.0 : 0.0, shown ? -badge.top : 0.0});
-        m.right = std::max({warn ? 4.0 : 0.0, shown ? badge.left + badge.width - side : 0.0});
+        m.top = std::max({markTop, shown ? -badge.top : 0.0});
+        m.right = std::max({markRight, shown ? badge.left + badge.width - side : 0.0});
         m.bottom = shown ? std::max(badge.top + badge.height - side, 0.0) : 0;
         if (across) {
             m.left = m.right = std::max(m.left, m.right);
@@ -8604,10 +9277,15 @@ struct QuotaMeter {
 
 struct AccountMeters {
     bool stale = false;
-    bool warn = false;         // Stale with an error: the label's "!" or the identity's mark.
+    bool warn = false;         // Stale with an error: the details flyout's stale marker.
+    IdentityMark mark = IdentityMark::None;
+    // The outage mark's color (the usage palette's orange, or its red for a major outage) and size
+    // in DIPs; 0 without one.
+    uint32_t markColor = 0;
+    double markSize = 0;
     int barMask = 0;           // Quota slots shown.
     std::array<QuotaMeter, kQuotaBarCount> quotas;
-    std::wstring labelText;    // Bars' Label identity.
+    std::wstring labelText;    // Bars' Label identity; the outage glyph follows it.
     double labelOpacity = 0;
     double identityOpacity = 0;  // Tiles' identity, and bars' logo identity.
     // Ring tiles: the badge's box from the ring area's top-left, the identity text's fitted font
@@ -8664,10 +9342,12 @@ using TileTraceSource = std::function<std::vector<TileTracePoint>(int slot, cons
 // `layout`: the layout the meters are drawn in. `badgeChars`: the tile badge's text length, 0
 // without a badge. `textWidthPerPt`: the tile identity text's width per DIP of font size, 0
 // without text. `traceOf`: a sparkline's recorded usage, asked for its charted quotas only.
+// `outage`: the level the account's provider shows (none while its marks are off).
 static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout layout,
                                        const AccountConfig& account, const AccountData& data,
                                        int badgeChars, double textWidthPerPt,
-                                       const TileTraceSource& traceOf = {}) {
+                                       const TileTraceSource& traceOf = {},
+                                       OutageLevel outage = OutageLevel::None) {
     AccountMeters meters;
     const std::array<const WindowUsage*, kQuotaBarCount> usage = {
         &data.win5h, &data.winWeek, &data.fableWeek, &data.extraUsage};
@@ -8682,7 +9362,15 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     meters.stale = data.stale || data.lastSuccessMs == 0 ||
                    display.now - data.lastSuccessMs > staleAfterMs;
     meters.warn = display.showStaleWarning && meters.stale && !data.error.empty();
-    meters.labelText = meters.warn ? account.label + L"!" : account.label;
+    // An outage explains the staleness: its mark takes the stale mark's place.
+    if (outage != OutageLevel::None) {
+        meters.mark = IdentityMark::Outage;
+        meters.markColor = display.usageColors[outage == OutageLevel::Major ? 3 : 2];
+    } else if (meters.warn) {
+        meters.mark = IdentityMark::Stale;
+    }
+    meters.labelText = meters.mark == IdentityMark::Stale  ? account.label + L"!" :
+                       meters.mark == IdentityMark::Outage ? account.label + L"\u2009" : account.label;
     meters.labelOpacity = meters.stale ? 0.45 : 0.8;
     meters.identityOpacity = meters.stale ? 0.45 : 1.0;
     // The selected quotas with a reading; none before the first success, so a loading or signed-out
@@ -8835,6 +9523,10 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         meters.ringTextFont = font;
         meters.ringTextWidth = chord(font);
         meters.ringWarnTop = 1 - (display.tileHeight - meters.ring.size) / 2;
+    }
+    if (meters.mark == IdentityMark::Outage) {
+        meters.markSize = ring ? std::clamp(meters.ring.size * kOutageRingMarkShare, kOutageRingMarkMin, kOutageRingMarkMax) :
+                                 OutageMarkSize((tiles ? kHeadlineLogoSide : kBarLogoSide) * display.logoScale);
     }
     // Tiles fill per the bar mode, clamped to the meter; unavailable quotas stay empty.
     auto tileShown = [&](double pct) {
@@ -9388,6 +10080,9 @@ static Grid LoadProviderLogo(std::wstring const& provider, Brush const& fill) {
 // every column takes the tiles' hover and open-flyout background. Values, identity text and
 // geometry come from the meter model (meter-model.h).
 
+// The icon font of the outage mark, as the details flyout's glyphs use it.
+static constexpr PCWSTR kTaskbarIconFont = L"Segoe Fluent Icons, Segoe MDL2 Assets";
+
 // A tile shape (meter-model.h), moved `offset` DIPs right and down: closed figures to fill, or
 // open ones to stroke. PathGeometry fills even-odd by default, as the outline expects.
 static Geometry TileOutlineGeometry(TileOutline const& outline, double offset, bool closed = true) {
@@ -9488,7 +10183,7 @@ static double TileTextWidthPerPt(TextBlock const& text) {
 
 // Builds account `index`'s identity into `tile`: the provider logo (in its brand colors when
 // chosen), with a number badge when another configured account, hidden or not, shares the
-// provider, or text, and the stale-warning mark. Ring tiles
+// provider, or text, and the stale and outage marks. Ring tiles
 // resize the logo to their hole and place the badge; other tiles take a 16 DIP logo, bar
 // columns 15 DIP, at the logo size. UpdateTileIdentity applies its state.
 static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t index,
@@ -9596,6 +10291,23 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
     tile.warn.Margin({0, -3, -4, 0});
     tile.warn.Visibility(Visibility::Collapsed);
     identity.Children().Append(tile.warn);
+    // The outage mark in the same corner, over its halo, in its own color: the stale mark's
+    // inherited text color tells UpdateQuotaUi the taskbar's theme. The icon font's cap height is
+    // its em, so tight line bounds keep the whole triangle. UpdateTileIdentity sizes and places
+    // them.
+    auto outageGlyph = [&] {
+        TextBlock glyph;
+        glyph.Text(kOutageGlyph);
+        glyph.FontFamily(FontFamily(kTaskbarIconFont));
+        glyph.TextLineBounds(TextLineBounds::Tight);
+        glyph.HorizontalAlignment(HorizontalAlignment::Right);
+        glyph.VerticalAlignment(VerticalAlignment::Top);
+        glyph.Visibility(Visibility::Collapsed);
+        identity.Children().Append(glyph);
+        return glyph;
+    };
+    tile.outageHalo = outageGlyph();
+    tile.outage = outageGlyph();
     return identity;
 }
 
@@ -9825,8 +10537,8 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     return column;
 }
 
-// The identity's state: dimmed while stale, like a label; the warning mark in place of the
-// label's "!"; the badge's halo color for a light (`light`) or dark taskbar.
+// The identity's state: dimmed while stale, like a label; the stale or outage mark in place of the
+// label's "!" or glyph; the badge's halo color for a light (`light`) or dark taskbar.
 static void UpdateTileIdentity(TileUiRefs const& tile, AppliedState& ap, AccountMeters const& meters,
                                MeterDisplay const& display, bool light) {
     if (!tile.identity) return;
@@ -9834,9 +10546,39 @@ static void UpdateTileIdentity(TileUiRefs const& tile, AppliedState& ap, Account
         tile.identity.Opacity(meters.identityOpacity);
         ap.identityOpacity = meters.identityOpacity;
     }
-    if ((meters.warn ? 1 : 0) != ap.tileWarn) {
-        tile.warn.Visibility(meters.warn ? Visibility::Visible : Visibility::Collapsed);
-        ap.tileWarn = meters.warn ? 1 : 0;
+    if ((int)meters.mark != ap.tileMark) {
+        tile.warn.Visibility(meters.mark == IdentityMark::Stale ? Visibility::Visible : Visibility::Collapsed);
+        Visibility outage = meters.mark == IdentityMark::Outage ? Visibility::Visible : Visibility::Collapsed;
+        if (tile.outage) tile.outage.Visibility(outage);
+        if (tile.outageHalo) tile.outageHalo.Visibility(outage);
+        ap.tileMark = (int)meters.mark;
+    }
+    if (tile.outage && meters.markColor && meters.markColor != ap.tileMarkColor) {
+        tile.outage.Foreground(SolidColorBrush(ArgbColor(meters.markColor)));
+        ap.tileMarkColor = meters.markColor;
+    }
+    if (tile.outageHalo && (light ? 1 : 0) != ap.tileMarkLight) {
+        tile.outageHalo.Foreground(SolidColorBrush(ArgbColor(TilePaletteFor(light).badgeHalo)));
+        ap.tileMarkLight = light ? 1 : 0;
+    }
+    // The outage mark's size and place (meter-model.h): past the identity's top-right corner, or
+    // on ring tiles where the "!" goes; its halo centred under it. The left and bottom margins take
+    // each box out of the identity's size, as the "!" is, so it never grows a small text identity.
+    if (tile.outage && tile.outageHalo && meters.markSize > 0) {
+        bool ring = IsRingTile(tile.layout);
+        double size = meters.markSize;
+        double right = ring ? -3 : -kOutageMarkRight * size, top = ring ? meters.ringWarnTop : -kOutageMarkTop * size;
+        if (size != ap.tileMarkSize || top != ap.tileMarkTop) {
+            auto place = [](TextBlock const& glyph, double size, double right, double top) {
+                glyph.FontSize(size);
+                glyph.Margin({-right - size, top, right, -top - size});
+            };
+            double grow = size * kOutageHaloShare;
+            place(tile.outage, size, right, top);
+            place(tile.outageHalo, size + 2 * grow, right - grow, top - grow);
+            ap.tileMarkSize = size;
+            ap.tileMarkTop = top;
+        }
     }
     if (tile.badgeHalo && (light ? 1 : 0) != ap.badgeLight) {
         tile.badgeHalo.Color(ArgbColor(BadgeColorsFor(display.badgeColor, light).halo));
@@ -10580,6 +11322,9 @@ struct FlyoutDisplay {
     bool warn = false;
     bool refreshing = false;
     bool visualTestMode = false;
+    // What the provider's status page shows, and the taskbar mark's color for it (0: none).
+    ProviderOutage outage;
+    uint32_t outageColor = 0;
 };
 
 // Quota rows' details cell margins (DIP).
@@ -10709,8 +11454,8 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         line.StrokeEndLineCap(PenLineCap::Round);
     };
 
-    // Header, quota rows, chart legend, notes and footer, top to bottom. Under the card's height
-    // limit (ShowAccountFlyout) only the quota rows shrink, and scroll.
+    // Header, provider status, quota rows, chart legend, notes and footer, top to bottom. Under the
+    // card's height limit (ShowAccountFlyout) only the quota rows shrink, and scroll.
     Grid content;
     auto appendSection = [&](FrameworkElement const& element, GridLength height) {
         RowDefinition definition;
@@ -10788,6 +11533,59 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     header.Children().Append(planChip);
     popup.planChip = planChip;
     appendSection(header, kAuto);
+
+    // Delegates check the popup they were created for.
+    HWND hWnd = state.hWnd;
+    uint64_t generation = popup.generation;
+    Brush transparent = FlyoutBrush(winrt::Windows::UI::Colors::Transparent());
+
+    // Provider status, while a watched component isn't operational: its glyph, then on one line the
+    // component, its state, its start and the incident, trimmed at the end. A click closes the card
+    // and opens the status page.
+    if (const ProviderStatusSource* statusSource = FindProviderStatusSource(provider)) {
+        Button line;
+        if (theme.buttonStyle) line.Style(theme.buttonStyle);
+        line.Background(transparent);
+        line.HorizontalAlignment(HorizontalAlignment::Left);
+        Grid row;
+        row.Margin({5, 4, 6, 4});
+        addColumn(row, kAuto);
+        addColumn(row, kStar);
+        popup.outageGlyph = makeText(14, theme.warning);
+        popup.outageGlyph.FontFamily(iconFont);
+        popup.outageGlyph.Text(kOutageGlyph);
+        popup.outageGlyph.TextWrapping(TextWrapping::NoWrap);
+        popup.outageGlyph.Margin({0, 1, 8, 0});
+        row.Children().Append(popup.outageGlyph);
+        popup.outageText = makeText(12, theme.text);
+        popup.outageText.LineHeight(16);
+        popup.outageText.VerticalAlignment(VerticalAlignment::Center);
+        singleLine(popup.outageText);
+        Grid::SetColumn(popup.outageText, 1);
+        row.Children().Append(popup.outageText);
+        line.Content(row);
+        popup.outageButton = line;
+        PCWSTR pageUrl = statusSource->pageUrl;
+        popup.buttonHandlers.reserve(popup.buttonHandlers.size() + 1);
+        auto token = line.Click([hWnd, generation, pageUrl](winrt::Windows::Foundation::IInspectable const&,
+                                                            RoutedEventArgs const&) {
+            if (g_unloading) return;
+            try {
+                auto* uiState = FindUiState(hWnd);
+                if (!uiState || !uiState->flyout.popup.flyout || uiState->flyout.popup.generation != generation) {
+                    return;
+                }
+                CloseAccountFlyout(*uiState);
+                OpenUrl(pageUrl);
+            } catch (...) {}
+        });
+        popup.buttonHandlers.push_back({line, token});
+        Border outage = section(line);
+        outage.Padding({10, 4, 10, 4});
+        collapsed(outage);
+        popup.outage = outage;
+        appendSection(outage, kAuto);
+    }
 
     // One row per quota: name, big number with over-pace arrow, then its visual and timings.
     // Rows stay in the tree and collapse when the quota is unavailable. All rows share one grid
@@ -11100,11 +11898,8 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     buttons.Spacing(2);
     buttons.VerticalAlignment(VerticalAlignment::Center);
     Grid::SetColumn(buttons, 1);
-    HWND hWnd = state.hWnd;
-    uint64_t generation = popup.generation;
     uint64_t identity = popup.accountIdentity;
     uint64_t historyId = state.accountRefs[popup.accountIndex].historyId;
-    Brush transparent = FlyoutBrush(winrt::Windows::UI::Colors::Transparent());
     auto addButton = [&](PCWSTR glyph, PCWSTR name, FlyoutFooterAction action) {
         Button button;
         if (theme.buttonStyle) button.Style(theme.buttonStyle);
@@ -11204,6 +11999,36 @@ static void UpdateAccountFlyout(
         std::wstring plan = openAi && sparkPlan && !display.showOpenAiExtraLimits ? L"" : d.plan;
         popup.plan.Text(plan);
         show(popup.planChip, !plan.empty());
+
+        // "Claude Code and 1 more: partial outage · since 14:05 · Elevated errors", the incident last
+        // so trimming takes only it; the whole line in the tooltip and to screen readers. The glyph in
+        // the taskbar mark's color (high contrast: the theme's).
+        const ProviderOutage& outage = display.outage;
+        show(popup.outage, outage.level != OutageLevel::None);
+        if (popup.outageText && popup.outageButton && outage.level != OutageLevel::None) {
+            std::wstring line = outage.component;
+            if (outage.others > 0) line += L" and " + std::to_wstring(outage.others) + L" more";
+            line += outage.level == OutageLevel::Major   ? L": major outage" :
+                    outage.level == OutageLevel::Partial ? L": partial outage" :
+                    outage.level == OutageLevel::Degraded ? L": degraded performance" : L": under maintenance";
+            SYSTEMTIME since;
+            if (outage.sinceMs && UnixMsToLocalSystemTime(outage.sinceMs, &since)) {
+                bool today = outage.sinceMs + 24ULL * 60 * 60 * 1000 > display.now;
+                line += L" \u00B7 since " + (today ? FormatLocalTime(since) : FormatLocalDayTime(since));
+            }
+            if (!outage.title.empty()) line += L" \u00B7 " + outage.title;
+            if (std::wstring_view(popup.outageText.Text()) != line) {
+                popup.outageText.Text(line);
+                std::wstring tip = line + L"\nOpen the " + ProviderDisplayName(account.provider) + L" status page";
+                ToolTipService::SetToolTip(popup.outageButton, winrt::box_value(tip));
+                winrt::Windows::UI::Xaml::Automation::AutomationProperties::SetName(popup.outageButton, tip);
+            }
+            if (theme.highContrast || !display.outageColor) {
+                popup.outageGlyph.Foreground(outage.level == OutageLevel::Major ? theme.error : theme.warning);
+            } else {
+                popup.outageGlyph.Foreground(FlyoutBrush(ArgbColor(display.outageColor)));
+            }
+        }
 
         // Antigravity pools are named by their reported window.
         auto poolName = [](PCWSTR pool, ULONGLONG durationMs) {
@@ -12828,8 +13653,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         }
 
         root.Children().Append(panel);
-        // Moves pace marks each minute; identities also pick up a missed light/dark switch with it.
-        if (showPaceTicks || identities) {
+        // Moves pace marks each minute; identities also pick up a missed light/dark switch with it,
+        // and outage marks drop a reading that grew too old.
+        if (showPaceTicks || identities || settings.showProviderOutages) {
             DispatcherTimer paceTimer;
             paceTimer.Interval(std::chrono::minutes(1));
             auto paceTimerToken = paceTimer.Tick(
@@ -12916,6 +13742,12 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     MeterDisplay swappedDisplay = display;
     if (settings.sparklineHoverSpan) swappedDisplay.sparklineAroundMs = SparklineAroundMs(*settings.sparklineHoverSpan);
     state.sparkSwapIndex = state.buildSparkHoverSwap ? state.flyout.hoverIndex : -1;
+    // What each account's provider status page shows while outage marks are on: the visual test
+    // sample, or the status reads' (CurrentProviderOutage takes only its leaf lock).
+    auto outageOf = [&](const std::wstring& provider) -> ProviderOutage {
+        if (!settings.showProviderOutages) return {};
+        return visualTestMode ? VisualTestOutage(provider, now) : CurrentProviderOutage(provider);
+    };
     try {
         for (size_t i = 0; i < data.size(); i++) {
             const AccountData& d = data[i];
@@ -12952,9 +13784,11 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                               kFlyoutFableRow, kFlyoutExtraRow};
                 return rowTrace(kRows[slot], reading);
             };
+            ProviderOutage outage = outageOf(accounts[i].provider);
             AccountMeters meters = AccountMeterState(
                 (int)i == state.sparkSwapIndex ? swappedDisplay : display, state.buildBarLayout, accounts[i], d,
-                ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt, traceOf);
+                ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt, traceOf,
+                outage.level);
             bool accountRefreshing = !visualTestMode &&
                 std::any_of(refreshRequests.begin(), refreshRequests.end(), [&](const auto& request) {
                     return !request.first || request.first == AccountIdentityHash(accounts[i]);
@@ -12979,7 +13813,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                         LogoBadgeBox(display, side, (int)ui.tile.badgeText.Text().size()) : BadgeBox{};
                     BarIdentityMargin m = BarIdentityMarginFor(
                         BarIdentityPositionFor(settings.labelPosition, display), ui.label != nullptr, side,
-                        badge, meters.warn, barMask ? settings.labelGap : 0, state.labelAboveCap,
+                        badge, meters.mark, barMask ? settings.labelGap : 0, state.labelAboveCap,
                         state.labelBelowBaseline);
                     Thickness margin{m.left, m.top, m.right, m.bottom};
                     if (margin != ap.identityMargin) {
@@ -13142,13 +13976,14 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     std::array<std::vector<TileTracePoint>, kFlyoutRowCount> traces;
                     const auto readings = FlyoutRowReadings(d);
                     for (int r = 0; r < kFlyoutRowCount; r++) traces[r] = rowTrace(r, *readings[r]);
-                    UpdateAccountFlyout(state, accounts[i], d,
-                                        {now, display.barMode, display.yellowThreshold,
-                                         display.orangeThreshold, display.redThreshold,
-                                         display.usageColors, settings.showOpenAiExtraLimits,
-                                         meters.stale, meters.warn, accountRefreshing,
-                                         visualTestMode},
-                                        traces);
+                    FlyoutDisplay flyoutDisplay{now, display.barMode, display.yellowThreshold,
+                                                display.orangeThreshold, display.redThreshold,
+                                                display.usageColors, settings.showOpenAiExtraLimits,
+                                                meters.stale, meters.warn, accountRefreshing,
+                                                visualTestMode};
+                    flyoutDisplay.outage = outage;
+                    flyoutDisplay.outageColor = meters.mark == IdentityMark::Outage ? meters.markColor : 0;
+                    UpdateAccountFlyout(state, accounts[i], d, flyoutDisplay, traces);
                 }
             }
 
@@ -13158,13 +13993,34 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 ap.columnOpacity = columnOpacity;
             }
 
-            if (meters.labelOpacity != ap.labelOpacity || meters.labelText != ap.labelText) {
+            // The Label identity: its text (with the stale "!"), or the text and the outage glyph in
+            // its color as a run in the icon font at the label's size, on its baseline (the font's
+            // ascent is shorter than the label's, so the line keeps its height). Text() replaces the
+            // runs.
+            uint32_t labelMarkColor = meters.mark == IdentityMark::Outage ? meters.markColor : 0;
+            if (meters.labelOpacity != ap.labelOpacity || meters.labelText != ap.labelText ||
+                labelMarkColor != ap.labelMarkColor) {
                 if (ui.label) {
                     ui.label.Opacity(meters.labelOpacity);
-                    ui.label.Text(meters.labelText);
+                    if (labelMarkColor) {
+                        namespace wuxd = winrt::Windows::UI::Xaml::Documents;
+                        auto inlines = ui.label.Inlines();
+                        inlines.Clear();
+                        wuxd::Run text;
+                        text.Text(meters.labelText);
+                        inlines.Append(text);
+                        wuxd::Run glyph;
+                        glyph.Text(kOutageGlyph);
+                        glyph.FontFamily(FontFamily(kTaskbarIconFont));
+                        glyph.Foreground(SolidColorBrush(ArgbColor(labelMarkColor)));
+                        inlines.Append(glyph);
+                    } else {
+                        ui.label.Text(meters.labelText);
+                    }
                 }
                 ap.labelOpacity = meters.labelOpacity;
                 ap.labelText = std::move(meters.labelText);
+                ap.labelMarkColor = labelMarkColor;
             }
         }
 
@@ -19885,6 +20741,7 @@ static std::wstring SerializeSettings(const Settings& s) {
         // Builds before palettes read only this switch; they show Custom as the default palette.
         setBool(L"colorblind", s.usagePalette == UsagePalette::Colorblind);
         setBool(L"staleWarning", s.showStaleWarning);
+        setBool(L"providerOutages", s.showProviderOutages);
         setString(L"material", s.material == Material::Mica ? L"mica" :
                                s.material == Material::MicaAlt ? L"micaAlt" :
                                s.material == Material::TintedWallpaper ? L"tintedWallpaper" :
@@ -20138,6 +20995,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
             }
         }
         s.showStaleWarning = getBoolDefault(L"staleWarning", true);
+        s.showProviderOutages = getBoolDefault(L"providerOutages", true);
         // A missing or unknown material keeps the default.
         std::wstring material = GetStr(root, L"material");
         s.material = material == L"acrylic" ? Material::Acrylic :
@@ -20387,6 +21245,7 @@ static void PublishSettings(Settings s, uint64_t oldIdentity, uint64_t newIdenti
         ++g_burnUpPolicyGeneration;
         ResetBurnUpCurvesLocked();
     }
+    if (s.showProviderOutages != g_settings.showProviderOutages) ++g_providerStatusPolicy;
     std::vector<AccountData> newData(s.accounts.size());
     std::vector<bool> oldDataUsed(g_data.size(), false);
     for (size_t i = 0; i < s.accounts.size(); i++) {
@@ -21066,6 +21925,7 @@ enum class SettingsField : uint8_t {
     OrangeThreshold,
     RedThreshold,
     ShowStaleWarning,
+    ShowProviderOutages,
     ShowOpenAiExtraLimits,
     // Accounts: fields of the account a draft's key names
     AccountLabel,         // Text, trimmed; unique per provider
@@ -21185,7 +22045,7 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::UsageColorOrange,    SettingsField::UsageColorRed,
                     SettingsField::YellowThreshold,     SettingsField::OrangeThreshold,
                     SettingsField::RedThreshold,        SettingsField::ShowStaleWarning,
-                    SettingsField::ShowOpenAiExtraLimits};
+                    SettingsField::ShowProviderOutages, SettingsField::ShowOpenAiExtraLimits};
         default: return {};
     }
 }
@@ -21260,6 +22120,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::OrangeThreshold: return s.orangeThreshold;
         case SettingsField::RedThreshold: return s.redThreshold;
         case SettingsField::ShowStaleWarning: return s.showStaleWarning;
+        case SettingsField::ShowProviderOutages: return s.showProviderOutages;
         case SettingsField::ShowOpenAiExtraLimits: return s.showOpenAiExtraLimits;
         default: return 0;
     }
@@ -21385,6 +22246,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::OrangeThreshold: s.orangeThreshold = value; break;
         case SettingsField::RedThreshold: s.redThreshold = value; break;
         case SettingsField::ShowStaleWarning: s.showStaleWarning = value != 0; break;
+        case SettingsField::ShowProviderOutages: s.showProviderOutages = value != 0; break;
         case SettingsField::ShowOpenAiExtraLimits: s.showOpenAiExtraLimits = value != 0; break;
         case SettingsField::ResetDisplay:
             s.material = defaults.material;
@@ -21398,6 +22260,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.orangeThreshold = defaults.orangeThreshold;
             s.redThreshold = defaults.redThreshold;
             s.showStaleWarning = defaults.showStaleWarning;
+            s.showProviderOutages = defaults.showProviderOutages;
             s.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
             break;
         case SettingsField::ResetLayout:
@@ -22680,25 +23543,34 @@ static SettingsPreviewRow SettingsPreviewRowAt(const SettingsPreviewStrip& strip
 // The taskbar's layout of the sample accounts in `settings`. Gallery: the two Anthropic sample
 // accounts on a 48 DIP strip, without a tray. `light` and `text` color the tile chrome and the
 // taskbar's text (logos without brand colors, labels, keys, tray). Tests may pass accounts with
-// their data to lay out instead of the samples.
+// their data (and their providers' outage levels, none without) to lay out instead of the samples,
+// whose outage is VisualTestOutage's; either shows only while outage marks are on.
 static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings,
                                                   double taskbarHeight, float scale, ULONGLONG now,
                                                   bool gallery, bool light, uint32_t text,
                                                   const std::vector<AccountConfig>* testAccounts = nullptr,
-                                                  const std::vector<AccountData>* testData = nullptr) {
+                                                  const std::vector<AccountData>* testData = nullptr,
+                                                  const std::vector<OutageLevel>* testOutages = nullptr) {
     using Op = SettingsPreviewOp;
     SettingsPreviewStrip strip;
     MeterDisplay display = MeterDisplayFor(settings, now, scale, taskbarHeight);
     std::vector<AccountConfig> accounts;
     std::vector<AccountData> data;
     BuildVisualTestSnapshot(display, &accounts, &data);
-    if (testAccounts && testData && testAccounts->size() == testData->size()) {
+    const bool tested = testAccounts && testData && testAccounts->size() == testData->size();
+    if (tested) {
         accounts = *testAccounts;
         data = *testData;
+    }
+    std::vector<OutageLevel> outages(accounts.size(), OutageLevel::None);
+    for (size_t i = 0; settings.showProviderOutages && i < accounts.size(); i++) {
+        outages[i] = !tested ? VisualTestOutage(accounts[i].provider, now).level :
+                     testOutages && i < testOutages->size() ? (*testOutages)[i] : OutageLevel::None;
     }
     if (gallery) {
         accounts = {accounts[1], accounts[2]};
         data = {data[1], data[2]};
+        outages = {outages[1], outages[2]};
     }
     const BarLayout layout = BarLayout(std::clamp(int(settings.barLayout), int(BarLayout::Sparkline),
                                                   int(kLastBarLayout)));
@@ -22780,10 +23652,34 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         }
     };
 
-    // The identity (tiles.h): a `side` DIP logo with its number badge, or the short text, shrunk
-    // to fit 26 DIPs, then clipped; "!" at its top-right corner while warned. From `left`,
-    // centered on `center`; returns its width.
+    // The identity's mark (tiles.h, meter-model.h) from the identity's top-right corner at (`right`,
+    // `top`): the stale "!" in the taskbar's text color, 4 DIPs right and 3 above, or the outage
+    // glyph in its color over its halo, centred, past the corner by its overhang. Ring tiles pass
+    // where the "!" goes, its box's top-right corner 3 DIPs left of `right`, for either mark.
     const UiTextStyle warnStyle{UiFamily::Taskbar, 10, 0, DWRITE_FONT_WEIGHT_BOLD};
+    auto markOps = [&](std::vector<Op>& ops, const AccountMeters& meters, float right, float top, float opacity,
+                       bool ring) {
+        if (meters.mark == IdentityMark::Stale) {
+            Measured m = measure(L"!", warnStyle);
+            label(ops, L"!", warnStyle, right + (ring ? 3 : 4) - m.width, ring ? top : top - 3, m.width,
+                  DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true);
+        }
+        if (meters.mark != IdentityMark::Outage) return;
+        const float size = float(meters.markSize), grow = size * float(kOutageHaloShare);
+        const float markRight = right + (ring ? 3 : size * float(kOutageMarkRight));
+        const float markTop = ring ? top : top - size * float(kOutageMarkTop);
+        const UiTextStyle markStyle{UiFamily::Icons, size, 0, DWRITE_FONT_WEIGHT_NORMAL};
+        const UiTextStyle haloStyle{UiFamily::Icons, size + 2 * grow, 0, DWRITE_FONT_WEIGHT_NORMAL};
+        Measured halo = measure(kOutageGlyph, haloStyle);
+        label(ops, kOutageGlyph, haloStyle, markRight + grow - halo.width, markTop - grow, halo.width,
+              DWRITE_TEXT_ALIGNMENT_LEADING, palette.badgeHalo, opacity, true);
+        Measured m = measure(kOutageGlyph, markStyle);
+        label(ops, kOutageGlyph, markStyle, markRight - m.width, markTop, m.width, DWRITE_TEXT_ALIGNMENT_LEADING,
+              meters.markColor, opacity, true);
+    };
+    // The identity (tiles.h): a `side` DIP logo with its number badge, or the short text, shrunk
+    // to fit 26 DIPs, then clipped; its mark at its top-right corner. From `left`, centered on
+    // `center`; returns its width.
     auto identityOps = [&](std::vector<Op>& ops, size_t i, const AccountMeters& meters, float side, float left,
                            float center) {
         const AccountConfig& account = accounts[i];
@@ -22808,11 +23704,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             label(ops, identity.text, style, left, center - height / 2, width, DWRITE_TEXT_ALIGNMENT_LEADING, text,
                   opacity, true, -1, true);
         }
-        if (meters.warn) {
-            Measured m = measure(L"!", warnStyle);
-            label(ops, L"!", warnStyle, left + width + 4 - m.width, center - height / 2 - 3, m.width,
-                  DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true);
-        }
+        markOps(ops, meters, left + width, center - height / 2, opacity, false);
         return width;
     };
 
@@ -22853,7 +23745,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             const float timeSize = float(geometry.timeGap + geometry.timeThickness);
             const float itemWidth = (vertical ? float(th) + timeSize : float(len)) + (keys ? keyColumn : 0);
             const float itemHeight = float(vertical ? len : th);
-            AccountMeters meters = AccountMeterState(display, layout, account, data[i], 0, 0);
+            AccountMeters meters = AccountMeterState(display, layout, account, data[i], 0, 0, {}, outages[i]);
             int count = std::popcount(unsigned(meters.barMask));
 
             float barsWidth = 0, barsHeight = 0;
@@ -22861,23 +23753,29 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 barsWidth = vertical ? count * itemWidth + (count - 1) * gap : itemWidth;
                 barsHeight = vertical ? float(len) : count * (float(th) + timeSize) + (count - 1) * gap + 2;
             }
-            // The identity: the account label in the label font, its "!" while warned, or the
-            // logo at its size; its margins (BarIdentityMarginFor) make its box, with the label
-            // line's space beyond its text as DirectWrite lays it out.
+            // The identity: the account label in the label font, with its "!" or its outage glyph
+            // (the icon font at the label's size, on its baseline), or the logo at its size; its
+            // margins (BarIdentityMarginFor) make its box, with the label line's space beyond its
+            // text as DirectWrite lays it out.
             const bool shown = position != LabelPosition::Hidden;
             const bool side = position == LabelPosition::Left || position == LabelPosition::Right;
             const bool labelForm = account.tileIdentity == TileIdentity::Text;
             const float logoSide = float(kBarLogoSide * display.logoScale);
             const TileIdentityText identity = TileIdentityFor(accounts, i);
             const Measured labelText = measure(meters.labelText, labelStyle), line = measure(L"A", labelStyle);
+            const UiTextStyle glyphStyle{UiFamily::Icons, labelStyle.size, 0, DWRITE_FONT_WEIGHT_NORMAL};
+            const bool labelGlyph = labelForm && meters.mark == IdentityMark::Outage;
+            const Measured glyph = measure(kOutageGlyph, glyphStyle);
+            const float labelWidth = labelText.width + (labelGlyph ? glyph.width : 0);
             const BarIdentityMargin margin = BarIdentityMarginFor(
                 position, labelForm, logoSide,
                 !labelForm && !identity.badgeText.empty() ?
                     LogoBadgeBox(display, logoSide, int(identity.badgeText.size())) : BadgeBox{},
-                meters.warn, count ? labelGap : 0, line.baseline - line.cap, line.height - line.baseline);
+                meters.mark, count ? labelGap : 0, line.baseline - line.cap,
+                line.height - line.baseline);
             float boxWidth = 0, boxHeight = 0;
             if (shown) {
-                boxWidth = (labelForm ? labelText.width : logoSide) + float(margin.left + margin.right);
+                boxWidth = (labelForm ? labelWidth : logoSide) + float(margin.left + margin.right);
                 boxHeight = (labelForm ? labelText.height : logoSide) + float(margin.top + margin.bottom);
             }
             float contentWidth = barsWidth, contentHeight = barsHeight;
@@ -22905,6 +23803,11 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 if (labelForm) {
                     label(ops, meters.labelText, labelStyle, left, idTop, labelText.width, DWRITE_TEXT_ALIGNMENT_LEADING,
                           text, meters.labelOpacity);
+                    if (labelGlyph) {
+                        label(ops, kOutageGlyph, glyphStyle, left + labelText.width,
+                              idTop + labelText.baseline - glyph.baseline, glyph.width, DWRITE_TEXT_ALIGNMENT_LEADING,
+                              meters.markColor, meters.labelOpacity);
+                    }
                 } else {
                     identityOps(ops, i, meters, logoSide, left, idTop + logoSide / 2);
                 }
@@ -23030,7 +23933,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             // Sparklines chart the visual test samples' recorded usage.
             AccountMeters meters = AccountMeterState(
                 display, layout, account, data[i], hasBadge ? int(identity.badgeText.size()) : 0, perPt,
-                [&](int, const WindowUsage& reading) { return VisualTestTrace(account, reading, now); });
+                [&](int, const WindowUsage& reading) { return VisualTestTrace(account, reading, now); }, outages[i]);
             const float opacity = float(meters.identityOpacity);
             top = (H - T) / 2;
             height = T;
@@ -23083,11 +23986,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     label(ops, identity.text, style, faceLeft + (S - w) / 2, faceTop + (S - m.cap) / 2, w,
                           DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true, -1, true);
                 }
-                if (meters.warn) {
-                    Measured m = measure(L"!", warnStyle);
-                    label(ops, L"!", warnStyle, faceLeft + S + 3 - m.width, faceTop + float(meters.ringWarnTop),
-                          m.width, DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true);
-                }
+                markOps(ops, meters, faceLeft + S, faceTop + float(meters.ringWarnTop), opacity, true);
             } else if (IsFaceTile(layout)) {
                 // Gauges and pies: the identity, then 6 DIP after it the face; a gauge's number
                 // and key centred across it, their cap heights on the model's centres.
@@ -24551,7 +25450,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
 
 // src/settings/page-display.h
 // Settings > Display: the material of the details flyout and the windows, what the meters show,
-// their usage colors and thresholds, the stale marker and the OpenAI details (approved mockup
+// their usage colors and thresholds, the stale and outage marks and the OpenAI details (approved mockup
 // display.png, Appearance aside). The preview card is in the shell's pinned header
 // (settings/preview.h). Pure builder.
 
@@ -24694,6 +25593,14 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
         spec.description = {{L"Adds ! when a refresh failed or is overdue."}};
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowStaleWarning);
     }
+    {
+        UiCardSpec spec;
+        spec.title = L"Show provider outages";
+        spec.description = {{L"A warning triangle on an account while its provider's status page reports a problem "
+                             L"with a service it uses: in the orange usage color for degraded service, a partial "
+                             L"outage or maintenance, the red one for a major outage. Off: no status pages are read."}};
+        y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowProviderOutages);
+    }
 
     y = UiAddSection(items, id, x, y + 20, width, L"Details flyout");
     {
@@ -24706,7 +25613,7 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
 
     UiCardSpec reset;
     reset.title = L"Reset Display to defaults";
-    reset.description = {{L"Material, values, usage colors, stale marker and flyout details."}};
+    reset.description = {{L"Material, values, usage colors, status marks and flyout details."}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetDisplay, L"Reset");
 }
 

@@ -22,8 +22,10 @@ Rules for code under `src/`. Generation, checks, testing and publishing are in t
 
 The mod is injected into `explorer.exe`. Execution domains:
 
-- **Fetch thread** (`FetchThreadProc`): usage HTTP, JSON parsing, retry/backoff, token refresh;
-  owns the notifications: their HKCU app identity (registered before each toast, removed while
+- **Fetch thread** (`FetchThreadProc`): usage HTTP, JSON parsing, retry/backoff, token refresh,
+  and after each round the providers' public status pages (`PollProviderStatuses`, its own
+  cadence, unauthenticated, rereading the setting and visibility before each request); owns the
+  notifications: their HKCU app identity (registered before each toast, removed while
   they are off and at unload) and the fallback tray icon. It must NEVER touch XAML. It runs
   rounds only while `IsTaskbarOwnerProcess()`; other Explorer processes never poll, refresh
   tokens or notify.
@@ -78,6 +80,9 @@ first, then reads/updates XAML.
   threads or showing user-paced dialogs.
 - `g_authMutex` is a leaf used only by token-store operations, including raw rename copies; never
   acquire another lock while holding it.
+- `g_providerStatusMutex` (`fetch/provider-status.h`) is a leaf guarding what each provider's
+  status shows: copy in or out holding no other lock. Status reads take `g_settingsMutex` and
+  `g_refreshMutex` only while holding nothing.
 - `g_placementMutex` (`taskbar/placement.h`) is a leaf guarding the placement records. Only a
   record's owner taskbar thread changes it or uses its weak reference; the settings thread reads
   plain fields only.

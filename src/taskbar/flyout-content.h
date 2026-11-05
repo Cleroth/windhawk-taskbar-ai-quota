@@ -20,6 +20,9 @@ struct FlyoutDisplay {
     bool warn = false;
     bool refreshing = false;
     bool visualTestMode = false;
+    // What the provider's status page shows, and the taskbar mark's color for it (0: none).
+    ProviderOutage outage;
+    uint32_t outageColor = 0;
 };
 
 // Quota rows' details cell margins (DIP).
@@ -149,8 +152,8 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         line.StrokeEndLineCap(PenLineCap::Round);
     };
 
-    // Header, quota rows, chart legend, notes and footer, top to bottom. Under the card's height
-    // limit (ShowAccountFlyout) only the quota rows shrink, and scroll.
+    // Header, provider status, quota rows, chart legend, notes and footer, top to bottom. Under the
+    // card's height limit (ShowAccountFlyout) only the quota rows shrink, and scroll.
     Grid content;
     auto appendSection = [&](FrameworkElement const& element, GridLength height) {
         RowDefinition definition;
@@ -228,6 +231,59 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     header.Children().Append(planChip);
     popup.planChip = planChip;
     appendSection(header, kAuto);
+
+    // Delegates check the popup they were created for.
+    HWND hWnd = state.hWnd;
+    uint64_t generation = popup.generation;
+    Brush transparent = FlyoutBrush(winrt::Windows::UI::Colors::Transparent());
+
+    // Provider status, while a watched component isn't operational: its glyph, then on one line the
+    // component, its state, its start and the incident, trimmed at the end. A click closes the card
+    // and opens the status page.
+    if (const ProviderStatusSource* statusSource = FindProviderStatusSource(provider)) {
+        Button line;
+        if (theme.buttonStyle) line.Style(theme.buttonStyle);
+        line.Background(transparent);
+        line.HorizontalAlignment(HorizontalAlignment::Left);
+        Grid row;
+        row.Margin({5, 4, 6, 4});
+        addColumn(row, kAuto);
+        addColumn(row, kStar);
+        popup.outageGlyph = makeText(14, theme.warning);
+        popup.outageGlyph.FontFamily(iconFont);
+        popup.outageGlyph.Text(kOutageGlyph);
+        popup.outageGlyph.TextWrapping(TextWrapping::NoWrap);
+        popup.outageGlyph.Margin({0, 1, 8, 0});
+        row.Children().Append(popup.outageGlyph);
+        popup.outageText = makeText(12, theme.text);
+        popup.outageText.LineHeight(16);
+        popup.outageText.VerticalAlignment(VerticalAlignment::Center);
+        singleLine(popup.outageText);
+        Grid::SetColumn(popup.outageText, 1);
+        row.Children().Append(popup.outageText);
+        line.Content(row);
+        popup.outageButton = line;
+        PCWSTR pageUrl = statusSource->pageUrl;
+        popup.buttonHandlers.reserve(popup.buttonHandlers.size() + 1);
+        auto token = line.Click([hWnd, generation, pageUrl](winrt::Windows::Foundation::IInspectable const&,
+                                                            RoutedEventArgs const&) {
+            if (g_unloading) return;
+            try {
+                auto* uiState = FindUiState(hWnd);
+                if (!uiState || !uiState->flyout.popup.flyout || uiState->flyout.popup.generation != generation) {
+                    return;
+                }
+                CloseAccountFlyout(*uiState);
+                OpenUrl(pageUrl);
+            } catch (...) {}
+        });
+        popup.buttonHandlers.push_back({line, token});
+        Border outage = section(line);
+        outage.Padding({10, 4, 10, 4});
+        collapsed(outage);
+        popup.outage = outage;
+        appendSection(outage, kAuto);
+    }
 
     // One row per quota: name, big number with over-pace arrow, then its visual and timings.
     // Rows stay in the tree and collapse when the quota is unavailable. All rows share one grid
@@ -540,11 +596,8 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     buttons.Spacing(2);
     buttons.VerticalAlignment(VerticalAlignment::Center);
     Grid::SetColumn(buttons, 1);
-    HWND hWnd = state.hWnd;
-    uint64_t generation = popup.generation;
     uint64_t identity = popup.accountIdentity;
     uint64_t historyId = state.accountRefs[popup.accountIndex].historyId;
-    Brush transparent = FlyoutBrush(winrt::Windows::UI::Colors::Transparent());
     auto addButton = [&](PCWSTR glyph, PCWSTR name, FlyoutFooterAction action) {
         Button button;
         if (theme.buttonStyle) button.Style(theme.buttonStyle);
@@ -644,6 +697,36 @@ static void UpdateAccountFlyout(
         std::wstring plan = openAi && sparkPlan && !display.showOpenAiExtraLimits ? L"" : d.plan;
         popup.plan.Text(plan);
         show(popup.planChip, !plan.empty());
+
+        // "Claude Code and 1 more: partial outage · since 14:05 · Elevated errors", the incident last
+        // so trimming takes only it; the whole line in the tooltip and to screen readers. The glyph in
+        // the taskbar mark's color (high contrast: the theme's).
+        const ProviderOutage& outage = display.outage;
+        show(popup.outage, outage.level != OutageLevel::None);
+        if (popup.outageText && popup.outageButton && outage.level != OutageLevel::None) {
+            std::wstring line = outage.component;
+            if (outage.others > 0) line += L" and " + std::to_wstring(outage.others) + L" more";
+            line += outage.level == OutageLevel::Major   ? L": major outage" :
+                    outage.level == OutageLevel::Partial ? L": partial outage" :
+                    outage.level == OutageLevel::Degraded ? L": degraded performance" : L": under maintenance";
+            SYSTEMTIME since;
+            if (outage.sinceMs && UnixMsToLocalSystemTime(outage.sinceMs, &since)) {
+                bool today = outage.sinceMs + 24ULL * 60 * 60 * 1000 > display.now;
+                line += L" \u00B7 since " + (today ? FormatLocalTime(since) : FormatLocalDayTime(since));
+            }
+            if (!outage.title.empty()) line += L" \u00B7 " + outage.title;
+            if (std::wstring_view(popup.outageText.Text()) != line) {
+                popup.outageText.Text(line);
+                std::wstring tip = line + L"\nOpen the " + ProviderDisplayName(account.provider) + L" status page";
+                ToolTipService::SetToolTip(popup.outageButton, winrt::box_value(tip));
+                winrt::Windows::UI::Xaml::Automation::AutomationProperties::SetName(popup.outageButton, tip);
+            }
+            if (theme.highContrast || !display.outageColor) {
+                popup.outageGlyph.Foreground(outage.level == OutageLevel::Major ? theme.error : theme.warning);
+            } else {
+                popup.outageGlyph.Foreground(FlyoutBrush(ArgbColor(display.outageColor)));
+            }
+        }
 
         // Antigravity pools are named by their reported window.
         auto poolName = [](PCWSTR pool, ULONGLONG durationMs) {

@@ -60,6 +60,12 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     MeterDisplay swappedDisplay = display;
     if (settings.sparklineHoverSpan) swappedDisplay.sparklineAroundMs = SparklineAroundMs(*settings.sparklineHoverSpan);
     state.sparkSwapIndex = state.buildSparkHoverSwap ? state.flyout.hoverIndex : -1;
+    // What each account's provider status page shows while outage marks are on: the visual test
+    // sample, or the status reads' (CurrentProviderOutage takes only its leaf lock).
+    auto outageOf = [&](const std::wstring& provider) -> ProviderOutage {
+        if (!settings.showProviderOutages) return {};
+        return visualTestMode ? VisualTestOutage(provider, now) : CurrentProviderOutage(provider);
+    };
     try {
         for (size_t i = 0; i < data.size(); i++) {
             const AccountData& d = data[i];
@@ -96,9 +102,11 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                               kFlyoutFableRow, kFlyoutExtraRow};
                 return rowTrace(kRows[slot], reading);
             };
+            ProviderOutage outage = outageOf(accounts[i].provider);
             AccountMeters meters = AccountMeterState(
                 (int)i == state.sparkSwapIndex ? swappedDisplay : display, state.buildBarLayout, accounts[i], d,
-                ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt, traceOf);
+                ui.tile.badge ? (int)ui.tile.badgeText.Text().size() : 0, ui.tile.textWidthPerPt, traceOf,
+                outage.level);
             bool accountRefreshing = !visualTestMode &&
                 std::any_of(refreshRequests.begin(), refreshRequests.end(), [&](const auto& request) {
                     return !request.first || request.first == AccountIdentityHash(accounts[i]);
@@ -123,7 +131,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                         LogoBadgeBox(display, side, (int)ui.tile.badgeText.Text().size()) : BadgeBox{};
                     BarIdentityMargin m = BarIdentityMarginFor(
                         BarIdentityPositionFor(settings.labelPosition, display), ui.label != nullptr, side,
-                        badge, meters.warn, barMask ? settings.labelGap : 0, state.labelAboveCap,
+                        badge, meters.mark, barMask ? settings.labelGap : 0, state.labelAboveCap,
                         state.labelBelowBaseline);
                     Thickness margin{m.left, m.top, m.right, m.bottom};
                     if (margin != ap.identityMargin) {
@@ -286,13 +294,14 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     std::array<std::vector<TileTracePoint>, kFlyoutRowCount> traces;
                     const auto readings = FlyoutRowReadings(d);
                     for (int r = 0; r < kFlyoutRowCount; r++) traces[r] = rowTrace(r, *readings[r]);
-                    UpdateAccountFlyout(state, accounts[i], d,
-                                        {now, display.barMode, display.yellowThreshold,
-                                         display.orangeThreshold, display.redThreshold,
-                                         display.usageColors, settings.showOpenAiExtraLimits,
-                                         meters.stale, meters.warn, accountRefreshing,
-                                         visualTestMode},
-                                        traces);
+                    FlyoutDisplay flyoutDisplay{now, display.barMode, display.yellowThreshold,
+                                                display.orangeThreshold, display.redThreshold,
+                                                display.usageColors, settings.showOpenAiExtraLimits,
+                                                meters.stale, meters.warn, accountRefreshing,
+                                                visualTestMode};
+                    flyoutDisplay.outage = outage;
+                    flyoutDisplay.outageColor = meters.mark == IdentityMark::Outage ? meters.markColor : 0;
+                    UpdateAccountFlyout(state, accounts[i], d, flyoutDisplay, traces);
                 }
             }
 
@@ -302,13 +311,34 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 ap.columnOpacity = columnOpacity;
             }
 
-            if (meters.labelOpacity != ap.labelOpacity || meters.labelText != ap.labelText) {
+            // The Label identity: its text (with the stale "!"), or the text and the outage glyph in
+            // its color as a run in the icon font at the label's size, on its baseline (the font's
+            // ascent is shorter than the label's, so the line keeps its height). Text() replaces the
+            // runs.
+            uint32_t labelMarkColor = meters.mark == IdentityMark::Outage ? meters.markColor : 0;
+            if (meters.labelOpacity != ap.labelOpacity || meters.labelText != ap.labelText ||
+                labelMarkColor != ap.labelMarkColor) {
                 if (ui.label) {
                     ui.label.Opacity(meters.labelOpacity);
-                    ui.label.Text(meters.labelText);
+                    if (labelMarkColor) {
+                        namespace wuxd = winrt::Windows::UI::Xaml::Documents;
+                        auto inlines = ui.label.Inlines();
+                        inlines.Clear();
+                        wuxd::Run text;
+                        text.Text(meters.labelText);
+                        inlines.Append(text);
+                        wuxd::Run glyph;
+                        glyph.Text(kOutageGlyph);
+                        glyph.FontFamily(FontFamily(kTaskbarIconFont));
+                        glyph.Foreground(SolidColorBrush(ArgbColor(labelMarkColor)));
+                        inlines.Append(glyph);
+                    } else {
+                        ui.label.Text(meters.labelText);
+                    }
                 }
                 ap.labelOpacity = meters.labelOpacity;
                 ap.labelText = std::move(meters.labelText);
+                ap.labelMarkColor = labelMarkColor;
             }
         }
 

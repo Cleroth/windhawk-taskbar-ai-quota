@@ -853,8 +853,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         }
 
         root.Children().Append(panel);
-        // Moves pace marks each minute; identities also pick up a missed light/dark switch with it.
-        if (showPaceTicks || identities) {
+        // Moves pace marks each minute; identities also pick up a missed light/dark switch with it,
+        // and outage marks drop a reading that grew too old.
+        if (showPaceTicks || identities || settings.showProviderOutages) {
             DispatcherTimer paceTimer;
             paceTimer.Interval(std::chrono::minutes(1));
             auto paceTimerToken = paceTimer.Tick(

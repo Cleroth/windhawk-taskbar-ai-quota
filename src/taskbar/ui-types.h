@@ -24,6 +24,7 @@ struct AppliedState {
     std::array<std::wstring, kQuotaBarCount> percentTexts;
     std::wstring labelText;
     double labelOpacity = -1;
+    uint32_t labelMarkColor = 0;  // The Label identity's outage glyph color; 0: plain text.
     Thickness identityMargin{-1, -1, -1, -1};  // Bar columns' identity, label or logo.
     double columnOpacity = -1;
     int barMask = -1;
@@ -34,7 +35,12 @@ struct AppliedState {
     TileShapeKey tileShape;
     // Identity (tiles, a bar column's logo identity).
     double identityOpacity = -1;
-    int tileWarn = -1;
+    int tileMark = -1;  // An IdentityMark; -1 unset.
+    uint32_t tileMarkColor = 0;
+    int tileMarkLight = -1;  // The outage mark's halo for a light (1) or dark (0) taskbar.
+    // The outage mark's size and top margin as placed; -1: not yet.
+    double tileMarkSize = -1;
+    double tileMarkTop = 0;
     int badgeLight = -1;  // Badge halo color for a light (1) or dark (0) taskbar.
     // Every column: 0 none; hover (2) or open flyout (4), plus 1 on a light taskbar.
     int highlight = -1;
@@ -90,7 +96,7 @@ struct TileUiRefs {
     Grid face{nullptr};
     // Meter shapes, regenerated whenever their TileShapeKey changes.
     Panel meters{nullptr};
-    // Logo (with an optional number badge) or text, plus the stale-warning mark.
+    // Logo (with an optional number badge) or text, plus the stale mark and the outage mark.
     Grid identity{nullptr};
     FrameworkElement logo{nullptr};
     TextBlock text{nullptr};
@@ -100,6 +106,8 @@ struct TileUiRefs {
     TextBlock badgeText{nullptr};
     SolidColorBrush badgeHalo{nullptr};
     TextBlock warn{nullptr};
+    TextBlock outage{nullptr};
+    TextBlock outageHalo{nullptr};
     // Logo + headline and gauges: the most-used quota's number and window key; headline tiles
     // with the countdown show it instead of their segments.
     TextBlock headline{nullptr};
@@ -274,6 +282,12 @@ struct FlyoutPopup {
 
     TextBlock title{nullptr};
     FrameworkElement staleMarker{nullptr};
+    // The provider status line under the header, its button (opening the status page; its tooltip
+    // the whole line), glyph and text; none for providers without a status page.
+    FrameworkElement outage{nullptr};
+    Button outageButton{nullptr};
+    TextBlock outageGlyph{nullptr};
+    TextBlock outageText{nullptr};
     FrameworkElement planChip{nullptr};
     TextBlock plan{nullptr};
     std::array<FlyoutQuotaRow, kFlyoutRowCount> rows;

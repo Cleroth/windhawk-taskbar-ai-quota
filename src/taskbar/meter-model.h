@@ -481,8 +481,8 @@ struct TilePalette {
     uint32_t track;
     uint32_t hover;
     uint32_t open;       // Tile whose flyout is open.
-    // The taskbar's own color: the number badge's outline, and the cut-out around a sparkline's
-    // current reading.
+    // The taskbar's own color: the number badge's outline, the cut-out around a sparkline's current
+    // reading, and the outage mark's halo on a logo, text or ring identity.
     uint32_t badgeHalo;
     uint32_t plot;     // A sparkline chart's background, darker than the taskbar,
     uint32_t lit;      // over it the window's elapsed part,
@@ -659,8 +659,8 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
     const ULONGLONG now = display.now;
     // One to four taskbar quotas, each from slots its provider reports; two Anthropic accounts
     // share a provider so tiles show number badges. A negative value is a quota not reported.
-    // Antigravity is stale, with an error. Identities mix: OAI shows its label, the Anthropic pair
-    // their logo and number badge, Go its logo alone, with the stale mark.
+    // Antigravity is stale, with an error. Identities mix: OAI shows its label (with VisualTestOutage's
+    // mark), the Anthropic pair their logo and number badge, Go its logo alone, with the stale mark.
     struct Sample {
         PCWSTR provider;
         PCWSTR label;
@@ -759,6 +759,13 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
         }
         data->push_back(std::move(accountData));
     }
+}
+
+// The visual test accounts' provider status, while outage marks are on: OpenAI's (the OAI sample's
+// provider) degraded since 25 minutes before `now`; the others operational.
+static ProviderOutage VisualTestOutage(std::wstring_view provider, ULONGLONG now) {
+    if (provider != L"openai") return {};
+    return {OutageLevel::Degraded, L"Codex API", 0, L"Elevated error rates", now - 25 * 60000};
 }
 
 // A recorded reading of a quota in its current window (the burn-up curve's), oldest first.
@@ -1049,12 +1056,37 @@ static BadgeBox LogoBadgeBox(const MeterDisplay& display, double side, int chars
     return {x - width / 2, y - height / 2, width, height};
 }
 
+// The mark beside an account's identity (a logo's or text's top-right corner, a ring tile's
+// corner, after a Label identity): the stale "!", or a provider outage's filled warning triangle
+// (kOutageGlyph in Segoe Fluent Icons), which takes its place. The outage mark is
+// kOutageMarkShare of a logo's side (a text identity's: its logo's), clamped to kOutageMarkMin-
+// kOutageMarkMax DIPs, its box kOutageMarkRight of its size past the identity's right edge and
+// kOutageMarkTop above its top; on ring tiles kOutageRingMarkShare of the ring, clamped likewise,
+// where the "!" goes (AccountMeters::markSize). Under it, the same glyph kOutageHaloShare of its size
+// larger on each side, in the taskbar's color (TilePalette::badgeHalo), so it stands clear of a
+// logo. After a label and a thin space: the glyph at the label's font size.
+enum class IdentityMark : uint8_t {
+    None,
+    Stale,
+    Outage,
+};
+static constexpr PCWSTR kOutageGlyph = L"\uE814";
+static constexpr double kOutageMarkShare = 0.75, kOutageMarkMin = 7, kOutageMarkMax = 14;
+static constexpr double kOutageRingMarkShare = 1.0 / 3, kOutageRingMarkMin = 8, kOutageRingMarkMax = 13;
+static constexpr double kOutageMarkRight = 4.0 / 9, kOutageMarkTop = 3.0 / 9, kOutageHaloShare = 1.0 / 9;
+
+// The outage mark's size beside a `side` DIP logo.
+static double OutageMarkSize(double side) {
+    return std::clamp(side * kOutageMarkShare, kOutageMarkMin, kOutageMarkMax);
+}
+
 // A bar column's identity margins in DIPs, which make its box: the identity gap (`gap`; 0
 // without bars) on the side facing the bars. A Label identity beside them sits 2 DIPs high. A
 // `side` DIP logo's box takes the overhangs of its badge (`badge`, from the logo's top-left) and
-// its stale mark (4 DIPs right, 3 above) while they show, and above or below the bars the label
-// line's space beyond its text at the label font size (`aboveCap`, over its cap height;
-// `belowBaseline`), so the logo keeps a label's distance from them. Across the bars (vertically
+// its mark (the stale "!" 4 DIPs right and 3 above, the outage mark its own) while they show, and
+// above or below the bars the label line's space beyond its text at the label font size
+// (`aboveCap`, over its cap height; `belowBaseline`), so the logo keeps a label's distance from
+// them. Across the bars (vertically
 // beside them, horizontally above or below them) an overhang counts on both sides, so the logo
 // stays centred on the bars wherever its badge sits.
 struct BarIdentityMargin {
@@ -1069,16 +1101,19 @@ static LabelPosition BarIdentityPositionFor(LabelPosition position, const MeterD
 }
 
 static BarIdentityMargin BarIdentityMarginFor(LabelPosition position, bool label, double side, BadgeBox badge,
-                                              bool warn, double gap, double aboveCap, double belowBaseline) {
+                                              IdentityMark mark, double gap, double aboveCap, double belowBaseline) {
     BarIdentityMargin m;
     bool across = position == LabelPosition::Top || position == LabelPosition::Bottom;
     if (label) {
         m.top = across ? 0 : -2;
     } else {
         bool shown = badge.width > 0;
+        bool outage = mark == IdentityMark::Outage;
+        double markTop = outage ? kOutageMarkTop * OutageMarkSize(side) : mark == IdentityMark::Stale ? 3 : 0;
+        double markRight = outage ? kOutageMarkRight * OutageMarkSize(side) : mark == IdentityMark::Stale ? 4 : 0;
         m.left = shown ? std::max(-badge.left, 0.0) : 0;
-        m.top = std::max({warn ? 3.0 : 0.0, shown ? -badge.top : 0.0});
-        m.right = std::max({warn ? 4.0 : 0.0, shown ? badge.left + badge.width - side : 0.0});
+        m.top = std::max({markTop, shown ? -badge.top : 0.0});
+        m.right = std::max({markRight, shown ? badge.left + badge.width - side : 0.0});
         m.bottom = shown ? std::max(badge.top + badge.height - side, 0.0) : 0;
         if (across) {
             m.left = m.right = std::max(m.left, m.right);
@@ -1151,10 +1186,15 @@ struct QuotaMeter {
 
 struct AccountMeters {
     bool stale = false;
-    bool warn = false;         // Stale with an error: the label's "!" or the identity's mark.
+    bool warn = false;         // Stale with an error: the details flyout's stale marker.
+    IdentityMark mark = IdentityMark::None;
+    // The outage mark's color (the usage palette's orange, or its red for a major outage) and size
+    // in DIPs; 0 without one.
+    uint32_t markColor = 0;
+    double markSize = 0;
     int barMask = 0;           // Quota slots shown.
     std::array<QuotaMeter, kQuotaBarCount> quotas;
-    std::wstring labelText;    // Bars' Label identity.
+    std::wstring labelText;    // Bars' Label identity; the outage glyph follows it.
     double labelOpacity = 0;
     double identityOpacity = 0;  // Tiles' identity, and bars' logo identity.
     // Ring tiles: the badge's box from the ring area's top-left, the identity text's fitted font
@@ -1211,10 +1251,12 @@ using TileTraceSource = std::function<std::vector<TileTracePoint>(int slot, cons
 // `layout`: the layout the meters are drawn in. `badgeChars`: the tile badge's text length, 0
 // without a badge. `textWidthPerPt`: the tile identity text's width per DIP of font size, 0
 // without text. `traceOf`: a sparkline's recorded usage, asked for its charted quotas only.
+// `outage`: the level the account's provider shows (none while its marks are off).
 static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout layout,
                                        const AccountConfig& account, const AccountData& data,
                                        int badgeChars, double textWidthPerPt,
-                                       const TileTraceSource& traceOf = {}) {
+                                       const TileTraceSource& traceOf = {},
+                                       OutageLevel outage = OutageLevel::None) {
     AccountMeters meters;
     const std::array<const WindowUsage*, kQuotaBarCount> usage = {
         &data.win5h, &data.winWeek, &data.fableWeek, &data.extraUsage};
@@ -1229,7 +1271,15 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     meters.stale = data.stale || data.lastSuccessMs == 0 ||
                    display.now - data.lastSuccessMs > staleAfterMs;
     meters.warn = display.showStaleWarning && meters.stale && !data.error.empty();
-    meters.labelText = meters.warn ? account.label + L"!" : account.label;
+    // An outage explains the staleness: its mark takes the stale mark's place.
+    if (outage != OutageLevel::None) {
+        meters.mark = IdentityMark::Outage;
+        meters.markColor = display.usageColors[outage == OutageLevel::Major ? 3 : 2];
+    } else if (meters.warn) {
+        meters.mark = IdentityMark::Stale;
+    }
+    meters.labelText = meters.mark == IdentityMark::Stale  ? account.label + L"!" :
+                       meters.mark == IdentityMark::Outage ? account.label + L"\u2009" : account.label;
     meters.labelOpacity = meters.stale ? 0.45 : 0.8;
     meters.identityOpacity = meters.stale ? 0.45 : 1.0;
     // The selected quotas with a reading; none before the first success, so a loading or signed-out
@@ -1382,6 +1432,10 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         meters.ringTextFont = font;
         meters.ringTextWidth = chord(font);
         meters.ringWarnTop = 1 - (display.tileHeight - meters.ring.size) / 2;
+    }
+    if (meters.mark == IdentityMark::Outage) {
+        meters.markSize = ring ? std::clamp(meters.ring.size * kOutageRingMarkShare, kOutageRingMarkMin, kOutageRingMarkMax) :
+                                 OutageMarkSize((tiles ? kHeadlineLogoSide : kBarLogoSide) * display.logoScale);
     }
     // Tiles fill per the bar mode, clamped to the meter; unavailable quotas stay empty.
     auto tileShown = [&](double pct) {

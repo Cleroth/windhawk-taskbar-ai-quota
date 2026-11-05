@@ -288,6 +288,9 @@ struct Settings {
     // The Custom palette's colors, kept while another palette is chosen.
     std::array<COLORREF, 4> customUsageColors = kDefaultUsageColors;
     bool showStaleWarning = true;
+    // Reads the providers' public status pages and marks their accounts while a watched component
+    // isn't operational (fetch/provider-status.h).
+    bool showProviderOutages = true;
     NotificationLevel notificationLevel = NotificationLevel::Red;
     Material material = Material::Acrylic;
 
@@ -360,6 +363,28 @@ struct AccountData {
     ULONGLONG retryDeadlineMs = 0;
     bool stale = true;
     bool needsLogin = false;  // Sign-in required; left-click signs in instead of refreshing.
+};
+
+// A provider's status page state, by severity: its worst watched component that isn't operational.
+enum class OutageLevel : uint8_t {
+    None,
+    Maintenance,
+    Degraded,
+    Partial,
+    Major,
+};
+
+// What a provider's accounts show of its status page (fetch/status-feeds.h): the worst watched
+// component's name and level, how many other watched components aren't operational, and the
+// incident or reason behind it with its start (Unix ms, 0 when unknown) when the page says.
+struct ProviderOutage {
+    OutageLevel level = OutageLevel::None;
+    std::wstring component;
+    int others = 0;
+    std::wstring title;
+    ULONGLONG sinceMs = 0;
+
+    bool operator==(const ProviderOutage&) const = default;
 };
 
 // Adds a reported quota to the account's extra quotas, its name followed by its window's length

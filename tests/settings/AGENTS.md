@@ -1,6 +1,7 @@
 # Settings verification
 
-Source-extracted tests of the pure fragments behind both custom-drawn windows (meter model,
+Source-extracted tests of the provider status pages' parser and read rules, and of the pure
+fragments behind both custom-drawn windows (meter model,
 `src/ui/` toolkit, the settings edit controller, shell and page builders; the usage history
 window's view, chart, controller and frame builders on the shared history model), offscreen renders of
 both windows, a native-host probe of the toolkit's window host (with its dropdown popup, tooltip
@@ -96,6 +97,16 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   and Custom's color cards (swatches, Custom... per band, dots, wording, dark text), threshold
   ordering in the projection and after a save (the test store's `normalize` hook), the Display
   page per tile style and what its settings change in the preview strip.
+- `extract-status`, `status-compile`, `status`: `fetch/status-feeds.h` (with `core/model.h`, the
+  JSON accessors, `Utf8ToWide`, `ParseIso8601Ms` and its epoch constant) in its own executable
+  (`fixtures/status-main.inc`, `fixtures/status.inc`, header `status.hpp`), given
+  `fixtures/status/` as its argument: the captured pages (Claude's and GitHub's Statuspage
+  summaries, OpenAI's incident.io feed and OpenCode's status API, all operational, and Supabase's
+  incident.io feed with a recovered incident still in monitoring, update texts removed; read
+  2026-11-05) parsed as is and with one entry replaced (each level, incidents and maintenances
+  with their titles and starts, HashiCorp's live incident.io incident moved onto a Codex
+  component, unwatched components, unknown statuses, strict dates, untrusted pages), the
+  two-read confirmation and the reading's age. No network.
 - `render`: the same executable with `--render-dir` paints the settings client area (1000 x 820
   DIP, the mockups' window without its caption) into WIC bitmaps: About, Accounts (collapsed
   cards), Behavior, History, Layout (every tile style; stacked and ring at every DPI) and Display
@@ -254,7 +265,7 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
 ## Outputs and side effects
 
 Each run creates a retained `.out/run-.../` with the extracted `settings.cpp`, `history.cpp`,
-`ui-host.cpp` and `popup.cpp` (plus `.manifest.json` section boundaries and hashes), executables, the DLL,
+`status.cpp`, `ui-host.cpp` and `popup.cpp` (plus `.manifest.json` section boundaries and hashes), executables, the DLL,
 `render-*.png`, per-phase logs and `results.json`. The tool never prunes old runs. The host probe
 shows off-screen, never-activated windows and briefly a message box, and reads the user's theme
 (registry, `UISettings`); its popup, text box, slider, preview, chart, tooltip and color dialog
@@ -268,7 +279,7 @@ credential or Explorer access.
 
 Exit 0 requires every phase to pass: tooling self-tests, freshness and the mod check (default
 source), the extractions, compiles, exactly one successful `RESULT` summary from `model`, `render`, `history`,
-`history-render`, `host-probe` and `popup-probe`, every reported render present as a PNG, and
+`history-render`, `status`, `host-probe` and `popup-probe`, every reported render present as a PNG, and
 source and harness unchanged during the run. A pass covers extracted logic, offscreen rendering and the host's
 window/thread/teardown contract in a test process (the controller against a test store, the
 popup and EDITs against a stub client); Explorer, the settings thread's real client and store,
@@ -288,10 +299,13 @@ readout, real cursor sizes, multi-monitor DPI and z-order next to the taskbar ne
 ## Maintenance rules
 
 - `extract.py` takes whole fragments between `// src/<path>` marker lines of the generated file,
-  plus named definitions; it refuses missing or ambiguous boundaries and source changes.
-  Model- and history-target fragments must stay pure (no XAML, WinRT, window, registry, storage
-  or global state): fix impurities in `src/`, never patch extracted code. The only stub allowed
-  is `Wh_Log`, in the host target.
+  plus named definitions and one-line constants; it refuses missing or ambiguous boundaries and
+  source changes. Model- and history-target fragments must stay pure (no XAML, WinRT, window,
+  registry, storage or global state); the status target's likewise, except Windows.Data.Json: fix
+  impurities in `src/`, never patch extracted code. The only stub allowed is `Wh_Log`, in the host
+  target.
+- `fixtures/status/` holds captured public status pages only (no account data); replace a capture
+  rather than edit it, and keep expected values read off it by hand.
 - Never extract the production store, storage, auth, account commands, settings client, history
   journal, history ops (`history/ops.h`) or history window code (`history/ui-window.h`,
   `window.h`).

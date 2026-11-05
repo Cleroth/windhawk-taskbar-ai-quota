@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
-// @version         2.14.2
+// @version         2.15.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -32,6 +32,11 @@ Supported providers and quotas:
 
 Optional notifications, under the mod's own name and icon, warn when usage reaches the yellow,
 orange or red threshold you choose, and say when it is projected to reach the limit.
+
+While a provider's public status page (Claude, OpenAI's Codex, GitHub Copilot, OpenCode Go)
+reports a problem, its accounts show a warning triangle, and the details flyout names the
+component and incident, with a link to the page. Nothing shows while all is well; turn it off
+under Display.
 
 ![Quota tooltip](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/ss1.png)
 
@@ -63,7 +68,7 @@ signed-in local app or CLI session, which must remain running.
 - **Display:** Material of the details flyout and the settings and history windows (Acrylic,
   Mica, Mica Alt, Tinted wallpaper or Solid; needs Windows transparency effects), used or
   remaining, percentage text, usage colors (default, colorblind or your own) and thresholds,
-  stale marker.
+  stale marker, provider outages.
 - **Behavior:** Choose displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
   default) or for a number of days, and choose recording per account independently of taskbar
@@ -149,6 +154,7 @@ Have a suggestion or found a bug?
 #include <winrt/Windows.UI.Xaml.Automation.Provider.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Documents.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Interop.h>
@@ -237,6 +243,10 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 #include "history/burn-up.h"
 
 #include "history/burn-up-store.h"
+
+#include "fetch/status-feeds.h"
+
+#include "fetch/provider-status.h"
 
 #include "fetch/notifications.h"
 

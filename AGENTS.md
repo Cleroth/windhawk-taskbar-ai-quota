@@ -57,7 +57,8 @@ Build files go to `.out/icon/`. Nothing references the two files.
 - Run `check-mod.ps1` for syntax/metadata and `python tests/history/run.py` for isolated
   usage-history domain regressions (model, continuity, burn-up, journal memory, CSV). Both test
   suites use bundled clang, not `msbuild`/`vstest.console`.
-- `python tests/settings/run.py` tests the extracted meter model, UI toolkit, settings edit
+- `python tests/settings/run.py` tests the provider status pages' parser and read rules against
+  captured pages, the extracted meter model, UI toolkit, settings edit
   controller (against an in-memory store with failure injection), settings builders and the usage
   history window's view, chart, controller (against in-memory ops) and frame builders the same way,
   renders both windows (and the settings

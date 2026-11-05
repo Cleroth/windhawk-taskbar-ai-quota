@@ -1709,6 +1709,147 @@ static void RunAccountTests() {
         }
     });
 
+    Run("outage mark: in the stale mark's place, the palette's orange, or its red for a major outage", [] {
+        auto meters = [](OutageLevel outage, bool stale, const Settings& settings = {},
+                         TileIdentity identity = TileIdentity::Text, BarLayout layout = BarLayout::Stacked) {
+            AccountData data = Fresh({10, -1, -1, -1});
+            if (stale) {
+                data.stale = true;
+                data.error = L"timeout";
+            }
+            AccountConfig account = Account();
+            account.tileIdentity = identity;
+            return AccountMeterState(Display(settings), layout, account, data, 0, 0, {}, outage);
+        };
+        // Without an outage, the stale rules as ever.
+        AccountMeters plain = meters(OutageLevel::None, false);
+        CHECK(plain.mark == IdentityMark::None && plain.markColor == 0 && plain.labelText == L"A");
+        AccountMeters stale = meters(OutageLevel::None, true);
+        CHECK(stale.mark == IdentityMark::Stale && stale.markColor == 0 && stale.labelText == L"A!" && stale.warn);
+        // Orange for degraded, partial and maintenance, red for major; it replaces the "!" (the label
+        // ends in a thin space before the glyph), while the flyout's stale state and the dimming stay.
+        const std::pair<OutageLevel, uint32_t> levels[] = {{OutageLevel::Degraded, 0xFFFB8C00},
+                                                           {OutageLevel::Partial, 0xFFFB8C00},
+                                                           {OutageLevel::Maintenance, 0xFFFB8C00},
+                                                           {OutageLevel::Major, 0xFFE53935}};
+        for (auto [level, color] : levels) {
+            for (bool failed : {false, true}) {
+                AccountMeters m = meters(level, failed);
+                CHECK(m.mark == IdentityMark::Outage && m.markColor == color && m.labelText == L"A\u2009");
+                CHECK(m.warn == failed && m.stale == failed);
+                CHECK_NEAR(m.labelOpacity, failed ? 0.45 : 0.8);
+                CHECK_NEAR(m.identityOpacity, failed ? 0.45 : 1);
+            }
+        }
+        // Also with the stale mark off.
+        Settings unmarked;
+        unmarked.showStaleWarning = false;
+        CHECK(meters(OutageLevel::Partial, true, unmarked).mark == IdentityMark::Outage);
+        CHECK(meters(OutageLevel::None, true, unmarked).mark == IdentityMark::None);
+        // The chosen palette's: colorblind orange and vermilion, Custom's own.
+        Settings colorblind;
+        colorblind.usagePalette = UsagePalette::Colorblind;
+        CHECK(meters(OutageLevel::Degraded, false, colorblind).markColor == 0xFFE69F00);
+        CHECK(meters(OutageLevel::Major, false, colorblind).markColor == 0xFFD55E00);
+        Settings custom;
+        custom.usagePalette = UsagePalette::Custom;
+        custom.customUsageColors = {RGB(1, 2, 3), RGB(4, 5, 6), RGB(0x12, 0x34, 0x56), RGB(0xAB, 0xCD, 0xEF)};
+        CHECK(meters(OutageLevel::Maintenance, false, custom).markColor == 0xFF123456);
+        CHECK(meters(OutageLevel::Major, false, custom).markColor == 0xFFABCDEF);
+        // Every identity form, in every layout.
+        for (TileIdentity identity : {TileIdentity::LogoBadge, TileIdentity::Logo, TileIdentity::Text}) {
+            for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical, BarLayout::SegmentedRing,
+                                     BarLayout::LogoHeadline, BarLayout::Sparkline}) {
+                AccountMeters m = meters(OutageLevel::Major, true, {}, identity, layout);
+                CHECK(m.mark == IdentityMark::Outage && m.markColor == 0xFFE53935 && m.labelText == L"A\u2009");
+            }
+        }
+    });
+
+    Run("outage mark size: three quarters of the logo's side, 7 to 14 DIPs; on rings a third of the ring, 8 to 13", [] {
+        auto size = [](BarLayout layout, int logoScale, double taskbar = 48, int ringSize = 32,
+                       OutageLevel outage = OutageLevel::Partial) {
+            Settings s;
+            s.logoScale = logoScale;
+            s.ringSize = ringSize;
+            AccountData data = Fresh({10, -1, -1, -1});
+            return AccountMeterState(Display(s, 1, taskbar), layout, Account(), data, 0, 0, {}, outage).markSize;
+        };
+        // Bars' 15 DIP logo: 11.25 at 100%, 9 at 80%; 7.5 DIPs at 50% takes the 7 DIP minimum, 22.5
+        // and 30 at 150% and 200% the 14 DIP cap.
+        for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
+            CHECK_NEAR(size(layout, 100), 11.25);
+            CHECK_NEAR(size(layout, 80), 9);
+            CHECK_NEAR(size(layout, 50), 7);
+            CHECK_NEAR(size(layout, 150), 14);
+            CHECK_NEAR(size(layout, 200), 14);
+        }
+        // Tiles beside their 16 DIP logo (a text identity stands for it): 12 at 100%, the minimum at
+        // 50% (6), the cap at 120% (14.4).
+        for (BarLayout layout : {BarLayout::LogoHeadline, BarLayout::Sparkline, BarLayout::Gauge, BarLayout::ClockPies,
+                                 BarLayout::QuotaMatrix}) {
+            CHECK_NEAR(size(layout, 100), 12);
+            CHECK_NEAR(size(layout, 50), 7);
+            CHECK_NEAR(size(layout, 120), 14);
+        }
+        // Ring tiles by their ring, whatever the logo: 32 DIPs give 10.67 at either logo size, 28
+        // give 9.33, 24 the 8 DIP minimum, 40 (13.33) the 13 DIP cap; a 32 DIP taskbar's 24 DIP
+        // tiles hold a 24 DIP ring.
+        for (BarLayout layout : {BarLayout::SegmentedRing, BarLayout::ConcentricRings, BarLayout::RoundedSquare}) {
+            CHECK_NEAR(size(layout, 100), 32.0 / 3);
+            CHECK_NEAR(size(layout, 50), 32.0 / 3);
+            CHECK_NEAR(size(layout, 200), 32.0 / 3);
+            CHECK_NEAR(size(layout, 100, 48, 28), 28.0 / 3);
+            CHECK_NEAR(size(layout, 100, 48, 24), 8);
+            CHECK_NEAR(size(layout, 100, 48, 40), 13);
+            CHECK_NEAR(size(layout, 100, 32, 40), 8);
+        }
+        // None without an outage; the stale mark has its own fixed size.
+        CHECK(size(BarLayout::Stacked, 100, 48, 32, OutageLevel::None) == 0);
+        AccountData failed = Fresh({10, -1, -1, -1});
+        failed.stale = true;
+        failed.error = L"timeout";
+        AccountMeters stale = AccountMeterState(Display(), BarLayout::Stacked, Account(), failed, 0, 0);
+        CHECK(stale.mark == IdentityMark::Stale && stale.markSize == 0);
+    });
+
+    Run("outage mark margins: 4/9 of the mark past the logo's right edge, 3/9 above it; the \"!\" 4 and 3", [] {
+        // A 15 DIP logo left of its bars with a 3 DIP identity gap: the 11.25 DIP mark reaches 5 DIPs
+        // right and 3.75 above, counted below too so the logo stays centred on the bars.
+        auto margin = [](double side, IdentityMark mark, LabelPosition position = LabelPosition::Left,
+                         BadgeBox badge = {}, bool label = false) {
+            return BarIdentityMarginFor(position, label, side, badge, mark, 3, 4, 2.5);
+        };
+        BarIdentityMargin m = margin(15, IdentityMark::Outage);
+        CHECK_NEAR(m.left, 0); CHECK_NEAR(m.right, 5 + 3); CHECK_NEAR(m.top, 3.75); CHECK_NEAR(m.bottom, 3.75);
+        m = margin(15, IdentityMark::Stale);
+        CHECK_NEAR(m.left, 0); CHECK_NEAR(m.right, 4 + 3); CHECK_NEAR(m.top, 3); CHECK_NEAR(m.bottom, 3);
+        m = margin(15, IdentityMark::None);
+        CHECK_NEAR(m.right, 3); CHECK_NEAR(m.top, 0); CHECK_NEAR(m.bottom, 0);
+        // 50%: the 7 DIP minimum, 3.11 and 2.33; 200%: the 14 DIP cap, 6.22 and 4.67.
+        m = margin(7.5, IdentityMark::Outage);
+        CHECK_NEAR(m.right, 28.0 / 9 + 3); CHECK_NEAR(m.top, 21.0 / 9);
+        m = margin(30, IdentityMark::Outage);
+        CHECK_NEAR(m.right, 56.0 / 9 + 3); CHECK_NEAR(m.top, 42.0 / 9);
+        // Right of the bars the gap moves to the left; above them the overhang counts on both sides
+        // and the label line's space over its cap height adds above.
+        m = margin(15, IdentityMark::Outage, LabelPosition::Right);
+        CHECK_NEAR(m.left, 3); CHECK_NEAR(m.right, 5);
+        m = margin(15, IdentityMark::Outage, LabelPosition::Top);
+        CHECK_NEAR(m.left, 5); CHECK_NEAR(m.right, 5); CHECK_NEAR(m.top, 3.75 + 4); CHECK_NEAR(m.bottom, 2.5 + 3);
+        // A badge reaching further keeps its overhang: one 11 x 8 DIPs at (10, -1) from the logo's
+        // top-left reaches 6 DIPs past a 15 DIP logo (13.5 past a 7.5 DIP one) and 1 above, less than
+        // the mark.
+        const BadgeBox badge{10, -1, 11, 8};
+        m = margin(15, IdentityMark::Outage, LabelPosition::Left, badge);
+        CHECK_NEAR(m.right, 6 + 3); CHECK_NEAR(m.top, 3.75); CHECK_NEAR(m.bottom, 3.75);
+        m = margin(7.5, IdentityMark::Outage, LabelPosition::Left, badge);
+        CHECK_NEAR(m.right, 13.5 + 3); CHECK_NEAR(m.top, 21.0 / 9); CHECK_NEAR(m.bottom, 21.0 / 9);
+        // A Label identity takes no mark margins: its glyph follows its text.
+        m = margin(15, IdentityMark::Outage, LabelPosition::Left, {}, true);
+        CHECK_NEAR(m.left, 0); CHECK_NEAR(m.top, -2); CHECK_NEAR(m.right, 3); CHECK_NEAR(m.bottom, 0);
+    });
+
     Run("quota mask: the selected quotas with a reading; none before the first success", [] {
         AccountConfig account = Account(L"anthropic", L"A", {true, true, false, true});
         CHECK(AccountMeterState(Display(), BarLayout::Stacked, account, Fresh({10, -1, -1, -1}), 0, 0)
@@ -1880,6 +2021,11 @@ static void RunSnapshotTests() {
         MeterDisplay unmarked = Display(With([](Settings& s) { s.showStaleWarning = false; }));
         go = AccountMeterState(unmarked, BarLayout::Stacked, accounts[3], data[3], 0, 0);
         CHECK(go.stale && !go.warn && go.labelText == L"Go");
+        // The sample outage: OpenAI's, degraded on Codex API since 25 minutes ago; no other provider's.
+        ProviderOutage outage = VisualTestOutage(accounts[0].provider, kNow);
+        CHECK(outage.level == OutageLevel::Degraded && outage.component == L"Codex API" && outage.others == 0 &&
+              outage.title == L"Elevated error rates" && outage.sinceMs == kNow - 25 * kMinute);
+        for (size_t i = 1; i < accounts.size(); i++) CHECK(VisualTestOutage(accounts[i].provider, kNow) == ProviderOutage{});
         // CC 2's weekly quota: red past 100% when used, an empty 0% when remaining.
         AccountMeters cc2 = AccountMeterState(display, BarLayout::Stacked, accounts[2], data[2], 0, 0);
         CHECK(cc2.quotas[1].text == L"110%" && cc2.quotas[1].fillPx == 100 && cc2.quotas[1].color == 0xFFE53935);

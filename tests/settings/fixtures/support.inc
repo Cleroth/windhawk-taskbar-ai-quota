@@ -1,20 +1,8 @@
 // Synthetic inputs and hand-derived expectations, never a second copy of the model's rules.
-static int passed = 0, failed = 0, assertions = 0;
+#include "check.inc"
 static constexpr ULONGLONG kNow = 1700000000000ULL;
 static constexpr ULONGLONG kMinute = 60000;
 static constexpr ULONGLONG kFiveHours = 18000000;
-
-#define CHECK(condition) do { ++assertions; if (!(condition)) throw std::runtime_error( \
-    std::string("line ") + std::to_string(__LINE__) + ": " #condition); } while (false)
-#define CHECK_NEAR(actual, expected) do { ++assertions; double a_ = (actual), e_ = (expected); \
-    if (!(std::abs(a_ - e_) < 1e-6)) throw std::runtime_error(std::string("line ") + \
-    std::to_string(__LINE__) + ": " #actual " = " + std::to_string(a_) + ", expected " + \
-    std::to_string(e_)); } while (false)
-
-static void Run(const std::string& name, const std::function<void()>& body) {
-    try { body(); ++passed; std::cout << "PASS " << name << '\n'; }
-    catch (const std::exception& e) { ++failed; std::cout << "FAIL " << name << ": " << e.what() << '\n'; }
-}
 
 static UiGraphics& TestGraphics() {
     static UiGraphics graphics = [] {

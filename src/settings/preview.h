@@ -127,25 +127,34 @@ static SettingsPreviewRow SettingsPreviewRowAt(const SettingsPreviewStrip& strip
 // The taskbar's layout of the sample accounts in `settings`. Gallery: the two Anthropic sample
 // accounts on a 48 DIP strip, without a tray. `light` and `text` color the tile chrome and the
 // taskbar's text (logos without brand colors, labels, keys, tray). Tests may pass accounts with
-// their data to lay out instead of the samples.
+// their data (and their providers' outage levels, none without) to lay out instead of the samples,
+// whose outage is VisualTestOutage's; either shows only while outage marks are on.
 static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings,
                                                   double taskbarHeight, float scale, ULONGLONG now,
                                                   bool gallery, bool light, uint32_t text,
                                                   const std::vector<AccountConfig>* testAccounts = nullptr,
-                                                  const std::vector<AccountData>* testData = nullptr) {
+                                                  const std::vector<AccountData>* testData = nullptr,
+                                                  const std::vector<OutageLevel>* testOutages = nullptr) {
     using Op = SettingsPreviewOp;
     SettingsPreviewStrip strip;
     MeterDisplay display = MeterDisplayFor(settings, now, scale, taskbarHeight);
     std::vector<AccountConfig> accounts;
     std::vector<AccountData> data;
     BuildVisualTestSnapshot(display, &accounts, &data);
-    if (testAccounts && testData && testAccounts->size() == testData->size()) {
+    const bool tested = testAccounts && testData && testAccounts->size() == testData->size();
+    if (tested) {
         accounts = *testAccounts;
         data = *testData;
+    }
+    std::vector<OutageLevel> outages(accounts.size(), OutageLevel::None);
+    for (size_t i = 0; settings.showProviderOutages && i < accounts.size(); i++) {
+        outages[i] = !tested ? VisualTestOutage(accounts[i].provider, now).level :
+                     testOutages && i < testOutages->size() ? (*testOutages)[i] : OutageLevel::None;
     }
     if (gallery) {
         accounts = {accounts[1], accounts[2]};
         data = {data[1], data[2]};
+        outages = {outages[1], outages[2]};
     }
     const BarLayout layout = BarLayout(std::clamp(int(settings.barLayout), int(BarLayout::Sparkline),
                                                   int(kLastBarLayout)));
@@ -227,10 +236,34 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
         }
     };
 
-    // The identity (tiles.h): a `side` DIP logo with its number badge, or the short text, shrunk
-    // to fit 26 DIPs, then clipped; "!" at its top-right corner while warned. From `left`,
-    // centered on `center`; returns its width.
+    // The identity's mark (tiles.h, meter-model.h) from the identity's top-right corner at (`right`,
+    // `top`): the stale "!" in the taskbar's text color, 4 DIPs right and 3 above, or the outage
+    // glyph in its color over its halo, centred, past the corner by its overhang. Ring tiles pass
+    // where the "!" goes, its box's top-right corner 3 DIPs left of `right`, for either mark.
     const UiTextStyle warnStyle{UiFamily::Taskbar, 10, 0, DWRITE_FONT_WEIGHT_BOLD};
+    auto markOps = [&](std::vector<Op>& ops, const AccountMeters& meters, float right, float top, float opacity,
+                       bool ring) {
+        if (meters.mark == IdentityMark::Stale) {
+            Measured m = measure(L"!", warnStyle);
+            label(ops, L"!", warnStyle, right + (ring ? 3 : 4) - m.width, ring ? top : top - 3, m.width,
+                  DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true);
+        }
+        if (meters.mark != IdentityMark::Outage) return;
+        const float size = float(meters.markSize), grow = size * float(kOutageHaloShare);
+        const float markRight = right + (ring ? 3 : size * float(kOutageMarkRight));
+        const float markTop = ring ? top : top - size * float(kOutageMarkTop);
+        const UiTextStyle markStyle{UiFamily::Icons, size, 0, DWRITE_FONT_WEIGHT_NORMAL};
+        const UiTextStyle haloStyle{UiFamily::Icons, size + 2 * grow, 0, DWRITE_FONT_WEIGHT_NORMAL};
+        Measured halo = measure(kOutageGlyph, haloStyle);
+        label(ops, kOutageGlyph, haloStyle, markRight + grow - halo.width, markTop - grow, halo.width,
+              DWRITE_TEXT_ALIGNMENT_LEADING, palette.badgeHalo, opacity, true);
+        Measured m = measure(kOutageGlyph, markStyle);
+        label(ops, kOutageGlyph, markStyle, markRight - m.width, markTop, m.width, DWRITE_TEXT_ALIGNMENT_LEADING,
+              meters.markColor, opacity, true);
+    };
+    // The identity (tiles.h): a `side` DIP logo with its number badge, or the short text, shrunk
+    // to fit 26 DIPs, then clipped; its mark at its top-right corner. From `left`, centered on
+    // `center`; returns its width.
     auto identityOps = [&](std::vector<Op>& ops, size_t i, const AccountMeters& meters, float side, float left,
                            float center) {
         const AccountConfig& account = accounts[i];
@@ -255,11 +288,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             label(ops, identity.text, style, left, center - height / 2, width, DWRITE_TEXT_ALIGNMENT_LEADING, text,
                   opacity, true, -1, true);
         }
-        if (meters.warn) {
-            Measured m = measure(L"!", warnStyle);
-            label(ops, L"!", warnStyle, left + width + 4 - m.width, center - height / 2 - 3, m.width,
-                  DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true);
-        }
+        markOps(ops, meters, left + width, center - height / 2, opacity, false);
         return width;
     };
 
@@ -300,7 +329,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             const float timeSize = float(geometry.timeGap + geometry.timeThickness);
             const float itemWidth = (vertical ? float(th) + timeSize : float(len)) + (keys ? keyColumn : 0);
             const float itemHeight = float(vertical ? len : th);
-            AccountMeters meters = AccountMeterState(display, layout, account, data[i], 0, 0);
+            AccountMeters meters = AccountMeterState(display, layout, account, data[i], 0, 0, {}, outages[i]);
             int count = std::popcount(unsigned(meters.barMask));
 
             float barsWidth = 0, barsHeight = 0;
@@ -308,23 +337,29 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 barsWidth = vertical ? count * itemWidth + (count - 1) * gap : itemWidth;
                 barsHeight = vertical ? float(len) : count * (float(th) + timeSize) + (count - 1) * gap + 2;
             }
-            // The identity: the account label in the label font, its "!" while warned, or the
-            // logo at its size; its margins (BarIdentityMarginFor) make its box, with the label
-            // line's space beyond its text as DirectWrite lays it out.
+            // The identity: the account label in the label font, with its "!" or its outage glyph
+            // (the icon font at the label's size, on its baseline), or the logo at its size; its
+            // margins (BarIdentityMarginFor) make its box, with the label line's space beyond its
+            // text as DirectWrite lays it out.
             const bool shown = position != LabelPosition::Hidden;
             const bool side = position == LabelPosition::Left || position == LabelPosition::Right;
             const bool labelForm = account.tileIdentity == TileIdentity::Text;
             const float logoSide = float(kBarLogoSide * display.logoScale);
             const TileIdentityText identity = TileIdentityFor(accounts, i);
             const Measured labelText = measure(meters.labelText, labelStyle), line = measure(L"A", labelStyle);
+            const UiTextStyle glyphStyle{UiFamily::Icons, labelStyle.size, 0, DWRITE_FONT_WEIGHT_NORMAL};
+            const bool labelGlyph = labelForm && meters.mark == IdentityMark::Outage;
+            const Measured glyph = measure(kOutageGlyph, glyphStyle);
+            const float labelWidth = labelText.width + (labelGlyph ? glyph.width : 0);
             const BarIdentityMargin margin = BarIdentityMarginFor(
                 position, labelForm, logoSide,
                 !labelForm && !identity.badgeText.empty() ?
                     LogoBadgeBox(display, logoSide, int(identity.badgeText.size())) : BadgeBox{},
-                meters.warn, count ? labelGap : 0, line.baseline - line.cap, line.height - line.baseline);
+                meters.mark, count ? labelGap : 0, line.baseline - line.cap,
+                line.height - line.baseline);
             float boxWidth = 0, boxHeight = 0;
             if (shown) {
-                boxWidth = (labelForm ? labelText.width : logoSide) + float(margin.left + margin.right);
+                boxWidth = (labelForm ? labelWidth : logoSide) + float(margin.left + margin.right);
                 boxHeight = (labelForm ? labelText.height : logoSide) + float(margin.top + margin.bottom);
             }
             float contentWidth = barsWidth, contentHeight = barsHeight;
@@ -352,6 +387,11 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 if (labelForm) {
                     label(ops, meters.labelText, labelStyle, left, idTop, labelText.width, DWRITE_TEXT_ALIGNMENT_LEADING,
                           text, meters.labelOpacity);
+                    if (labelGlyph) {
+                        label(ops, kOutageGlyph, glyphStyle, left + labelText.width,
+                              idTop + labelText.baseline - glyph.baseline, glyph.width, DWRITE_TEXT_ALIGNMENT_LEADING,
+                              meters.markColor, meters.labelOpacity);
+                    }
                 } else {
                     identityOps(ops, i, meters, logoSide, left, idTop + logoSide / 2);
                 }
@@ -477,7 +517,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             // Sparklines chart the visual test samples' recorded usage.
             AccountMeters meters = AccountMeterState(
                 display, layout, account, data[i], hasBadge ? int(identity.badgeText.size()) : 0, perPt,
-                [&](int, const WindowUsage& reading) { return VisualTestTrace(account, reading, now); });
+                [&](int, const WindowUsage& reading) { return VisualTestTrace(account, reading, now); }, outages[i]);
             const float opacity = float(meters.identityOpacity);
             top = (H - T) / 2;
             height = T;
@@ -530,11 +570,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     label(ops, identity.text, style, faceLeft + (S - w) / 2, faceTop + (S - m.cap) / 2, w,
                           DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true, -1, true);
                 }
-                if (meters.warn) {
-                    Measured m = measure(L"!", warnStyle);
-                    label(ops, L"!", warnStyle, faceLeft + S + 3 - m.width, faceTop + float(meters.ringWarnTop),
-                          m.width, DWRITE_TEXT_ALIGNMENT_LEADING, text, opacity, true);
-                }
+                markOps(ops, meters, faceLeft + S, faceTop + float(meters.ringWarnTop), opacity, true);
             } else if (IsFaceTile(layout)) {
                 // Gauges and pies: the identity, then 6 DIP after it the face; a gauge's number
                 // and key centred across it, their cap heights on the model's centres.

@@ -1,4 +1,4 @@
-"""Run source-extracted settings tests, offscreen renders and native-host and popup probes, plus the mod check."""
+"""Run source-extracted settings and provider status tests, offscreen renders and native-host and popup probes, plus the mod check."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -18,13 +18,14 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 DEFAULT_SOURCE = REPO / "local@taskbar-ai-quota.wh.cpp"
 DEFAULT_COMPILER = Path(r"C:\Program Files\Windhawk\Compiler\bin\clang++.exe")
-SUMMARY_PHASES = ("model", "render", "history", "history-render", "host-probe", "popup-probe")
+SUMMARY_PHASES = ("model", "render", "history", "history-render", "status", "host-probe", "popup-probe")
 RENDER_PHASES = ("render", "history-render")
 
 
 def hashes():
     paths = sorted(p for p in HERE.iterdir() if p.is_file() and p.suffix in {".py", ".hpp", ".cpp"})
     paths += sorted((HERE / "fixtures").glob("*.inc"))
+    paths += sorted((HERE / "fixtures" / "status").glob("*.json"))
     return {p.relative_to(HERE).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
 
 
@@ -98,6 +99,7 @@ def main():
         results["harness_sha256_before"] = hashes()
         cpp, exe = root / "settings.cpp", root / "settings.exe"
         history_cpp, history_exe = root / "history.cpp", root / "history.exe"
+        status_cpp, status_exe = root / "status.cpp", root / "status.exe"
         host_cpp, host_dll, probe = root / "ui-host.cpp", root / "ui-host.dll", root / "host-probe.exe"
         popup_cpp, popup_exe = root / "popup.cpp", root / "popup-probe.exe"
         flags = [str(compiler), "--target=x86_64-w64-mingw32", "-std=c++23", "-DUNICODE", "-D_UNICODE",
@@ -138,9 +140,14 @@ def main():
             groups += [
                 [("extract", extract + ["--output", str(cpp)]),
                  ("extract-history", extract + ["--output", str(history_cpp), "--target", "history"]),
+                 ("extract-status", extract + ["--output", str(status_cpp), "--target", "status"]),
                  host_build[0], popup_build[0]],
                 [("model-compile", flags + ["-I", str(HERE), str(cpp), "-o", str(exe), *render_libs]),
                  ("history-compile", flags + ["-I", str(HERE), str(history_cpp), "-o", str(history_exe), *render_libs]),
+                 # The model's constants and helpers the status parser doesn't use stay quiet.
+                 ("status-compile", flags + ["-Wno-unused-const-variable", "-Wno-unused-function", "-I", str(HERE),
+                                             str(status_cpp), "-o", str(status_exe),
+                                             "-lole32", "-loleaut32", "-lruntimeobject"]),
                  *host_build[1:], popup_build[1],
                  # The mod's own syntax and metadata check rides along with the builds.
                  *([("mod-check", ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
@@ -150,6 +157,7 @@ def main():
                     ("render", [str(exe), "--render-dir", str(root)]),
                     ("history", [str(history_exe)]),
                     ("history-render", [str(history_exe), "--render-dir", str(root)]),
+                    ("status", [str(status_exe), str(HERE / "fixtures" / "status")]),
                     ("host-probe", [str(probe), str(host_dll)]),
                     ("popup-probe", [str(popup_exe)]),
                 ]),
@@ -181,8 +189,8 @@ def main():
                         step.update(ok=False, evidence_error=str(error))
                         print(error, flush=True)
                 if name.startswith("extract") and step["ok"]:
-                    extracted = {"extract": cpp, "extract-history": history_cpp, "extract-host": host_cpp,
-                                 "extract-popup": popup_cpp}[name]
+                    extracted = {"extract": cpp, "extract-history": history_cpp, "extract-status": status_cpp,
+                                 "extract-host": host_cpp, "extract-popup": popup_cpp}[name]
                     manifest = extracted.with_suffix(".manifest.json")
                     results.setdefault("extraction", {})[name] = json.loads(manifest.read_text(encoding="utf-8"))
             if not all(step["ok"] for step, _ in outcomes):
