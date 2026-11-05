@@ -11676,6 +11676,11 @@ static bool StartLoopback(std::initializer_list<int> ports, SOCKET* outSock, int
 static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedRoute,
                                    const std::string& expectedState, const I18nLocale& locale, std::string* code,
                                    std::wstring* terminalError) {
+    // Closed on every path, a failed allocation included, so the browser never waits on it.
+    struct ClientSocket {
+        SOCKET s;
+        ~ClientSocket() { closesocket(s); }
+    } owned{client};
     auto getParam = [](const std::string& query, const std::string& key) -> std::string {
         std::string pat = key + "=";
         for (size_t p = 0; (p = query.find(pat, p)) != std::string::npos; p += pat.size()) {
@@ -11735,7 +11740,6 @@ static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedRou
                        "Connection: close\r\nContent-Length: " + std::to_string(html.size()) +
                        "\r\n\r\n" + html;
     send(client, resp.data(), (int)resp.size(), 0);
-    closesocket(client);
 
     if (success) {
         *code = std::move(received);
@@ -12558,6 +12562,8 @@ static DWORD WINAPI LoginThreadProc(LPVOID param) {
     } catch (...) {
         Wh_Log(L"Sign-in: exception");
     }
+    // A sign-in that threw past its own cleanup must not keep its loopback port bound.
+    if (SOCKET s = g_loginSocket.exchange(INVALID_SOCKET); s != INVALID_SOCKET) closesocket(s);
     if (apartmentInitialized) winrt::uninit_apartment();
     g_loginAccountIdentity.store(0);
     g_loginInProgress.store(false);
@@ -16591,18 +16597,24 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         shouldNotify = g_settings.notificationLevel != NotificationLevel::Off;
                     }
                     if (shouldNotify && !g_unloading) {
-                        const I18nLocale locale(*g_language.load(std::memory_order_acquire));
-                        auto [title, body] = ThresholdNotificationText(
-                            locale, publishedAccounts[i].provider, publishedResults[i], w,
-                            (w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs ?
-                                FormatReset(locale, wu.resetUnixMs) : L"");
-                        // The flyout's projection to the limit; none for an OpenCode Go window at
-                        // its limit, as there.
-                        std::wstring projection = publishedResults[i].opencodeLimited[w] ? L"" :
-                            NotificationProjectionText(locale, publishedAccounts[i].historyId, w, wu);
-                        FireThresholdNotification(title, body, projection,
-                                                  ProviderDashboardUrl(publishedAccounts[i].provider),
-                                                  AccountIdentityHash(publishedAccounts[i]), w);
+                        // Text, toast and balloon allocate; a failure skips only this notification
+                        // (nothing above the fetch loop catches).
+                        try {
+                            const I18nLocale locale(*g_language.load(std::memory_order_acquire));
+                            auto [title, body] = ThresholdNotificationText(
+                                locale, publishedAccounts[i].provider, publishedResults[i], w,
+                                (w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs ?
+                                    FormatReset(locale, wu.resetUnixMs) : L"");
+                            // The flyout's projection to the limit; none for an OpenCode Go window
+                            // at its limit, as there.
+                            std::wstring projection = publishedResults[i].opencodeLimited[w] ? L"" :
+                                NotificationProjectionText(locale, publishedAccounts[i].historyId, w, wu);
+                            FireThresholdNotification(title, body, projection,
+                                                      ProviderDashboardUrl(publishedAccounts[i].provider),
+                                                      AccountIdentityHash(publishedAccounts[i]), w);
+                        } catch (...) {
+                            Wh_Log(L"Threshold notification failed");
+                        }
                         toastAppIdMayExist = true;
                     }
                 }
@@ -36441,12 +36453,15 @@ struct SettingsUiClient final : UiHostClient {
     // starts it from its home. Account cards follow the projection's order, a dragged card its
     // drag order. The window takes the projected material at once.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
-        view = {};
-        view.locale = I18nLocale(*g_language.load(std::memory_order_acquire));
-        host.graphics->locale = view.locale.LocaleName();
-        if (std::exchange(titleLocale, view.locale) != view.locale) {
-            SetWindowTextW(host.main, SettingsWindowTitle(view.locale).c_str());
+        // The title first: setting it sends messages, which must never see the view half built.
+        const I18nLocale locale(*g_language.load(std::memory_order_acquire));
+        if (titleLocale != locale) {
+            SetWindowTextW(host.main, SettingsWindowTitle(locale).c_str());
+            titleLocale = locale;
         }
+        view = {};
+        view.locale = locale;
+        host.graphics->locale = view.locale.LocaleName();
         view.page = page;
         view.version = WH_MOD_VERSION;
         view.settings = edits.Projection();
@@ -37150,18 +37165,22 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
     } catch (...) {}
 
     if (apartmentInitialized && !g_unloading && !g_settingsWindowCancelRequested) {
-        SettingsUiClient client;
-        client.titleLocale = I18nLocale(*g_language.load(std::memory_order_acquire));
-        std::wstring title = SettingsWindowTitle(client.titleLocale);
-        UiHostConfig config;
-        config.mainClass = kSettingsUiClass;
-        config.viewportClass = kSettingsUiViewportClass;
-        config.popupClass = kSettingsUiPopupClass;
-        config.title = title.c_str();
-        config.activateMessage = GetSettingsActivateMessage();
-        config.icon = SettingsAppIcon({});
-        config.appId = kWindowAppId;
-        if (!UiHostRun(config, client)) Wh_Log(L"Could not open the settings window");
+        try {
+            SettingsUiClient client;
+            client.titleLocale = I18nLocale(*g_language.load(std::memory_order_acquire));
+            std::wstring title = SettingsWindowTitle(client.titleLocale);
+            UiHostConfig config;
+            config.mainClass = kSettingsUiClass;
+            config.viewportClass = kSettingsUiViewportClass;
+            config.popupClass = kSettingsUiPopupClass;
+            config.title = title.c_str();
+            config.activateMessage = GetSettingsActivateMessage();
+            config.icon = SettingsAppIcon({});
+            config.appId = kWindowAppId;
+            if (!UiHostRun(config, client)) Wh_Log(L"Could not open the settings window");
+        } catch (...) {
+            Wh_Log(L"Settings worker failed");
+        }
     }
     SetVisualTestMode(false);
     g_settingsWindow.store(nullptr);

@@ -46,6 +46,11 @@ static bool StartLoopback(std::initializer_list<int> ports, SOCKET* outSock, int
 static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedRoute,
                                    const std::string& expectedState, const I18nLocale& locale, std::string* code,
                                    std::wstring* terminalError) {
+    // Closed on every path, a failed allocation included, so the browser never waits on it.
+    struct ClientSocket {
+        SOCKET s;
+        ~ClientSocket() { closesocket(s); }
+    } owned{client};
     auto getParam = [](const std::string& query, const std::string& key) -> std::string {
         std::string pat = key + "=";
         for (size_t p = 0; (p = query.find(pat, p)) != std::string::npos; p += pat.size()) {
@@ -105,7 +110,6 @@ static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedRou
                        "Connection: close\r\nContent-Length: " + std::to_string(html.size()) +
                        "\r\n\r\n" + html;
     send(client, resp.data(), (int)resp.size(), 0);
-    closesocket(client);
 
     if (success) {
         *code = std::move(received);
@@ -928,6 +932,8 @@ static DWORD WINAPI LoginThreadProc(LPVOID param) {
     } catch (...) {
         Wh_Log(L"Sign-in: exception");
     }
+    // A sign-in that threw past its own cleanup must not keep its loopback port bound.
+    if (SOCKET s = g_loginSocket.exchange(INVALID_SOCKET); s != INVALID_SOCKET) closesocket(s);
     if (apartmentInitialized) winrt::uninit_apartment();
     g_loginAccountIdentity.store(0);
     g_loginInProgress.store(false);

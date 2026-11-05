@@ -763,18 +763,24 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         shouldNotify = g_settings.notificationLevel != NotificationLevel::Off;
                     }
                     if (shouldNotify && !g_unloading) {
-                        const I18nLocale locale(*g_language.load(std::memory_order_acquire));
-                        auto [title, body] = ThresholdNotificationText(
-                            locale, publishedAccounts[i].provider, publishedResults[i], w,
-                            (w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs ?
-                                FormatReset(locale, wu.resetUnixMs) : L"");
-                        // The flyout's projection to the limit; none for an OpenCode Go window at
-                        // its limit, as there.
-                        std::wstring projection = publishedResults[i].opencodeLimited[w] ? L"" :
-                            NotificationProjectionText(locale, publishedAccounts[i].historyId, w, wu);
-                        FireThresholdNotification(title, body, projection,
-                                                  ProviderDashboardUrl(publishedAccounts[i].provider),
-                                                  AccountIdentityHash(publishedAccounts[i]), w);
+                        // Text, toast and balloon allocate; a failure skips only this notification
+                        // (nothing above the fetch loop catches).
+                        try {
+                            const I18nLocale locale(*g_language.load(std::memory_order_acquire));
+                            auto [title, body] = ThresholdNotificationText(
+                                locale, publishedAccounts[i].provider, publishedResults[i], w,
+                                (w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs ?
+                                    FormatReset(locale, wu.resetUnixMs) : L"");
+                            // The flyout's projection to the limit; none for an OpenCode Go window
+                            // at its limit, as there.
+                            std::wstring projection = publishedResults[i].opencodeLimited[w] ? L"" :
+                                NotificationProjectionText(locale, publishedAccounts[i].historyId, w, wu);
+                            FireThresholdNotification(title, body, projection,
+                                                      ProviderDashboardUrl(publishedAccounts[i].provider),
+                                                      AccountIdentityHash(publishedAccounts[i]), w);
+                        } catch (...) {
+                            Wh_Log(L"Threshold notification failed");
+                        }
                         toastAppIdMayExist = true;
                     }
                 }

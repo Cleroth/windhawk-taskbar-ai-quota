@@ -108,18 +108,22 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
     } catch (...) {}
 
     if (apartmentInitialized && !g_unloading && !g_settingsWindowCancelRequested) {
-        SettingsUiClient client;
-        client.titleLocale = I18nLocale(*g_language.load(std::memory_order_acquire));
-        std::wstring title = SettingsWindowTitle(client.titleLocale);
-        UiHostConfig config;
-        config.mainClass = kSettingsUiClass;
-        config.viewportClass = kSettingsUiViewportClass;
-        config.popupClass = kSettingsUiPopupClass;
-        config.title = title.c_str();
-        config.activateMessage = GetSettingsActivateMessage();
-        config.icon = SettingsAppIcon({});
-        config.appId = kWindowAppId;
-        if (!UiHostRun(config, client)) Wh_Log(L"Could not open the settings window");
+        try {
+            SettingsUiClient client;
+            client.titleLocale = I18nLocale(*g_language.load(std::memory_order_acquire));
+            std::wstring title = SettingsWindowTitle(client.titleLocale);
+            UiHostConfig config;
+            config.mainClass = kSettingsUiClass;
+            config.viewportClass = kSettingsUiViewportClass;
+            config.popupClass = kSettingsUiPopupClass;
+            config.title = title.c_str();
+            config.activateMessage = GetSettingsActivateMessage();
+            config.icon = SettingsAppIcon({});
+            config.appId = kWindowAppId;
+            if (!UiHostRun(config, client)) Wh_Log(L"Could not open the settings window");
+        } catch (...) {
+            Wh_Log(L"Settings worker failed");
+        }
     }
     SetVisualTestMode(false);
     g_settingsWindow.store(nullptr);

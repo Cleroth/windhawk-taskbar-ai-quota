@@ -169,12 +169,15 @@ struct SettingsUiClient final : UiHostClient {
     // starts it from its home. Account cards follow the projection's order, a dragged card its
     // drag order. The window takes the projected material at once.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
-        view = {};
-        view.locale = I18nLocale(*g_language.load(std::memory_order_acquire));
-        host.graphics->locale = view.locale.LocaleName();
-        if (std::exchange(titleLocale, view.locale) != view.locale) {
-            SetWindowTextW(host.main, SettingsWindowTitle(view.locale).c_str());
+        // The title first: setting it sends messages, which must never see the view half built.
+        const I18nLocale locale(*g_language.load(std::memory_order_acquire));
+        if (titleLocale != locale) {
+            SetWindowTextW(host.main, SettingsWindowTitle(locale).c_str());
+            titleLocale = locale;
         }
+        view = {};
+        view.locale = locale;
+        host.graphics->locale = view.locale.LocaleName();
         view.page = page;
         view.version = WH_MOD_VERSION;
         view.settings = edits.Projection();
