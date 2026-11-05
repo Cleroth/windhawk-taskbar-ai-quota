@@ -298,7 +298,7 @@ static void RunUiTests() {
                 if (run.style == UiRunStyle::Link) urls.push_back(run.action.text);
             }
         }
-        CHECK(cards == 7);
+        CHECK(cards == 8);
         CHECK_NEAR(frame.contentHeight, lastBottom + 28);
         // Copy version info: a card under the app card, 62 DIP like the links; its button says
         // for a moment whether it copied, keeping its id.
@@ -332,8 +332,15 @@ static void RunUiTests() {
             L"https://github.com/Cleroth/windhawk-taskbar-ai-quota",
             L"https://github.com/Cleroth/windhawk-taskbar-ai-quota/issues/new",
             L"https://github.com/Cleroth/windhawk-taskbar-ai-quota#usage-history",
+            L"https://github.com/amirf147", L"https://github.com/HughMacdonald", L"https://github.com/incconutwo",
+            L"https://github.com/smnio", L"https://github.com/Sof2245", L"https://github.com/yalov",
             L"https://simpleicons.org", L"https://github.com/primer/octicons", L"https://opensource.org/license/mit"};
         CHECK(urls == expected);
+        // Contributors: the names, linked, in one sentence.
+        CHECK(std::any_of(frame.content.begin(), frame.content.end(), [](const UiItem& item) {
+            return UiRunsText(item.runs) ==
+                   L"Thanks to amirf147, Hugh Macdonald, incconutwo, smnio, Sof2245 and yalov.";
+        }));
         bool version = std::any_of(frame.content.begin(), frame.content.end(), [](const UiItem& item) {
             return !item.runs.empty() && item.runs[0].text.starts_with(L"Version 9.8.7");
         });
@@ -362,8 +369,9 @@ static void RunUiTests() {
         });
         CHECK((marks == std::vector<PCWSTR>{kClaudeLogoPath, kOpenAiLogoPath, kGeminiLogoPath, kCopilotLogoPath,
                                             kOpenCodeLogoPath}));
-        // The pages, Copy, the link cards, the logos' two links, then the license's.
-        CHECK(UiFocusStops(frame).size() == 6 + 1 + 3 + 3);
+        // The pages, Copy, the link cards, the contributors' six links, the logos' two, then the
+        // license's.
+        CHECK(UiFocusStops(frame).size() == 6 + 1 + 3 + 6 + 3);
     });
 
     Run("controls: toggles, dropdowns and number boxes are tab stops; spin buttons click only", [] {

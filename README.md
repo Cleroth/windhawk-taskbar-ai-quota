@@ -95,7 +95,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - do not poll hidden accounts (on by default; overrides per-account history recording)
   - threshold notifications: off, or the yellow, orange or red threshold (the default), each listed with its percentage from Display; a selected taskbar quota notifies when it first reaches it
 - **History**: record usage history (on by default, per Windows user, with its live status), how long to keep it (30 days, 90 days, 1 year, **Forever** by default, or a custom 1 to 3650 days), **Open usage history**, the time span the usage history window opens on (24 hours, **7 days** by default, 30 days, 90 days, or All retained), and the storage folder
-- **About**: version, **Copy version info** (the mod's name and version and the Windows build, with its update revision, to the clipboard for bug reports), project links, credits, and license
+- **About**: version, **Copy version info** (the mod's name and version and the Windows build, with its update revision, to the clipboard for bug reports), project links, contributors, credits, and license
 
 Sizes and thresholds combine a slider with a number box; spacing, polling, retention, and credits use number boxes with step buttons. Changes save as you make them; a number or text box saves on Enter or when you leave it, and Esc reverts it. A value that can't be saved stays in its box with the error, and closing the window then asks before discarding it. Layout, Display, Behavior, and History each have a reset that restores that page's defaults without touching accounts or sign-ins.
 
@@ -339,6 +339,17 @@ Windhawk and its catalog take a single file, so the source lives in `src/` as fr
 ## Suggestions & Bugs
 
 Have a suggestion or found a bug? [Open an issue](https://github.com/Cleroth/windhawk-taskbar-ai-quota/issues/new).
+
+## Contributors
+
+Thanks to everyone who contributed:
+
+- [amirf147](https://github.com/amirf147): Antigravity's Gemini Argon weekly quota
+- [Hugh Macdonald](https://github.com/HughMacdonald): provider outage marks from the status pages
+- [incconutwo](https://github.com/incconutwo): Google Antigravity support, StackPanel taskbar trays on newer Windows 11 builds, and left and right taskbars
+- [smnio](https://github.com/smnio): sign-in hardening (no HTTP redirects, refusing another sign-in's pasted Anthropic code)
+- [Sof2245](https://github.com/Sof2245): GitHub Copilot support, polling only from the taskbar's Explorer process, model and extra limits, free resets and the Claude plan in the details flyout, notification levels, the Custom usage palette, Copy version info, and Antigravity's other quota buckets
+- [yalov](https://github.com/yalov): the first GitHub Copilot implementation ([#12](https://github.com/Cleroth/windhawk-taskbar-ai-quota/pull/12))
 
 ## License
 

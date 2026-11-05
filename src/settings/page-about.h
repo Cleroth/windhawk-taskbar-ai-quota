@@ -123,6 +123,26 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
     // Credits and license.
     y = UiAddSection(items, id, x, y - 3 + 20, width, L"Credits and license");
     {
+        // Alphabetical, ignoring case (README > Contributors); each name links to its GitHub profile.
+        constexpr std::pair<PCWSTR, PCWSTR> kContributors[] = {
+            {L"amirf147", L"amirf147"}, {L"Hugh Macdonald", L"HughMacdonald"}, {L"incconutwo", L"incconutwo"},
+            {L"smnio", L"smnio"},       {L"Sof2245", L"Sof2245"},             {L"yalov", L"yalov"},
+        };
+        constexpr size_t kCount = std::size(kContributors);
+        UiCardSpec spec;
+        spec.glyph = L"\uE716";
+        spec.title = L"Contributors";
+        spec.description = {{L"Thanks to "}};
+        for (size_t i = 0; i < kCount; i++) {
+            auto [name, login] = kContributors[i];
+            spec.description.push_back({name, UiRunStyle::Link, UiInk::Inherit,
+                                        {UiActionKind::OpenUrl, 0, std::wstring(L"https://github.com/") + login}});
+            PCWSTR separator = i + 2 < kCount ? L", " : i + 1 < kCount ? L" and " : L".";
+            spec.description.push_back({separator});
+        }
+        y = UiAddCard(g, items, id, x, y, width, spec).card.bottom + 3;
+    }
+    {
         constexpr float kLogo = 18, kLogoGap = 14;
         UiCardSpec spec;
         spec.glyph = L"\uE8B9";

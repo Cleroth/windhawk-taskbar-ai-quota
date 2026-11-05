@@ -13,6 +13,11 @@ Windhawk mod that draws AI subscription quota bars on the Windows 11 taskbar; it
 - Usage-history behavior, storage and manual verification:
   [README > Usage history](README.md#usage-history).
 - History regression suite: [tests/history/AGENTS.md](tests/history/AGENTS.md).
+- Contributors: when a commit credits someone new (`Co-authored-by`, or work taken from their
+  PR), add them alphabetically (ignoring case) to [README > Contributors](README.md#contributors)
+  and the About page's Contributors card (`src/settings/page-about.h`; its test's URL list and
+  focus-stop count in `tests/settings/fixtures/ui.inc`). Add new work by existing contributors to
+  their README line.
 - Building, checks, install, testing and catalog publishing: below.
 
 # Building
