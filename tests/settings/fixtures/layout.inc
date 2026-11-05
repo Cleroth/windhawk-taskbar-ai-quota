@@ -3142,13 +3142,14 @@ static void RunLayoutTests() {
         for (size_t i = 0; i < std::min<size_t>(position.options.size(), 7); i++) {
             CHECK(position.options[i].text == options[i].first && position.options[i].value == int(options[i].second));
         }
-        // In the Placement section, after the pace markers and before Spacing, whose tray gap is now
-        // the gap after the accounts wherever they sit.
+        // In the Placement section, between the tile style gallery and the style's own sections;
+        // Spacing's tray gap is now the gap after the accounts wherever they sit.
         CHECK(HasText(frame, L"Position") &&
               HasText(frame, L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the "
                              L"taskbar\u2019s buttons move over to make room."));
-        CHECK(Control(frame, SettingsField::PaceTickColor, 1).rect.bottom < position.rect.top &&
-              position.rect.bottom < Control(frame, SettingsField::AccountMargin).rect.top);
+        CHECK(Control(frame, SettingsField::BarLayout, 9).rect.bottom < position.rect.top &&
+              position.rect.bottom < Control(frame, SettingsField::BarLayout, 10).rect.top &&
+              position.rect.bottom < Control(frame, SettingsField::PaceTickColor, 1).rect.top);
         CHECK(HasText(frame, L"Gap after accounts") &&
               HasText(frame, L"Space after the last account, before whatever comes next on the taskbar.") &&
               !HasText(frame, L"Tray gap") && !HasText(frame, L"system tray"));

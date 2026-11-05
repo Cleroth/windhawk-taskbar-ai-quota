@@ -51,12 +51,12 @@ signed-in local app or CLI session, which must remain running.
   quotas, identity (logo, logo with a number badge, or label, on its bars and tiles), history
   recording, and sign-in. Removing an account deletes its sign-in and, if you choose, its
   history.
-- **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
+- **Layout:** Tile style with a live taskbar preview, position on the taskbar (tray slots, or
+  Left side and Right of Start, experimental), bar style (full track or thin rail), sizes,
   usage graph spans at rest and on hover (whole weekly or monthly windows, or 12 to 48 hours
   each side of now),
   logo size and colors (Claude's orange, Gemini's gradient), number badge size, color and
-  position, identity position, pace markers, position on the taskbar (tray slots, or Left side
-  and Right of Start, experimental), and spacing.
+  position, identity position, pace markers, and spacing.
 - **Display:** Material of the details flyout and the settings and history windows (Acrylic,
   Mica, Mica Alt, Tinted wallpaper or Solid; needs Windows transparency effects), used or
   remaining, percentage text, usage colors and thresholds, stale marker.

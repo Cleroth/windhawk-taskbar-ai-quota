@@ -54,12 +54,12 @@ signed-in local app or CLI session, which must remain running.
   quotas, identity (logo, logo with a number badge, or label, on its bars and tiles), history
   recording, and sign-in. Removing an account deletes its sign-in and, if you choose, its
   history.
-- **Layout:** Tile style with a live taskbar preview, bar style (full track or thin rail), sizes,
+- **Layout:** Tile style with a live taskbar preview, position on the taskbar (tray slots, or
+  Left side and Right of Start, experimental), bar style (full track or thin rail), sizes,
   usage graph spans at rest and on hover (whole weekly or monthly windows, or 12 to 48 hours
   each side of now),
   logo size and colors (Claude's orange, Gemini's gradient), number badge size, color and
-  position, identity position, pace markers, position on the taskbar (tray slots, or Left side
-  and Right of Start, experimental), and spacing.
+  position, identity position, pace markers, and spacing.
 - **Display:** Material of the details flyout and the settings and history windows (Acrylic,
   Mica, Mica Alt, Tinted wallpaper or Solid; needs Windows transparency effects), used or
   remaining, percentage text, usage colors and thresholds, stale marker.
@@ -22822,9 +22822,9 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
 }
 
 // src/settings/page-layout.h
-// Settings > Layout: the tile style gallery, then the chosen style's sizes, identity and text, pace
-// markers, the position and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview card is in the
-// shell's pinned header (settings/preview.h). Pure builder.
+// Settings > Layout: the tile style gallery and the position, then the chosen style's sizes, identity
+// and text, pace markers and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview
+// card is in the shell's pinned header (settings/preview.h). Pure builder.
 
 // By BarLayout.
 static constexpr PCWSTR kSettingsTileStyles[] = {L"Usage graph",    L"Stacked bars",     L"Vertical bars",
@@ -22862,6 +22862,40 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             items.push_back(std::move(card));
         }
         y += kRows * kCardHeight + (kRows - 1) * kGap;
+    }
+
+    // Placement: the position, then the taskbars that show the bars in the tray instead of beside
+    // Start (one line each).
+    y = UiAddSection(items, id, x, y + 20, width, L"Placement");
+    {
+        UiCardSpec spec;
+        spec.title = L"Position";
+        spec.description = {{L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: "
+                             L"the taskbar\u2019s buttons move over to make room."}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::Placement, 260,
+                                    {{L"Before notification icons", int(TaskbarPlacement::BeforeIcons)},
+                                     {L"Before network and volume", int(TaskbarPlacement::BeforeNetwork)},
+                                     {L"Before the clock", int(TaskbarPlacement::BeforeClock)},
+                                     {L"After the clock", int(TaskbarPlacement::AfterClock)},
+                                     {L"After Show desktop", int(TaskbarPlacement::AfterShowDesktop)},
+                                     {L"Left side", int(TaskbarPlacement::LeftSide)},
+                                     {L"Right of Start", int(TaskbarPlacement::RightOfStart)}},
+                                    int(s.placement));
+    }
+    if (IsStartAreaPlacement(s.placement) && !view.status.placementFallbacks.empty()) {
+        // Left side needs the taskbar's buttons; Right of Start also a shown Start.
+        PCWSTR unavailable = s.placement == TaskbarPlacement::RightOfStart ?
+                                 L"its Start button is hidden or wasn\u2019t found." :
+                                 L"its taskbar buttons weren\u2019t found.";
+        std::wstring text;
+        for (const SettingsPlacementFallback& fallback : view.status.placementFallbacks) {
+            if (!text.empty()) text += L"\n";
+            text += L"Display " + std::to_wstring(fallback.display) + L" shows the bars in the tray: " +
+                    (fallback.conflict ? L"another mod controls the space they need. Restart Explorer to retry." :
+                                         unavailable);
+        }
+        y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::Placement, 8), x, y + 3, width, {{text}},
+                         UiSeverity::Caution);
     }
 
     // Account identity is per account: a card that goes to Accounts. Fixed ids past the gallery's
@@ -23265,40 +23299,6 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                           {std::begin(kSettingsPaceColors), std::end(kSettingsPaceColors)},
                           s.paceTickColor & 0x00FFFFFF);
         }
-    }
-
-    // Placement: the position, then the taskbars that show the bars in the tray instead of beside
-    // Start (one line each).
-    y = UiAddSection(items, id, x, y + 20, width, L"Placement");
-    {
-        UiCardSpec spec;
-        spec.title = L"Position";
-        spec.description = {{L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: "
-                             L"the taskbar\u2019s buttons move over to make room."}};
-        y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::Placement, 260,
-                                    {{L"Before notification icons", int(TaskbarPlacement::BeforeIcons)},
-                                     {L"Before network and volume", int(TaskbarPlacement::BeforeNetwork)},
-                                     {L"Before the clock", int(TaskbarPlacement::BeforeClock)},
-                                     {L"After the clock", int(TaskbarPlacement::AfterClock)},
-                                     {L"After Show desktop", int(TaskbarPlacement::AfterShowDesktop)},
-                                     {L"Left side", int(TaskbarPlacement::LeftSide)},
-                                     {L"Right of Start", int(TaskbarPlacement::RightOfStart)}},
-                                    int(s.placement));
-    }
-    if (IsStartAreaPlacement(s.placement) && !view.status.placementFallbacks.empty()) {
-        // Left side needs the taskbar's buttons; Right of Start also a shown Start.
-        PCWSTR unavailable = s.placement == TaskbarPlacement::RightOfStart ?
-                                 L"its Start button is hidden or wasn\u2019t found." :
-                                 L"its taskbar buttons weren\u2019t found.";
-        std::wstring text;
-        for (const SettingsPlacementFallback& fallback : view.status.placementFallbacks) {
-            if (!text.empty()) text += L"\n";
-            text += L"Display " + std::to_wstring(fallback.display) + L" shows the bars in the tray: " +
-                    (fallback.conflict ? L"another mod controls the space they need. Restart Explorer to retry." :
-                                         unavailable);
-        }
-        y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::Placement, 8), x, y + 3, width, {{text}},
-                         UiSeverity::Caution);
     }
 
     y = UiAddSection(items, id, x, y + 20, width, L"Spacing");
