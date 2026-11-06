@@ -118,6 +118,8 @@ in `tests/settings/extract.py`'s `I18N`.
   case automatically: write the case shown.
 - `quota-unit-order` orders the details flyout's number and its unit; only the arguments' order
   shows, their spacing is the layout's.
+- Write non-breaking and other non-standard spaces, and invisible format characters, as escapes
+  (`\u00A0`, `\u202F`), never literally: the catalog's PR validation flags each line holding one.
 
 ## Checker
 
@@ -127,7 +129,8 @@ in `tests/settings/extract.py`'s `I18N`.
 English keys, catalogs outside the registry, and per language missing, unused or stale, duplicate
 and unsorted entries and argument, link and plural mismatches (the runtime's rules); then wide
 literals outside `src/i18n/` that look user-facing and are neither wrapped, `Wh_Log` arguments
-nor marked (a heuristic, not an inventory: single lowercase words such as `left` slip through).
+nor marked (a heuristic, not an inventory: single lowercase words such as `left` slip through);
+then lines anywhere in `src/` holding a non-standard space or format character literally.
 Any other use of `Tr`/`TrCtx` than a literal call or an `I18nKey` declaration is reported. Exit 0 with a report whatever it finds; 1 when it can't read the sources or parse a
 catalog or the registry. A complete string change shows none of the catalog findings for its
 keys.

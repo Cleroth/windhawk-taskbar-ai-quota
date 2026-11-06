@@ -77,8 +77,9 @@ Build files go to `.out/icon/`. Nothing references the two files.
   [tests/settings/AGENTS.md](tests/settings/AGENTS.md).
 - A full integration check still requires Windhawk loading the mod into `explorer.exe`.
 - `python tests/i18n/check.py` reports the catalogs against the message keys in `src/` (missing,
-  stale, unsorted, mismatched entries; unwrapped UI literals), and `python tests/i18n/test_check.py`
-  self-tests it; guide: [src/i18n/AGENTS.md](src/i18n/AGENTS.md#checker).
+  stale, unsorted, mismatched entries; unwrapped UI literals; literal special spaces), and
+  `python tests/i18n/test_check.py` self-tests it; guide:
+  [src/i18n/AGENTS.md](src/i18n/AGENTS.md#checker).
 - When changed native-control behavior is hidden by stubs, verify the assumed API/message contract
   with an isolated real-control probe under relevant, verified host contexts. Report caller-logic,
   native-contract, and Explorer integration results separately; a stub pass does not verify

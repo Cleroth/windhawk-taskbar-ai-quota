@@ -163,6 +163,17 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
         self.assertIn("Missing entries: 6", report)
         self.assertIn("Unwrapped user-facing literals: 1 in 1 file(s)", report)
 
+    def test_special_spaces_written_as_characters(self):
+        sources = dict(self.SOURCES)
+        sources["src/i18n/notes.h"] = ('// a\u00a0b\n'
+                                       'static constexpr auto kEscaped = L"x\\u00A0y\\u202Fz";\n'
+                                       'static constexpr auto kLiteral = L"a\u202f:\u00a0b\u200b";\n')
+        findings = check.check(sources)
+        self.assertEqual(findings["special_spaces"], [
+            {"where": "src/i18n/notes.h:1", "chars": ["U+00A0"]},
+            {"where": "src/i18n/notes.h:3", "chars": ["U+00A0", "U+200B", "U+202F"]}])
+        self.assertIn("written as characters (write \\u escapes): 2", check.report(findings, "src"))
+
     def test_sort_order_is_utf16_code_units(self):
         # U+FF5B sorts after U+1F600 by code point, before it by UTF-16 code unit (a surrogate pair).
         self.assertLess(check.sort_key("", "\U0001F600"), check.sort_key("", "\uFF5B"))

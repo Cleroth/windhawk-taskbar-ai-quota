@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 import re
 import sys
+import unicodedata
 
 REPO = Path(__file__).resolve().parents[2]
 ENGINE = "src/i18n/"
@@ -498,9 +499,14 @@ def check(sources):
     """Findings for {path: text} sources; raises CheckError on the checker's own failures."""
     if REGISTRY not in sources:
         raise CheckError(f"{REGISTRY} is missing")
-    keys, unextractable, literals, catalogs, catalog_files = {}, [], [], {}, {}
+    keys, unextractable, literals, special, catalogs, catalog_files = {}, [], [], [], {}, {}
     registry = None
     for rel, text in sorted(sources.items()):
+        # The catalog's PR validation flags these on any line of the mod file
+        for number, line in enumerate(text.split("\n"), 1):
+            if chars := sorted({c for c in line if unicodedata.category(c) == "Cf"
+                                or (unicodedata.category(c) == "Zs" and c != " ")}):
+                special.append({"where": f"{rel}:{number}", "chars": [f"U+{ord(c):04X}" for c in chars]})
         code, marked = tokenize(text, rel)
         found, problems = extract_keys(code, rel)
         for context, english, where in found:
@@ -546,6 +552,7 @@ def check(sources):
         "languages": languages,
         "unregistered_catalogs": sorted(f"{catalog_files[n]}: {n}" for n in catalogs if n not in registered),
         "unwrapped_literals": literals,
+        "special_spaces": special,
     }
 
 
@@ -584,6 +591,8 @@ def report(findings, src):
     lines.append("")
     lines.append(f"Unwrapped user-facing literals: {f'{len(literals)} in {len(files)} file(s)' if literals else 'none'}")
     lines.extend(f"  {i['where']}: {json.dumps(i['text'], ensure_ascii=False)}" for i in literals)
+    section("Invisible or non-standard spaces written as characters (write \\u escapes)", findings["special_spaces"],
+            lambda i: f"{i['where']}: {', '.join(i['chars'])}")
     return "\n".join(lines) + "\n"
 
 

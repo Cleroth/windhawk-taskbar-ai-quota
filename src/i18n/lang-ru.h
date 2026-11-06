@@ -30,7 +30,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
           L"Windows 11 taskbar.",
      L"Квоты ИИ-подписок Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач "
-     L"Windows 11."},
+     L"Windows\u00A011."},
     {L"", L"Account identity is set per account in Accounts",
      L"Идентификация задаётся для каждого аккаунта в разделе «Аккаунты»"},
     {L"", L"Account margin", L"Отступ аккаунта"},
@@ -337,7 +337,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Provider logos", L"Логотипы поставщиков"},
     {L"", L"Quota keys", L"Обозначения квот"},
     {L"", L"Quota keys ({key5h}, {key7d}, ...) and extra usage on the charts, in pixels.",
-     L"Размер обозначений квот ({key5h}, {key7d} и т. д.) и доп. использования на графиках, в пикселях."},
+     L"Размер обозначений квот ({key5h}, {key7d} и т.\u00A0д.) и доп. использования на графиках, в пикселях."},
     {L"", L"Quotas on taskbar", L"Квоты на панели задач"},
     {L"", L"Reading size", L"Размер отметки"},
     {L"", L"Record history", L"Записывать историю"},
@@ -397,7 +397,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
           L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
           L"Accounts are not changed.",
-     L"Сбросить «Макет» к значениям по умолчанию?\n\nПолосы стопкой 100 × 8 пикс. с подписями слева, кольца 32 пикс., "
+     L"Сбросить «Макет» к значениям по умолчанию?\n\nПолосы стопкой 100\u00A0×\u00A08\u00A0пикс. с подписями слева, кольца 32\u00A0пикс., "
      L"логотипы и номера цветом текста панели задач, светло-серые метки темпа в виде курсора и интервалы по умолчанию. "
      L"Аккаунты не изменяются."},
     {L"", L"Reset countdown", L"Отсчёт до сброса"},
@@ -411,8 +411,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Retention: {days, plural, one{# days} other{# days}}, also limited to 250,000 records / about 60 MB. "
           L"Turning recording off keeps saved history. Removed accounts remain under their IDs until expiry or Clear, "
           L"unless their history was deleted with them; select one to delete its history.",
-     L"Хранение: {days, plural, one{# день} few{# дня} many{# дней} other{# дня}}, а также не более 250 000 записей "
-     L"(около 60 МБ). При выключении записи сохранённая история остаётся. Удалённые аккаунты остаются под своими "
+     L"Хранение: {days, plural, one{# день} few{# дня} many{# дней} other{# дня}}, а также не более 250\u00A0000 записей "
+     L"(около 60\u00A0МБ). При выключении записи сохранённая история остаётся. Удалённые аккаунты остаются под своими "
      L"идентификаторами, пока не истечёт срок хранения или пока история не будет очищена командой «Очистить всю "
      L"историю…», если только их история не была удалена вместе с ними; выберите такой аккаунт, чтобы удалить его "
      L"историю."},
@@ -429,7 +429,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
      L"Общий параметр для всех пользователей Windows. «Бессрочно» ничего не удаляет и не ограничивает размер, поэтому "
      L"история продолжает расти в памяти Проводника и на диске. Ограничения в днях очищают историю каждый час, с "
-     L"пределом около 60 МБ."},
+     L"пределом около 60\u00A0МБ."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"Короткое обозначение рядом с каждой полосой: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Короткий текст"},
@@ -461,7 +461,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
      L"Прекратить бессрочное хранение истории?\n\nИстория снова будет храниться {days, plural, one{# день} few{# дня} "
-     L"many{# дней} other{# дня}} и содержать не более 250 000 замеров (около 60 МБ). Более старые замеры, а также "
+     L"many{# дней} other{# дня}} и содержать не более 250\u00A0000 замеров (около 60\u00A0МБ). Более старые замеры, а также "
      L"самые старые сверх этого предела будут удалены безвозвратно для всех пользователей Windows."},
     {L"", L"Storage cap reached; oldest samples were pruned.",
      L"Достигнут предел хранилища; самые старые замеры удалены."},
@@ -731,7 +731,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"button", L"Sign in", L"Войти"},
     {L"button", L"Sign in again", L"Войти снова"},
     {L"button", L"Sign out", L"Выйти"},
-    {L"chart-axis", L"{value} cr", L"{value} кр"},
+    {L"chart-axis", L"{value} cr", L"{value}\u00A0кр"},
     {L"chart-key", L"Solid: current", L"Сплошные линии: текущий период"},
     {L"chart-key", L"Solid: current · Dashed: previous", L"Сплошные: текущая неделя · Пунктирные: прошлая неделя"},
     {L"chart-message", L"All lines are hidden", L"Все линии скрыты"},
@@ -749,8 +749,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"copilot-unit", L"AI credits", L"ИИ-кредиты"},
     {L"copilot-unit", L"chat requests", L"запросы в чате"},
     {L"copilot-unit", L"premium requests", L"премиум-запросы"},
-    {L"credits-amount", L"{amount} credits", L"{amount} кредита"},
-    {L"credits-amount-abbreviated", L"{amount} credits", L"{amount} кредитов"},
+    {L"credits-amount", L"{amount} credits", L"{amount}\u00A0кредита"},
+    {L"credits-amount-abbreviated", L"{amount} credits", L"{amount}\u00A0кредитов"},
     {L"credits-unit", L"{credits, plural, one{credits} other{credits}}",
      L"{credits, plural, one{кредит} few{кредита} many{кредитов} other{кредита}}"},
     {L"date-month", L"Apr", L"апр"},
@@ -800,13 +800,13 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"dialog-caption", L"Remove account", L"Удаление аккаунта"},
     {L"dialog-caption", L"Reset settings", L"Сброс параметров"},
     {L"dialog-caption", L"Usage history", L"История использования"},
-    {L"duration", L"{days}d", L"{days} д"},
-    {L"duration", L"{days}d {hours}h", L"{days} д {hours} ч"},
-    {L"duration", L"{hours}h", L"{hours} ч"},
-    {L"duration", L"{hours}h {minutes}m", L"{hours} ч {minutes} мин"},
-    {L"duration", L"{minutes}m", L"{minutes} мин"},
-    {L"duration", L"{minutes}m {seconds}s", L"{minutes} мин {seconds} с"},
-    {L"duration", L"{seconds}s", L"{seconds} с"},
+    {L"duration", L"{days}d", L"{days}\u00A0д"},
+    {L"duration", L"{days}d {hours}h", L"{days}\u00A0д {hours}\u00A0ч"},
+    {L"duration", L"{hours}h", L"{hours}\u00A0ч"},
+    {L"duration", L"{hours}h {minutes}m", L"{hours}\u00A0ч {minutes}\u00A0мин"},
+    {L"duration", L"{minutes}m", L"{minutes}\u00A0мин"},
+    {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0мин {seconds}\u00A0с"},
+    {L"duration", L"{seconds}s", L"{seconds}\u00A0с"},
     {L"file-type", L"All files (*.*)", L"Все файлы (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"Файлы CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Данных пока нет"},
@@ -883,10 +883,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Запись · {days, plural, one{# день} few{# дня} many{# дней} other{# дня}}"},
     {L"history-pill", L"Waiting", L"Ожидание"},
     {L"history-provider", L"Unknown provider", L"Неизвестный поставщик"},
-    {L"history-range", L"24h", L"24 ч"},
-    {L"history-range", L"30d", L"30 д"},
-    {L"history-range", L"7d", L"7 д"},
-    {L"history-range", L"90d", L"90 д"},
+    {L"history-range", L"24h", L"24\u00A0ч"},
+    {L"history-range", L"30d", L"30\u00A0д"},
+    {L"history-range", L"7d", L"7\u00A0д"},
+    {L"history-range", L"90d", L"90\u00A0д"},
     {L"history-range", L"All", L"Всё"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
@@ -929,7 +929,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"history-view", L"Extra usage", L"Доп. использование"},
     {L"history-view", L"Short-term", L"Краткосрочные"},
     {L"history-view", L"Weekly", L"Неделя"},
-    {L"hours-value", L"{hours} h", L"{hours} ч"},
+    {L"hours-value", L"{hours} h", L"{hours}\u00A0ч"},
     {L"identity-position", L"Bottom", L"Снизу"},
     {L"identity-position", L"Hidden", L"Скрыта"},
     {L"identity-position", L"Left", L"Слева"},
@@ -953,7 +953,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"Оранжевый ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Красный ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Жёлтый ({threshold}%)"},
-    {L"notification-title", L"5h usage at {percent}%", L"5 ч: использовано {percent}%"},
+    {L"notification-title", L"5h usage at {percent}%", L"5\u00A0ч: использовано {percent}%"},
     {L"notification-title", L"AI credits usage at {percent}%", L"ИИ-кредиты: использовано {percent}%"},
     {L"notification-title", L"chat requests usage at {percent}%", L"Запросы в чате: использовано {percent}%"},
     {L"notification-title", L"credits usage at {percent}%", L"Кредиты: использовано {percent}%"},
@@ -964,7 +964,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"notification-title", L"{name} current limit usage at {percent}%",
      L"{name}, текущий лимит: использовано {percent}%"},
     {L"notification-title", L"{name} weekly usage at {percent}%", L"{name}, неделя: использовано {percent}%"},
-    {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name}, {hours} ч: использовано {percent}%"},
+    {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name}, {hours}\u00A0ч: использовано {percent}%"},
     {L"outage-action", L"{status}\nOpen the {provider} status page",
      L"{status}\nОткрыть страницу состояния {provider}"},
     {L"outage-level", L"degraded performance", L"снижение производительности"},
@@ -1039,7 +1039,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"quota-name", L"Short window", L"Короткое окно"},
     {L"quota-name", L"Short-term (varying windows)", L"Краткосрочная (разные окна)"},
     {L"quota-name", L"Weekly", L"Неделя"},
-    {L"quota-name", L"{hours}h", L"{hours} ч"},
+    {L"quota-name", L"{hours}h", L"{hours}\u00A0ч"},
     {L"quota-name", L"{name} current limit", L"{name}: текущий лимит"},
     {L"quota-name", L"{name} short-term (varying windows)", L"{name}: краткосрочная (разные окна)"},
     {L"quota-name", L"{name} weekly", L"{name}: неделя"},
@@ -1047,8 +1047,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"{name}: {days, plural, one{# день} few{# дня} many{# дней} other{# дня}}"},
     {L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}",
      L"{name}: {hours, plural, one{# час} few{# часа} many{# часов} other{# часа}}"},
-    {L"quota-name", L"{name} {hours} h", L"{name}: {hours} ч"},
-    {L"quota-name", L"{name} {hours}h", L"{name}: {hours} ч"},
+    {L"quota-name", L"{name} {hours} h", L"{name}: {hours}\u00A0ч"},
+    {L"quota-name", L"{name} {hours}h", L"{name}: {hours}\u00A0ч"},
     {L"quota-reset", L"Not yet started", L"Ещё не началось"},
     {L"quota-reset", L"Resets {when}", L"Сброс {when}"},
     {L"quota-unit", L"left", L"осталось"},
@@ -1205,7 +1205,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"usage-band", L"From red", L"От красного"},
     {L"usage-band", L"From yellow", L"От жёлтого"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
-     L"При темпе за последние 24 ч: лимит через ~{duration}"},
+     L"При темпе за последние 24\u00A0ч: лимит через ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
      L"При темпе с {time}: лимит через ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
