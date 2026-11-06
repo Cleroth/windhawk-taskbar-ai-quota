@@ -37,7 +37,8 @@ body**, not the branch's commit messages. There is no `@changelog` field or in-f
 
 Prerequisites: `git`, `gh` authed as Cleroth, Python with PyYAML.
 
-`pwsh catalog-update.ps1` (Workbench: Prepare Catalog Update) runs `check-mod.ps1`, syncs a
+`pwsh catalog-update.ps1` (Workbench: Prepare Catalog Update) runs `check-mod.ps1 -Link` (so a
+mod Windhawk can't build fails here, not on the PR), syncs a
 persistent clone of the `Cleroth/windhawk-mods` fork with upstream `main`, checks out
 `taskbar-ai-quota-<version>` (`-Branch` overrides), copies the mod, and verifies it is
 byte-identical, newer than the catalog version, and the only changed file. It then runs upstream's

@@ -28,10 +28,10 @@ Each file opens with a comment naming what it holds.
   later fragment in `core/forward.h`. Keep file-scope functions and globals `static`.
 - Files are UTF-8 without BOM, LF, ending with exactly one newline.
 - Keep the `@compilerOptions` line in sync with the libs you call (e.g. `Shell_NotifyIconW` needs
-  `-lshell32`); syntax checks can't catch a missing lib.
+  `-lshell32`); syntax checks can't catch a missing lib, `check-mod.ps1 -Link` does.
 - Runtime OS support doesn't guarantee that Windhawk's bundled MinGW headers and import libraries
-  expose an API. Verify with the bundled toolchain before replacing dynamic `GetProcAddress`
-  lookups/fallbacks with direct calls.
+  expose an API (e.g. `CancelSynchronousIo` isn't in its kernel32 library). Check a new call with
+  `check-mod.ps1 -Link`; one it lacks needs a `GetProcAddress` lookup.
 
 ## Threading model
 

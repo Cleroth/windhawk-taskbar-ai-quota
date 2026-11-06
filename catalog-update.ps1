@@ -10,7 +10,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $catalogPath = 'mods/taskbar-ai-quota.wh.cpp'
 
-& (Join-Path $PSScriptRoot 'check-mod.ps1') -Source $Source
+& (Join-Path $PSScriptRoot 'check-mod.ps1') -Source $Source -Link
 if ($LASTEXITCODE -ne 0) {
     throw "Mod validation failed with exit code $LASTEXITCODE"
 }

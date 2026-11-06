@@ -50,8 +50,10 @@ its bundled clang. There is no `.sln`/`.vcxproj`. Do NOT use `msbuild`.
 
 - `pwsh check-mod.ps1` checks freshness, runs bundled clang `-fsyntax-only` with Windhawk's editor
   flags (`-DWH_EDITING`: placeholder macros, no internal header), and validates metadata. Exit 0
-  with no diagnostics = clean. It never links, so a lib missing from `@compilerOptions` only fails
-  when Windhawk builds the mod.
+  with no diagnostics = clean. `-Link` also builds the mod as Windhawk does (per `@architecture`,
+  against the installed engine's `windhawk.lib`, with `@compilerOptions`; output in `.out/link/`,
+  deleted), catching a lib missing from `@compilerOptions` or an API the bundled import libraries
+  lack. Run it before installing or publishing a change that adds Win32 calls or libs.
 - Toolchain: compiler `C:\Program Files\Windhawk\Compiler\bin\clang++.exe`; mod API headers
   (`windhawk_api.h`, `windhawk_utils.h`) in `C:\Program Files\Windhawk\Compiler\include`.
 - `pwsh install-windhawk.ps1` (as Administrator) copies the mod into
@@ -75,7 +77,7 @@ the two files.
 
 Tests compile with bundled clang, never `msbuild`/`vstest.console`.
 
-- `pwsh check-mod.ps1`: freshness, syntax and metadata (above).
+- `pwsh check-mod.ps1`: freshness, syntax and metadata; `-Link` adds Windhawk's build (above).
 - `python tests/history/run.py`: usage-history domain regressions (model, continuity, burn-up,
   journal memory, CSV).
 - `python tests/settings/run.py`: extracted logic, offscreen renders and native probes of the
