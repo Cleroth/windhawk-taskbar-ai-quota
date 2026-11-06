@@ -353,7 +353,7 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 break;
             }
             // Dropdown field: a standard control fill (pressed while its popup shows), the
-            // chosen label clipped before the chevron.
+            // chosen label ellipsized before the chevron (UiDropdownTextWidth).
             case UiItemKind::Dropdown: {
                 bool down = item.enabled && (pressed || state.open == item.id);
                 bool active = item.enabled && (hot || down);
@@ -363,11 +363,10 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 UiFillRect(target, cache, r, 4, fill, scale);
                 UiStrokeRect(target, cache, r, 4, p.controlBorder, 1, scale);
                 UiTextStyle label = UiTextStyleFor(UiFont::Body);
-                D2D1_RECT_F clip{r.left + 11, r.top, r.right - 30, r.bottom};
-                target->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
-                UiDrawLayout(target, cache, UiLayout(g, item.text, label, 10000, false),
-                             {clip.left, centerY - label.lineHeight / 2}, ink);
-                target->PopAxisAlignedClip();
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, label, UiDropdownTextWidth(item), false,
+                                      DWRITE_TEXT_ALIGNMENT_LEADING, true),
+                             {r.left + 11, centerY - label.lineHeight / 2}, ink);
                 UiDrawLayout(target, cache,
                              UiLayout(g, L"\uE70D", UiIconStyle(10), 12, false,
                                       DWRITE_TEXT_ALIGNMENT_CENTER),
@@ -552,7 +551,8 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 break;
             }
             // Gallery card: reacts to the pointer as a whole; the chosen one has a 2 DIP accent
-            // border. The client draws the thumbnail; the name sits under it.
+            // border. The client draws the thumbnail; the name sits under it, wrapped to its width
+            // (UiGalleryCaptionWidth).
             case UiItemKind::Gallery: {
                 bool active = UiActive(item);
                 D2D1_COLOR_F fill = active && pressed ? p.cardPressed : active && hot ? p.cardHover : p.card;
@@ -570,9 +570,7 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 } else {
                     UiFillRect(target, cache, thumb, 4, p.control, scale);
                 }
-                UiDrawLayout(target, cache,
-                             UiLayout(g, item.text, UiTextStyleFor(UiFont::Note),
-                                      std::max(thumb.right - thumb.left - 4, 0.0f), false),
+                UiDrawLayout(target, cache, UiLayout(g, item.text, UiTextStyleFor(UiFont::Note), UiGalleryCaptionWidth(item)),
                              {thumb.left + 2, thumb.bottom + 8}, item.enabled ? p.text : p.textDisabled);
                 break;
             }

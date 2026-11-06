@@ -91,25 +91,20 @@ static float SettingsAddToggleCard(UiGraphics& g, const SettingsView& view,
     return card.card.bottom;
 }
 
-// The field is at least `fieldWidth` wide, wider when its widest option needs it (the label's 11
-// DIP before it and 30 DIP chevron after it), growing to at most half the card.
+// The field is at least `fieldWidth` wide, wider when its widest option needs it, growing to at
+// most half the card; a label cut there shows whole in its tooltip and the popup.
 static float SettingsAddDropdownCard(UiGraphics& g, const SettingsView& view,
                                      std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                      float width, UiCardSpec spec, SettingsField field,
                                      float fieldWidth, std::vector<UiOption> options, int value,
                                      uint32_t part = 0) {
-    float widest = 0;
-    for (const UiOption& option : options) {
-        float text = UiLayoutSize(UiLayout(g, option.text, UiTextStyleFor(UiFont::Body), 10000, false)).width;
-        widest = std::max(widest, std::ceil(text) + 11 + 30);
-    }
-    fieldWidth = std::max(fieldWidth, std::min(widest, width / 2));
+    fieldWidth = std::max(fieldWidth, std::min(UiDropdownWidth(g, options), width / 2));
     spec.trailing = {fieldWidth, 32};
     if (const SettingsDraft* draft = SettingsViewDraft(view, field); draft && !draft->text) {
         spec.error = SettingsDraftErrorText(view.locale, *draft);
     }
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
-    UiAddDropdown(items, SettingsControlId(field, part), card.trailing, std::move(options),
+    UiAddDropdown(g, items, SettingsControlId(field, part), card.trailing, std::move(options),
                   spec.enabled, SettingsCommand(field, value));
     return card.card.bottom;
 }
@@ -132,15 +127,16 @@ static float SettingsAddNumberCard(UiGraphics& g, const SettingsView& view,
 }
 
 // A slider with a centered number box before it (mockup .sldwrap: 60 DIP box, 14 DIP gap,
-// 220 DIP slider). The box shows its draft's text while there is one, else the projected
-// value; the slider shows the projected value.
+// 220 DIP slider). On a narrow card the slider gives up to 100 DIP so the text keeps 200. The box
+// shows its draft's text while there is one, else the projected value; the slider shows the
+// projected value.
 static float SettingsAddSliderCard(UiGraphics& g, const SettingsView& view,
                                    std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                    float width, UiCardSpec spec, SettingsField field) {
     SettingsNumberRange range = SettingsFieldRange(field).value_or(SettingsNumberRange{});
     int value = SettingsFieldValue(view.settings, field);
     const SettingsDraft* draft = SettingsViewDraft(view, field);
-    spec.trailing = {60 + 14 + 220, 32};
+    spec.trailing = {60 + 14 + std::clamp(UiCardRoom(spec, width) - 16 - 60 - 14 - 200, 120.0f, 220.0f), 32};
     if (draft) spec.error = SettingsDraftErrorText(view.locale, *draft);
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     const D2D1_RECT_F& slot = card.trailing;
@@ -159,8 +155,9 @@ static float SettingsAddSliderCard(UiGraphics& g, const SettingsView& view,
 }
 
 // A color card's swatches (mockup .swrow): 24 DIP circles 10 DIP apart, Custom... (the `custom`
-// command with `customValue`, also its control part) 16 DIP after them. A color picked in
-// Custom... shows as one more swatch.
+// command with `customValue`, also its control part) 16 DIP after them, or 8 DIP under them on a
+// card too narrow to leave the text 200 DIP beside both. A color picked in Custom... shows as one
+// more swatch.
 static float SettingsAddColorCard(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
                                   uint32_t& id, float x, float y, float width, UiCardSpec spec,
                                   SettingsField field, SettingsField custom, std::vector<COLORREF> colors,
@@ -170,17 +167,19 @@ static float SettingsAddColorCard(UiGraphics& g, const SettingsView& view, std::
     float buttonWidth =
         std::ceil(UiLayoutSize(UiLayout(g, customText, UiTextStyleFor(UiFont::Body), 1000, false)).width) + 28;
     float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
-    spec.trailing = {swatches + 16 + buttonWidth, 32};
+    const bool stacked = UiCardRoom(spec, width) - 16 - (swatches + 16 + buttonWidth) < 200;
+    spec.trailing = stacked ? D2D1_SIZE_F{std::max(swatches, buttonWidth), 32 + 8 + 32} :
+                              D2D1_SIZE_F{swatches + 16 + buttonWidth, 32};
     if (const SettingsDraft* draft = SettingsViewDraft(view, field)) {
         spec.error = SettingsDraftErrorText(view.locale, *draft);
     }
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
-    float center = (card.trailing.top + card.trailing.bottom) / 2;
+    float center = card.trailing.top + 16, swatchLeft = stacked ? card.trailing.right - swatches : card.trailing.left;
     for (size_t i = 0; i < colors.size(); i++) {
         UiItem swatch;
         swatch.id = SettingsControlId(field, uint32_t(1 + i));
         swatch.kind = UiItemKind::Swatch;
-        float left = card.trailing.left + float(i) * 34;
+        float left = swatchLeft + float(i) * 34;
         swatch.rect = {left, center - 12, left + 24, center + 12};
         swatch.selected = colors[i] == current;
         swatch.enabled = spec.enabled;
@@ -190,7 +189,7 @@ static float SettingsAddColorCard(UiGraphics& g, const SettingsView& view, std::
     UiItem button;
     button.id = SettingsControlId(custom, uint32_t(customValue));
     button.kind = UiItemKind::Button;
-    button.rect = {card.trailing.right - buttonWidth, card.trailing.top, card.trailing.right, card.trailing.bottom};
+    button.rect = {card.trailing.right - buttonWidth, card.trailing.bottom - 32, card.trailing.right, card.trailing.bottom};
     button.text = customText;
     button.enabled = spec.enabled;
     button.action = SettingsCommand(custom, customValue);
@@ -198,11 +197,16 @@ static float SettingsAddColorCard(UiGraphics& g, const SettingsView& view, std::
     return card.card.bottom;
 }
 
-// A card with a standard button (mockup .btn: 14 DIP padding, optional 12 DIP glyph).
+// A card with a standard button (mockup .btn: 14 DIP padding, optional 12 DIP glyph), as wide as
+// its label or the widest of the labels it can switch to (`states`), so it keeps its width.
 static float SettingsAddButtonCard(UiGraphics& g, std::vector<UiItem>& items, uint32_t& id,
                                    float x, float y, float width, UiCardSpec spec,
-                                   SettingsField command, std::wstring label, std::wstring icon = {}) {
+                                   SettingsField command, std::wstring label, std::wstring icon = {},
+                                   const std::vector<std::wstring>& states = {}) {
     float labelWidth = UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Body), 1000, false)).width;
+    for (const std::wstring& state : states) {
+        labelWidth = std::max(labelWidth, UiLayoutSize(UiLayout(g, state, UiTextStyleFor(UiFont::Body), 1000, false)).width);
+    }
     spec.trailing = {std::ceil(labelWidth) + 28 + (icon.empty() ? 0 : 12 + 8), 32};
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     UiItem button;

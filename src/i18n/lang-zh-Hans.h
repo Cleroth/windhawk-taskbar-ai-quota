@@ -459,8 +459,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Turn on Record usage history to change this.", L"开启“记录使用历史”后即可更改。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.", L"不可用的配额会自动隐藏。至少保留一个选中。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
-          L"on the 7d chart.",
-     L"不可用的配额会自动隐藏。至少保留一个选中。用量图表会在 7天 图表上以数字显示积分。"},
+          L"on the {key7d} chart.",
+     L"不可用的配额会自动隐藏。至少保留一个选中。用量图表会在 {key7d} 图表上以数字显示积分。"},
     {L"", L"Usage below this is blue.", L"低于此值的用量显示为蓝色。"},
     {L"", L"Usage below this is blue. Also the level for threshold notifications.", L"低于此值的用量显示为蓝色。也是阈值通知的触发级别。"},
     {L"", L"Usage below this is green.", L"低于此值的用量显示为绿色。"},

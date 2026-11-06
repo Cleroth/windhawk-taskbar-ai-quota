@@ -200,12 +200,12 @@ static void RunI18nTaskbarTests() {
     });
 
     Run("accounts page: the coded error's state reads Local app not running in the page's language; another "
-        "code's alone form, and provider text as is, cut at 60 characters as before; key chips localized", [] {
+        "code's alone form, and provider text whole, ellipsized with the card's tooltip; key chips localized", [] {
         auto stateOf = [](const UiFrame& frame) {
             std::vector<std::wstring> states;
             for (const UiItem& item : frame.content) {
-                if (item.kind == UiItemKind::Text && item.runs.size() == 2 && item.runs[1].ink == UiInk::Caution) {
-                    states.push_back(item.runs[1].text);
+                for (const UiRun& run : item.runs) {
+                    if (item.kind == UiItemKind::Text && run.ink == UiInk::Caution) states.push_back(run.text);
                 }
             }
             return states;
@@ -229,11 +229,17 @@ static void RunI18nTaskbarTests() {
               L"\u041B\u043E\u043A\u0430\u043B\u044C\u043D\u043E\u0435 \u043F\u0440\u0438\u043B\u043E\u0436\u0435"
               L"\u043D\u0438\u0435 \u043D\u0435 \u0437\u0430\u043F\u0443\u0449\u0435\u043D\u043E");
         // Another error of the local app: its alone form, as the first letter's capital was before;
-        // provider text cut at 60 characters.
+        // provider text whole on a line that ellipsizes it, the card header's tooltip holding it.
         CHECK(stateOf(frameOf({}, {AccountErrorCode::LanguageServerNetwork})).back() ==
               L"Network error (language server)");
-        CHECK(stateOf(frameOf(TestLocale(L"zh-Hans"), {AccountErrorCode::Message, L"X" + std::wstring(69, L'x')})).back() ==
-              L"X" + std::wstring(58, L'x') + L"\u2026");
+        const std::wstring provider = L"X" + std::wstring(69, L'x');
+        UiFrame cut = frameOf(TestLocale(L"zh-Hans"), {AccountErrorCode::Message, provider});
+        CHECK(stateOf(cut).back() == provider);
+        const UiItem* header = UiFindItem(cut, AccountId(4, SettingsField::AccountExpand));
+        CHECK(header && UiRunsText(header->tooltip).find(provider) != std::wstring::npos);
+        CHECK(std::any_of(cut.content.begin(), cut.content.end(), [&](const UiItem& item) {
+            return item.trim && UiRunsText(item.runs).ends_with(provider);
+        }));
         // The quota chips in the card headers: OAI's 5h and 7d (5h, 7天).
         UiFrame chinese = frameOf(TestLocale(L"zh-Hans"), {});
         std::vector<std::wstring> chips;

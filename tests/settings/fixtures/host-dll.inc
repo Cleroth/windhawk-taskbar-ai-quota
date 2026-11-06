@@ -370,7 +370,7 @@ struct ProbeClient final : UiHostClient {
             frame.main.push_back(std::move(button));
         }
         frame.viewport = {200, 40, std::max(client.width, 200.0f), std::max(client.height, 40.0f)};
-        UiAddDropdown(frame.content, kProbeDropdown, {20, 0, 280, 32},
+        UiAddDropdown(*host.graphics, frame.content, kProbeDropdown, {20, 0, 280, 32},
                       {{L"First", 0}, {L"Second", 1}, {L"Third", 2}}, true,
                       {UiActionKind::Command, choice, {}, 7});
         UiAddNumberBox(frame.content, kProbeNumberBox, {20, 44, 20 + 96 + 10 + 40, 76}, boxText,

@@ -122,6 +122,23 @@ static void RunControlTests() {
         CHECK(TestTrimmed(rich, UiRunsText(runs).size()));
     });
 
+    Run("dropdown field: the width that shows every option whole; a value cut before the chevron gets "
+        "its tooltip whole, a fitting one none", [] {
+        UiGraphics& g = TestGraphics();
+        std::vector<UiOption> options = {{L"Research \u2014 shared Max seat", 1}, {L"Short", 2}};
+        CHECK_NEAR(UiDropdownWidth(g, options), TestTextWidth(L"Research \u2014 shared Max seat", UiFont::Body) + 11 + 30);
+        std::vector<UiItem> items;
+        UiAddDropdown(g, items, 1, {0, 0, 120, 32}, options, true, {UiActionKind::Command, 1, {}, 9});
+        UiAddDropdown(g, items, 2, {0, 0, 120, 32}, options, true, {UiActionKind::Command, 2, {}, 9});
+        CHECK_NEAR(UiDropdownTextWidth(items[0]), 120 - 41);
+        CHECK(items[0].text == options[0].text && UiRunsText(items[0].tooltip) == options[0].text);
+        CHECK(items[1].text == L"Short" && items[1].tooltip.empty());
+        // As wide as its widest option: nothing is cut.
+        items.clear();
+        UiAddDropdown(g, items, 1, {0, 0, UiDropdownWidth(g, options), 32}, options, true, {UiActionKind::Command, 1, {}, 9});
+        CHECK(items[0].tooltip.empty());
+    });
+
     Run("navigation pane: its stops first, its surface; the scrollbar at its right edge; scrolling "
         "an entry into view within the range", [] {
         UiFrame frame = TestPaneFrame();

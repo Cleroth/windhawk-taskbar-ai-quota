@@ -225,12 +225,13 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         }
         for (auto item = trailing.rbegin(); item != trailing.rend(); ++item) push(std::move(*item));
 
-        // Label and "Provider · plan · status", the status in its color.
+        // Label and "Provider · plan · status", the status in its color (the last poll's error on
+        // its own), each one line before the controls. Where the details don't fit they drop the
+        // plan, then the provider (its logo stays), then the status ellipsizes; the label
+        // ellipsizes. Anything left out or cut, the header's tooltip holds both lines whole.
         std::wstring stateText;
         UiInk stateInk = UiInk::Success;
-        // The last poll's error on its own, cut at 60 characters.
         std::wstring error = AccountErrorText(view.locale, status.error, AccountErrorForm::Alone);
-        if (error.size() > 60) error = error.substr(0, 59) + L"\u2026";
         if (status.signingIn) {
             stateText = I18nText(locale, TrCtx(L"account-state", L"Signing in\u2026"));
             stateInk = UiInk::Accent;
@@ -253,28 +254,44 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         }
         PCWSTR provider = anthropic ? L"Anthropic" : openai ? L"OpenAI" :  // i18n-en
                           copilot ? L"GitHub Copilot" : opencode ? L"OpenCode Go" : L"Antigravity";  // i18n-en
-        std::vector<UiRun> details = SettingsStatusRuns(
-            status.plan.empty() ?
-                I18nRuns(locale, TrCtx(L"account-details", L"{provider} \u00B7 {state}"),
-                         {{L"provider", provider}, {L"state", SettingsStatusArg(stateText)}}) :
-                I18nRuns(locale, TrCtx(L"account-details", L"{provider} \u00B7 {plan} \u00B7 {state}"),
-                         {{L"provider", provider}, {L"plan", status.plan}, {L"state", SettingsStatusArg(stateText)}}),
+        std::vector<UiRun> withProvider = SettingsStatusRuns(
+            I18nRuns(locale, TrCtx(L"account-details", L"{provider} \u00B7 {state}"),
+                     {{L"provider", provider}, {L"state", SettingsStatusArg(stateText)}}),
             stateInk);
-        float textRight = std::max(right, x + 77 + 40);
+        std::vector<UiRun> details =
+            status.plan.empty() ?
+                withProvider :
+                SettingsStatusRuns(I18nRuns(locale, TrCtx(L"account-details", L"{provider} \u00B7 {plan} \u00B7 {state}"),
+                                            {{L"provider", provider}, {L"plan", status.plan},
+                                             {L"state", SettingsStatusArg(stateText)}}),
+                                   stateInk);
+        const float textLeft = x + 77, textRight = std::max(right, textLeft + 40);
+        auto fits = [&](const std::vector<UiRun>& runs, UiFont font) {
+            return textWidth(UiRunsText(runs), font) <= textRight - textLeft;
+        };
+        std::vector<UiRun> shown = fits(details, UiFont::Caption)      ? details :
+                                   fits(withProvider, UiFont::Caption) ? withProvider :
+                                                                         std::vector<UiRun>{{stateText, UiRunStyle::Normal, stateInk}};
         UiItem title;
         title.id = id++;
         title.kind = UiItemKind::Text;
-        title.rect = {x + 77, cy - 18, textRight, cy + 2};
+        title.rect = {textLeft, cy - 18, textRight, cy + 2};
         title.runs.push_back({account.label});
-        push(title);
+        title.trim = true;
         UiItem state;
         state.id = id++;
         state.kind = UiItemKind::Text;
         state.font = UiFont::Caption;
         state.ink = UiInk::Muted;
-        state.rect = {x + 77, cy + 2, textRight, cy + 18};
-        state.runs = std::move(details);
-        push(state);
+        state.rect = {textLeft, cy + 2, textRight, cy + 18};
+        state.runs = shown;
+        state.trim = true;
+        if (!fits(title.runs, UiFont::Body) || !fits(details, UiFont::Caption)) {
+            cardItems[1].tooltip = {{account.label, UiRunStyle::Strong}, {L"\n"}};
+            cardItems[1].tooltip.insert(cardItems[1].tooltip.end(), details.begin(), details.end());
+        }
+        push(std::move(title));
+        push(std::move(state));
 
         // Expanded rows (mockup .scard.sub).
         float bottom = top + kHeader;
@@ -293,7 +310,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 spec.description = {{I18nText(locale, Tr(L"Shown in details, and next to bars when Identity is "
                                                          L"Label. Unique per provider; renaming keeps the sign-in "
                                                          L"and history."))}};
-                spec.trailing = {200, 32};
+                // 200 DIP, down to 160 on a narrow card so the text keeps 200.
+                spec.trailing = {std::clamp(width - 2 - 55 - 18 - 16 - 200, 160.0f, 200.0f), 32};
                 if (draft) spec.error = SettingsDraftErrorText(locale, *draft);
                 UiCardLayout layout = row(spec);
                 UiItem box;
@@ -332,25 +350,42 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 } else {
                     quotas.push_back({kFableWeeklyBar, weekly(L"Argon")});  // i18n-en
                 }
-                float chipsWidth = 0;
-                for (const Quota& quota : quotas) chipsWidth += textWidth(quota.name, UiFont::Note) + 26 + 4;
+                // 26 DIP chips 4 DIP apart, in lines that leave the text 200 DIP, wider only for a
+                // chip that needs it.
+                std::vector<float> chipWidths;
+                for (const Quota& quota : quotas) chipWidths.push_back(textWidth(quota.name, UiFont::Note) + 26);
+                const float lineWidth = std::max(*std::max_element(chipWidths.begin(), chipWidths.end()),
+                                                 width - 2 - 55 - 18 - 16 - 200);
+                std::vector<D2D1_RECT_F> chipRects;
+                float chipsWidth = 0, chipLeft = 0, chipTop = 0;
+                for (float chipWidth : chipWidths) {
+                    if (chipLeft > 0 && chipLeft + chipWidth > lineWidth) {
+                        chipLeft = 0;
+                        chipTop += 26 + 4;
+                    }
+                    chipRects.push_back({chipLeft, chipTop, chipLeft + chipWidth, chipTop + 26});
+                    chipsWidth = std::max(chipsWidth, chipLeft + chipWidth);
+                    chipLeft += chipWidth + 4;
+                }
                 UiCardSpec spec;
                 spec.title = I18nText(locale, Tr(L"Quotas on taskbar"));
-                spec.description = {{I18nText(
-                    locale, openai && s.barLayout == BarLayout::Sparkline ?
-                                Tr(L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs "
-                                   L"show Credits as a number on the 7d chart.") :
-                                Tr(L"Unavailable quotas hide automatically. At least one stays selected."))}};
-                spec.trailing = {chipsWidth - 4, 26};
+                spec.description = {{openai && s.barLayout == BarLayout::Sparkline ?
+                                         I18nText(locale,
+                                                  Tr(L"Unavailable quotas hide automatically. At least one stays "
+                                                     L"selected. Usage graphs show Credits as a number on the {key7d} "
+                                                     L"chart."),
+                                                  {{L"key7d", QuotaKey(locale, account.provider, kWeeklyBar)}}) :
+                                         I18nText(locale, Tr(L"Unavailable quotas hide automatically. At least one "
+                                                             L"stays selected."))}};
+                spec.trailing = {chipsWidth, chipTop + 26};
                 if (openai && !account.creditsMax) {
                     spec.reason = I18nText(locale, Tr(L"Set Credits max to show the Credits bar."));
                 }
                 UiCardLayout layout = row(spec);
-                float left = layout.trailing.left;
-                for (const Quota& quota : quotas) {
+                for (size_t i = 0; i < quotas.size(); i++) {
+                    const Quota& quota = quotas[i];
                     bool on = (bars >> quota.bar) & 1;
                     int desired = bars ^ (1 << quota.bar);
-                    float chipWidth = textWidth(quota.name, UiFont::Note) + 26;
                     UiItem chip;
                     chip.id = control(SettingsField::AccountBars, uint32_t(quota.bar));
                     chip.kind = UiItemKind::Chip;
@@ -358,10 +393,10 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                     chip.text = quota.name;
                     chip.selected = on;
                     chip.enabled = !(openai && quota.bar == kExtraUsageBar && !account.creditsMax);
-                    chip.rect = {left, layout.trailing.top, left + chipWidth, layout.trailing.bottom};
+                    chip.rect = {layout.trailing.left + chipRects[i].left, layout.trailing.top + chipRects[i].top,
+                                 layout.trailing.left + chipRects[i].right, layout.trailing.top + chipRects[i].bottom};
                     chip.action = command(SettingsField::AccountBars, desired ? desired : bars);
                     push(chip);
-                    left += chipWidth + 4;
                 }
             }
             if (openai) {
@@ -388,17 +423,19 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                                                          L"shows the label on bars and its short text on tiles. The "
                                                          L"number badge appears when several accounts share a "
                                                          L"provider, hidden ones included."))}};
-                spec.trailing = {220, 32};
+                // At least 220 DIP, wider for its widest option up to half the row.
+                std::vector<UiOption> options = {
+                    {I18nText(locale, TrCtx(L"tile-identity", L"Logo + number badge")), int(TileIdentity::LogoBadge)},
+                    {I18nText(locale, TrCtx(L"tile-identity", L"Logo only")), int(TileIdentity::Logo)},
+                    {I18nText(locale, TrCtx(L"tile-identity", L"Label")), int(TileIdentity::Text)}};
+                spec.trailing = {std::max(220.0f, std::min(UiDropdownWidth(g, options), (width - 2) / 2)), 32};
                 if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileIdentity)) {
                     spec.error = SettingsDraftErrorText(locale, *draft);
                 }
                 UiCardLayout layout = row(spec);
-                UiAddDropdown(cardItems, control(SettingsField::AccountTileIdentity), layout.trailing,
-                              {{I18nText(locale, TrCtx(L"tile-identity", L"Logo + number badge")),
-                                int(TileIdentity::LogoBadge)},
-                               {I18nText(locale, TrCtx(L"tile-identity", L"Logo only")), int(TileIdentity::Logo)},
-                               {I18nText(locale, TrCtx(L"tile-identity", L"Label")), int(TileIdentity::Text)}},
-                              true, command(SettingsField::AccountTileIdentity, int(account.tileIdentity)));
+                UiAddDropdown(g, cardItems, control(SettingsField::AccountTileIdentity), layout.trailing,
+                              std::move(options), true,
+                              command(SettingsField::AccountTileIdentity, int(account.tileIdentity)));
             }
             {
                 // Its placeholder is what the tile shows without it: the label without spaces.
@@ -466,19 +503,26 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                             command(SettingsField::AccountRecordHistory, !account.recordHistory), states);
             }
 
-            // Actions (mockup .aact): dashboard and sign-in buttons, Remove account at the right.
-            // Sign in again is the header's Sign in when no sign-in is needed (its own id).
+            // Actions (mockup .aact): dashboard and sign-in buttons from the left, Remove account at
+            // the right. A button that would reach the edge starts a row 8 DIP below; so does Remove
+            // account when it would meet the last row's buttons. Sign in again is the header's Sign
+            // in when no sign-in is needed (its own id).
             UiItem rule;
             rule.id = id++;
             rule.kind = UiItemKind::Rule;
             rule.rect = {x + 1, bottom, x + width - 1, bottom + 1};
             push(rule);
-            float buttonTop = bottom + 12, left = x + 56;
+            const float rowLeft = x + 56, edge = x + width - 19;
+            float buttonTop = bottom + 12, left = rowLeft;
             auto addButton = [&](SettingsField field, I18nKey key, PCWSTR icon, UiButtonStyle style, bool enabled,
                                  bool trailing) {
                 std::wstring text = I18nText(locale, key);
                 float buttonWidth = textWidth(text, UiFont::Body) + 28 + (icon[0] ? 12 + 8 : 0);
-                float buttonLeft = trailing ? x + width - 19 - buttonWidth : left;
+                if (left > rowLeft && left + buttonWidth > edge) {
+                    left = rowLeft;
+                    buttonTop += 32 + 8;
+                }
+                float buttonLeft = trailing ? edge - buttonWidth : left;
                 UiItem button;
                 button.id = control(field, 1);
                 button.kind = UiItemKind::Button;
@@ -490,7 +534,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 button.enabled = enabled;
                 button.action = command(field);
                 push(button);
-                if (!trailing) left += buttonWidth + 8;
+                left += buttonWidth + 8;
             };
             if (signsIn) {
                 addButton(SettingsField::AccountDashboard, TrCtx(L"button", L"Open dashboard"), L"\uE8A7",
@@ -506,7 +550,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             }
             addButton(SettingsField::AccountRemove, TrCtx(L"button", L"Remove account"), L"", UiButtonStyle::Danger,
                       true, true);
-            bottom += 12 + 32 + 14;
+            bottom = buttonTop + 32 + 14;
         }
         cardItems.front().rect.bottom = bottom;
 

@@ -5,6 +5,8 @@
 static constexpr PCWSTR kSettingsUiClass = L"AiQuotaSettingsUi_" WH_MOD_ID;
 static constexpr PCWSTR kSettingsUiViewportClass = L"AiQuotaSettingsUiView_" WH_MOD_ID;
 static constexpr PCWSTR kSettingsUiPopupClass = L"AiQuotaSettingsUiPopup_" WH_MOD_ID;
+// Tooltips hold text a control shows cut (an account's state line, a dropdown's value).
+static constexpr PCWSTR kSettingsUiTooltipClass = L"AiQuotaSettingsUiTip_" WH_MOD_ID;
 // Posted to run the commit queue outside the handler that queued (focus loss, Enter, a slider's
 // release).
 static constexpr UINT kSettingsProcessMessage = WM_APP + 40;

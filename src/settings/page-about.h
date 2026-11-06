@@ -87,7 +87,8 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
         y += height;
     }
 
-    // Version info for bug reports; the button says for a moment whether it copied.
+    // Version info for bug reports; the button says for a moment whether it copied, as wide as its
+    // widest state.
     {
         UiCardSpec spec;
         spec.glyph = L"\uE8C8";
@@ -95,10 +96,11 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
         spec.description = {{I18nText(locale, Tr(L"The mod\u2019s name and version and the Windows build, for bug "
                                                  L"reports."))}};
         spec.minHeight = 62;
-        std::wstring label = I18nText(locale, !view.versionCopied ? TrCtx(L"button", L"Copy") :
-                                              *view.versionCopied ? TrCtx(L"button", L"Copied") :
-                                                                    TrCtx(L"button", L"Copy failed"));
-        y = SettingsAddButtonCard(g, items, id, x, y + 3, width, spec, SettingsField::CopyVersionInfo, label);
+        const std::vector<std::wstring> states = {I18nText(locale, TrCtx(L"button", L"Copy")),
+                                                  I18nText(locale, TrCtx(L"button", L"Copied")),
+                                                  I18nText(locale, TrCtx(L"button", L"Copy failed"))};
+        y = SettingsAddButtonCard(g, items, id, x, y + 3, width, spec, SettingsField::CopyVersionInfo,
+                                  states[!view.versionCopied ? 0 : *view.versionCopied ? 1 : 2], {}, states);
     }
 
     // Links: whole cards open the page in the browser.

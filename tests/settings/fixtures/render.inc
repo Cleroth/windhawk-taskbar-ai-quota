@@ -1109,41 +1109,143 @@ static void RunRenders(const std::wstring& directory) {
                 CHECK(linkCard && logos && license);
             });
         }
-        // The localization review's languages, light at 96 and 144 DPI: Behavior and History whole
-        // (the client as tall as the page), each language stored as the choice, the toolkit in its
-        // locale as the settings client sets it; Layout (with a side taskbar's note) and Display at
-        // 96 DPI only.
-        for (std::string_view tag : {"zh-Hans", "qps-ploc"}) {
+        // The localization review's languages, light, each language stored as the choice and the
+        // toolkit in its locale as the settings client sets it, pages whole (the client as tall as
+        // the page; fixtures/i18n-layout.inc's views): every page at 96 DPI at the default width
+        // and the window's minimum width (-min), Accounts with OAI's and CC 2's cards expanded, its
+        // empty state, Layout (with a side taskbar's note) and its other styles' sections at the
+        // minimum width; Behavior and History also at 144 DPI; then every dropdown's and menu's popup
+        // rows, captioned, as ui/popup.h paints them.
+        const D2D1_SIZE_F minClient = I18nLayoutMinClient();
+        for (std::string_view tag : {"qps-ploc", "de", "ru", "ja", "zh-Hans"}) {
             std::wstring wide(tag.begin(), tag.end());
             I18nLocale locale(*I18nLanguageByTag(wide));
-            for (UINT dpi : {96u, 144u}) {
-                for (auto [page, pageName] : {std::pair{SettingsUiPage::Behavior, "behavior"},
-                                              std::pair{SettingsUiPage::History, "history"},
-                                              std::pair{SettingsUiPage::Layout, "layout"},
-                                              std::pair{SettingsUiPage::Display, "display"}}) {
-                    if (dpi != 96 && (page == SettingsUiPage::Layout || page == SettingsUiPage::Display)) continue;
-                    std::string name = "render-i18n-" + std::string(pageName) + "-" + std::string(tag) + "-light-" +
-                                       std::to_string(dpi) + ".png";
-                    Run(name, [&] {
-                        SettingsView view = TestView(page);
-                        view.locale = locale;
-                        view.settings.language = wide;
-                        if (page == SettingsUiPage::Layout) view.status.sideTaskbars = {{2, false}};
-                        g.locale = locale.LocaleName();
-                        UiFrame frame;
-                        SettingsUiBuildFrame(g, view, client, frame);
-                        D2D1_SIZE_F whole{client.width, std::max(client.height, frame.viewport.top + frame.contentHeight)};
-                        frame = {};
-                        SettingsUiBuildFrame(g, view, whole, frame);
-                        UiPaintState state;
-                        state.focus = {uint32_t(int(page) + 1)};
-                        RenderFrame(g, wic.get(), path(name), frame, view, whole, dpi, RenderThemes()[0].input, state, 0,
-                                    false);
-                        g.locale = L"en-US";
-                        CHECK(true);
-                    });
+            auto renderPage = [&](const std::string& name, SettingsView view, D2D1_SIZE_F size, UINT dpi) {
+                Run(name, [&] {
+                    view = I18nLayoutLocalized(std::move(view), tag);
+                    g.locale = locale.LocaleName();
+                    UiFrame frame;
+                    SettingsUiBuildFrame(g, view, size, frame);
+                    D2D1_SIZE_F whole{size.width, std::max(size.height, frame.viewport.top + frame.contentHeight)};
+                    frame = {};
+                    SettingsUiBuildFrame(g, view, whole, frame);
+                    UiPaintState state;
+                    state.focus = {uint32_t(int(view.page) + 1)};
+                    RenderFrame(g, wic.get(), path(name), frame, view, whole, dpi, RenderThemes()[0].input, state, 0,
+                                false);
+                    g.locale = L"en-US";
+                    CHECK(true);
+                });
+            };
+            SettingsView about = TestView(SettingsUiPage::About);
+            about.version = L"2.0.1";
+            SettingsView layout = TestView(SettingsUiPage::Layout);
+            layout.status.sideTaskbars = {{2, false}};
+            const std::pair<const char*, SettingsView> pages[] = {
+                {"about", about},
+                {"accounts", I18nAccountsView({0, 2})},
+                {"accounts-empty", TestView(SettingsUiPage::Accounts)},
+                {"behavior", TestView(SettingsUiPage::Behavior)},
+                {"history", TestView(SettingsUiPage::History)},
+                {"layout", layout},
+                {"display", TestView(SettingsUiPage::Display)},
+            };
+            for (const auto& [pageName, view] : pages) {
+                std::string name = "render-i18n-" + std::string(pageName) + "-" + std::string(tag) + "-light-";
+                renderPage(name + "96.png", view, client, 96);
+                renderPage(name + "96-min.png", view, minClient, 96);
+                if (view.page == SettingsUiPage::Behavior || view.page == SettingsUiPage::History) {
+                    renderPage(name + "144.png", view, client, 144);
                 }
-                // The taskbar's localized text on the preview strip, measured in the locale.
+            }
+            for (auto [style, styleName] : {std::pair{BarLayout::Sparkline, "spark"}, std::pair{BarLayout::SegmentedRing, "ring"},
+                                            std::pair{BarLayout::LogoHeadline, "headline"},
+                                            std::pair{BarLayout::QuotaMatrix, "matrix"}}) {
+                renderPage("render-i18n-layout-" + std::string(styleName) + "-" + std::string(tag) + "-light-96-min.png",
+                           I18nLayoutView(style), minClient, 96);
+            }
+
+            // The popups: each field's or menu button's rows under its caption, at the default width.
+            std::string popups = "render-i18n-popups-" + std::string(tag) + "-light-96.png";
+            Run(popups, [&] {
+                g.locale = locale.LocaleName();
+                struct Popup {
+                    SettingsView view;
+                    uint32_t id;
+                };
+                SettingsView spark = I18nLayoutView(BarLayout::Sparkline);
+                std::vector<Popup> list = {
+                    {TestView(SettingsUiPage::Accounts), SettingsControlId(SettingsField::AccountAdd)},
+                    {I18nAccountsView({2}), AccountId(3, SettingsField::AccountTileIdentity)},
+                    {I18nLayoutView(BarLayout::Stacked), SettingsControlId(SettingsField::Placement)},
+                    {I18nLayoutView(BarLayout::Stacked), SettingsControlId(SettingsField::ClaudeLogoBrand)},
+                    {I18nLayoutView(BarLayout::Stacked), SettingsControlId(SettingsField::GeminiLogoBrand)},
+                    {I18nLayoutView(BarLayout::Stacked), SettingsControlId(SettingsField::BarStyle)},
+                    {I18nLayoutView(BarLayout::Stacked), SettingsControlId(SettingsField::LabelPosition)},
+                    {I18nLayoutView(BarLayout::Stacked), SettingsControlId(SettingsField::PaceTickStyle)},
+                    {spark, SettingsControlId(SettingsField::SparklineExtra)},
+                    {spark, SettingsControlId(SettingsField::SparklineSpan)},
+                    {spark, SettingsControlId(SettingsField::SparklineHoverSpan)},
+                    {TestView(SettingsUiPage::Display), SettingsControlId(SettingsField::Material)},
+                    {TestView(SettingsUiPage::Display), SettingsControlId(SettingsField::BarMode)},
+                    {TestView(SettingsUiPage::Display), SettingsControlId(SettingsField::PercentTextVisibility)},
+                    {TestView(SettingsUiPage::Display), SettingsControlId(SettingsField::PercentTextAlignment)},
+                    {TestView(SettingsUiPage::Display), SettingsControlId(SettingsField::UsagePalette)},
+                    {TestView(SettingsUiPage::Behavior), SettingsControlId(SettingsField::Language)},
+                    {TestView(SettingsUiPage::Behavior), SettingsControlId(SettingsField::ShowOn)},
+                    {TestView(SettingsUiPage::Behavior), SettingsControlId(SettingsField::PollMinutes, 8)},
+                    {TestView(SettingsUiPage::Behavior), SettingsControlId(SettingsField::Notifications)},
+                    {TestView(SettingsUiPage::History), SettingsControlId(SettingsField::KeepHistory)},
+                    {TestView(SettingsUiPage::History), SettingsControlId(SettingsField::HistoryRange)},
+                };
+                struct Placed {
+                    std::wstring caption;
+                    std::vector<UiItem> rows;
+                    D2D1_SIZE_F size;
+                };
+                std::vector<Placed> placed;
+                float width = 0, height = 8;
+                for (const Popup& popup : list) {
+                    SettingsView view = I18nLayoutLocalized(popup.view, tag);
+                    UiFrame frame;
+                    SettingsUiBuildFrame(g, view, client, frame);
+                    const UiItem* field = UiFindItem(frame, popup.id);
+                    CHECK(field && !field->options.empty());
+                    Placed entry;
+                    entry.caption = field->kind == UiItemKind::Button ? field->text : field->text + L" \u25BE";
+                    entry.size = UiLayoutOptions(g, field->options, field->action, field->rect.right - field->rect.left,
+                                                 entry.rows);
+                    width = std::max(width, entry.size.width + 16);
+                    height += 20 + entry.size.height + 12;
+                    placed.push_back(std::move(entry));
+                }
+                winrt::com_ptr<IWICBitmap> bitmap = RenderBitmap(wic.get(), {width, height}, 96);
+                winrt::com_ptr<ID2D1RenderTarget> target = RenderTarget(g, bitmap.get(), 96);
+                UiTargetCache cache;
+                UiPalette palette = UiPaletteFor(RenderThemes()[0].input);
+                target->BeginDraw();
+                target->Clear(palette.background);
+                float y = 8;
+                for (const Placed& entry : placed) {
+                    UiDrawLayout(target.get(), cache, UiLayout(g, entry.caption, UiTextStyleFor(UiFont::Caption), width - 16, false),
+                                 {8, y}, palette.textSecondary);
+                    y += 20;
+                    D2D1_RECT_F box{8, y, 8 + entry.size.width, y + entry.size.height};
+                    UiFillRect(target.get(), cache, box, 8, palette.popup, 1);
+                    UiStrokeRect(target.get(), cache, box, 8, palette.controlBorder, 1, 1);
+                    UiPaintItems(target.get(), g, cache, palette, entry.rows, {}, {box.left, box.top}, 1, -1e9f, 1e9f);
+                    y += entry.size.height + 12;
+                }
+                winrt::check_hresult(target->EndDraw());
+                cache.Clear();
+                SaveRender(wic.get(), bitmap.get(), path(popups));
+                std::cout << "RENDER " << popups << '\n';
+                g.locale = L"en-US";
+            });
+
+            if (tag != "zh-Hans" && tag != "qps-ploc") continue;
+            // The taskbar's localized text on the preview strip, measured in the locale.
+            for (UINT dpi : {96u, 144u}) {
                 std::string sheet = "render-i18n-preview-sheet-" + std::string(tag) + "-light-" + std::to_string(dpi) +
                                     ".png";
                 Run(sheet, [&] {

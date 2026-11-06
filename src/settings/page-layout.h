@@ -28,24 +28,35 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
     auto key = [&](size_t index) { return text(kQuotaKeys[index]); };
     const std::wstring pixels = text(TrCtx(L"pixel-unit", L"px"));
 
-    // Tile style (mockup .gallery): three cards a row, 8 DIP apart, the chosen one outlined.
+    // Tile style (mockup .gallery): three cards a row, 8 DIP apart, the chosen one outlined; every
+    // card as tall as the longest name wraps.
     y = section(y + 16, TrCtx(L"settings-section", L"Tile style"));
     {
-        constexpr float kCardHeight = 1 + 8 + 72 + 8 + 17 + 2 + 8 + 1, kGap = 8;
+        constexpr float kGap = 8;
         constexpr int kRows = int(std::size(kSettingsTileStyles) + 2) / 3;
         float cardWidth = std::max((width - 2 * kGap) / 3, 1.0f);
+        std::vector<UiItem> cards;
+        float captionHeight = 0;
         for (int i = 0; i < int(std::size(kSettingsTileStyles)); i++) {
-            float left = x + float(i % 3) * (cardWidth + kGap), top = y + float(i / 3) * (kCardHeight + kGap);
+            float left = x + float(i % 3) * (cardWidth + kGap);
             UiItem card;
             card.id = SettingsControlId(SettingsField::BarLayout, uint32_t(i));
             card.kind = UiItemKind::Gallery;
-            card.rect = {left, top, left + cardWidth, top + kCardHeight};
+            card.rect = {left, 0, left + cardWidth, 0};
             card.text = text(kSettingsTileStyles[i]);
             card.selected = i == int(layout);
             card.action = SettingsCommand(SettingsField::BarLayout, i);
-            items.push_back(std::move(card));
+            captionHeight = std::max(captionHeight, UiLayoutSize(UiLayout(g, card.text, UiTextStyleFor(UiFont::Note),
+                                                                          UiGalleryCaptionWidth(card))).height);
+            cards.push_back(std::move(card));
         }
-        y += kRows * kCardHeight + (kRows - 1) * kGap;
+        const float cardHeight = 1 + 8 + 72 + 8 + captionHeight + 8 + 1;
+        for (int i = 0; i < int(cards.size()); i++) {
+            cards[size_t(i)].rect.top = y + float(i / 3) * (cardHeight + kGap);
+            cards[size_t(i)].rect.bottom = cards[size_t(i)].rect.top + cardHeight;
+            items.push_back(std::move(cards[size_t(i)]));
+        }
+        y += kRows * cardHeight + (kRows - 1) * kGap;
     }
 
     // Placement: the position, then the taskbars that show the bars in the tray instead of beside

@@ -72,6 +72,17 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   style (Russian, Japanese) with the preview card's text, the Layout page in Russian (time span
   plurals, the pixel unit, the quota keys' description, the usage graph's section) and the
   threshold notifications' level as whole texts on the Display page in Chinese.
+  `fixtures/i18n-layout.inc`: the settings window in every language and the pseudo-locale: a
+  layout audit of every page (account cards in every state, expanded per provider and empty;
+  Layout per tile style and with placement notes; Display, Behavior, History and About states) at
+  the default and the window's minimum size (labels wider than their control, text cut without a
+  tooltip holding it whole where the pointer hits, wrapped text taller than its slot or breaking a
+  word, items over each other or out of their card, popup rows), then the measured layout: the
+  minimum client, account state lines dropping the plan, then the provider, then ellipsizing with
+  the header's tooltip, ellipsized surrogate pairs, the action row's wrapping, quota chips in
+  lines, the Identity field's width, the header note's height, gallery cards growing with a
+  wrapped name, Copy version info as wide as its widest state, narrow cards' sliders and color
+  cards. Its cases are also the localization review renders'.
   `fixtures/i18n-taskbar.inc`: the meter model's localized text on the production catalogs: the
   quota keys and the headline countdown's forms and width reserve in zh-Hans, ru and the
   pseudo-locale, the preview strip drawing them (the matrix's localized key reserve), an account
@@ -92,7 +103,8 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   History page's box).
   `fixtures/controls.inc`: the
   toolkit controls the history window builds on (segment geometry, hits and keys, ellipsis
-  trimming, the navigation pane's stops, scrollbar and scroll-into-view, the leading switch,
+  trimming, a dropdown's width and cut value's tooltip, the navigation pane's stops, scrollbar and
+  scroll-into-view, the leading switch,
   status pills, info bar severities with a button). `fixtures/tooltip.inc`: the readout layout
   search (forms, columns, widest titles, the "+N more" hint measured on its own, nothing below
   one row), the pointer-excluding placement in adversarial geometries (centre, corners, edges, a
@@ -162,9 +174,14 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   (`render-layout-placement-*`), preview strip sheets with one captioned
   row per layout and option (`render-preview-sheet-*`) or per Display option
   (`render-display-preview-sheet-*`; 1:1 at 100/125/150%) and the dropdown popup's rows
-  (`render-popup-*`), and the localization review's Behavior and History pages, whole, in
-  zh-Hans and the pseudo-locale (`render-i18n-<page>-<tag>-light-96/144`; Layout, with a side
-  taskbar's note, and Display at 96 only), with a preview strip
+  (`render-popup-*`), and the localization review in the pseudo-locale, de, ru, ja and zh-Hans:
+  every page whole at 96 DPI at the default and the window's minimum width
+  (`render-i18n-<page>-<tag>-light-96`, `-96-min`; Accounts with two cards expanded, its empty
+  state as `accounts-empty`, Layout with a side taskbar's note), Behavior and History also at 144
+  DPI, Layout's other style sections at the minimum width
+  (`render-i18n-layout-<spark|ring|headline|matrix>-<tag>-light-96-min`), every dropdown's and
+  menu's popup rows under their field's value (`render-i18n-popups-<tag>-light-96`), and in
+  zh-Hans and the pseudo-locale a preview strip
   sheet of the taskbar's localized text (keys, the headline's countdown, chart and matrix keys;
   `render-i18n-preview-sheet-<tag>-light-96/144`), and the Display page under de-DE's number
   format in English and German (`render-i18n-display-<en|de>-de-DE-light-96`). `render-backdrop-*`

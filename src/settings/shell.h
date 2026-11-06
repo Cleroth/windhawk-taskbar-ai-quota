@@ -3,6 +3,8 @@
 // snapshot (settings/view.h; approved mockups: nav and header of layout-v2.png, accounts-add.png).
 // Pure.
 
+// The window's smallest outer size, DIPs: every page lays out from its client area up.
+static constexpr D2D1_SIZE_F kSettingsWindowMinSize{800, 590};
 static constexpr float kSettingsNavWidth = 260;
 static constexpr float kSettingsHeaderHeight = 56;
 static constexpr float kSettingsContentMaxWidth = 1000;
@@ -49,7 +51,8 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
     uint32_t id = uint32_t(page + 1) << 12;
     float header = kSettingsHeaderHeight, contentTop = 0;
     // Accounts: Add account (mockup .btn.accent: 14 DIP padding, 12 DIP glyph) at the title row's
-    // right opens the provider menu; while accounts exist, a note under the title.
+    // right opens the provider menu; while accounts exist, a note under the title, the header as
+    // tall as it wraps.
     if (SettingsUiPage(page) == SettingsUiPage::Accounts) {
         std::wstring label = I18nText(view.locale, TrCtx(L"button", L"Add account"));
         float labelWidth = UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Body), 1000, false)).width;
@@ -85,14 +88,15 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             note.kind = UiItemKind::Text;
             note.font = UiFont::Note;
             note.ink = UiInk::Muted;
-            note.rect = {kSettingsNavWidth + left, 50, right, 69};
             note.runs.push_back({I18nText(view.locale, view.settings.skipHiddenPolling ?
                                                            Tr(L"Drag to reorder. Toggle hides an account from the "
                                                               L"taskbar; hidden accounts are not polled.") :
                                                            Tr(L"Drag to reorder. Toggle hides an account from the "
                                                               L"taskbar."))});
+            float noteLeft = kSettingsNavWidth + left;
+            header = 50 + UiLayoutSize(UiRichLayout(g, note.runs, UiFont::Note, right - noteLeft)).height;
+            note.rect = {noteLeft, 50, right, header};
             frame.main.push_back(std::move(note));
-            header = 69;
         }
     }
     if (SettingsUiPage(page) == SettingsUiPage::Layout || SettingsUiPage(page) == SettingsUiPage::Display) {

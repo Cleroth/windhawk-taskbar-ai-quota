@@ -503,8 +503,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"利用できないクォータは自動的に非表示になります。少なくとも 1 つは選択されたままです。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
-          L"on the 7d chart.",
-     L"利用できないクォータは自動的に非表示になります。少なくとも 1 つは選択されたままです。使用量グラフでは、クレジットは 7日 のグラフに数値で表示されます。"},
+          L"on the {key7d} chart.",
+     L"利用できないクォータは自動的に非表示になります。少なくとも 1 つは選択されたままです。使用量グラフでは、クレジットは {key7d} のグラフに数値で表示されます。"},
     {L"", L"Usage below this is blue.", L"これ未満の使用量は青になります。"},
     {L"", L"Usage below this is blue. Also the level for threshold notifications.",
      L"これ未満の使用量は青になります。しきい値の通知のレベルでもあります。"},

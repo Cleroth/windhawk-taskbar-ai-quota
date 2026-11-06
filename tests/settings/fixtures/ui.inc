@@ -381,7 +381,7 @@ static void RunUiTests() {
         UiAction command{UiActionKind::Command, 0, {}, 9};
         UiAddToggle(frame.content, 300, {500, 10, 500 + UiToggleSize(g, UiToggleText{L"On", L"Off"}).width, 42}, true, true, command,
                     UiToggleText{L"On", L"Off"});
-        UiAddDropdown(frame.content, 310, {300, 60, 560, 92}, {{L"One", 1}, {L"Two", 2}}, true,
+        UiAddDropdown(g, frame.content, 310, {300, 60, 560, 92}, {{L"One", 1}, {L"Two", 2}}, true,
                       {UiActionKind::Command, 2, {}, 9});
         UiAddNumberBox(frame.content, 320, {300, 110, 300 + UiNumberBoxSize(g, L"days").width, 142},
                        L"90", L"days", true, command);

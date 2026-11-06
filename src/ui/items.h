@@ -11,7 +11,8 @@
 // centered alone without one; with options, a menu button whose activation opens them in the
 // popup. Toggle: selected = on; its `text` (the state's, or a label) leads the
 // switch, or follows a leading switch when align is trailing. Dropdown: text = the chosen
-// option's label, action.value = its value; activating it opens the popup (ui/popup.h).
+// option's label (ellipsized), action.value = its value; activating it opens the popup
+// (ui/popup.h).
 // NumberBox: the drawn frame of a native text box (ui/text-box.h) showing `text`, centered
 // without spin buttons when align is center; SpinButton: its up/down buttons (not tab stops).
 // TextBox: the frame of a native text box for free text, `runs` its placeholder while empty,
@@ -19,7 +20,8 @@
 // (title `text`, detail `runs`, an icon from `parts`); with a glyph (`icon`), a one-line menu row,
 // a separator line above it when `separator` is set. Slider: action.value within [minimum,
 // maximum]. Swatch: a color choice, action.value = 0xBBGGRR, selected = current; without an
-// action kind, a color dot. Gallery: a choice card named `text` with a client-drawn thumbnail.
+// action kind, a color dot. Gallery: a choice card named `text` (wrapped) under a client-drawn
+// thumbnail.
 // Preview: a client-drawn strip that pans sideways (not a tab stop). Chip: a pill named `text`,
 // selected = on; without an action it only shows. Handle: a drag handle (glyph `text`, not a
 // tab stop) for its `owner`, which holds keyboard focus for it. Rule: a 1 px separator along the
@@ -370,6 +372,14 @@ struct UiCardLayout {
     D2D1_RECT_F card{}, trailing{};
 };
 
+// The width a card of `width` has for its text, its trailing slot and the 16 DIP between them:
+// less its padding (a nested card's indent) and a leading glyph or dot with its gap. UiAddCard's
+// geometry.
+static float UiCardRoom(const UiCardSpec& spec, float width) {
+    float lead = !spec.glyph.empty() ? 22 : spec.dot ? 14 : 0;
+    return width - (spec.nested ? 55 + 18 : 2 * (1 + 18)) - (lead > 0 ? lead + 16 : 0);
+}
+
 static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_t& id, float x,
                               float y, float width, const UiCardSpec& spec) {
     constexpr float kBorder = 1, kPadX = 18, kPadY = 12, kGap = 16, kLeadWidth = 22, kDot = 14;
@@ -653,8 +663,22 @@ static void UiAddToggle(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slo
     items.push_back(std::move(pill));
 }
 
-// Dropdown field (mockup .combo): the option whose value is action.value.
-static void UiAddDropdown(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot,
+// Dropdown field (mockup .combo): the option whose value is action.value, its label 11 DIP in and
+// ellipsized 30 DIP before the edge (the chevron's room); cut, its tooltip holds it whole.
+static float UiDropdownTextWidth(const UiItem& field) {
+    return std::max(field.rect.right - field.rect.left - 11 - 30, 0.0f);
+}
+
+// The field width that shows every option whole.
+static float UiDropdownWidth(UiGraphics& g, const std::vector<UiOption>& options) {
+    float widest = 0;
+    for (const UiOption& option : options) {
+        widest = std::max(widest, UiLayoutSize(UiLayout(g, option.text, UiTextStyleFor(UiFont::Body), 10000, false)).width);
+    }
+    return std::ceil(widest) + 11 + 30;
+}
+
+static void UiAddDropdown(UiGraphics& g, std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot,
                           std::vector<UiOption> options, bool enabled, UiAction action) {
     UiItem field;
     field.id = id;
@@ -662,6 +686,10 @@ static void UiAddDropdown(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F s
     field.rect = slot;
     for (const UiOption& option : options) {
         if (option.value == action.value) field.text = option.text;
+    }
+    if (UiLayoutSize(UiLayout(g, field.text, UiTextStyleFor(UiFont::Body), 10000, false)).width >
+        UiDropdownTextWidth(field)) {
+        field.tooltip = {{field.text}};
     }
     field.options = std::move(options);
     field.enabled = enabled;
@@ -748,9 +776,13 @@ static float UiSliderThumbX(const UiItem& slider) {
 }
 
 // A gallery card's thumbnail (mockup .gcard .thumb): 72 DIP tall inside its 1 DIP border and
-// 8 DIP padding; the name sits 8 DIP below it.
+// 8 DIP padding; the name sits 8 DIP below it, 2 DIP in from each side, and wraps.
 static D2D1_RECT_F UiGalleryThumbRect(const UiItem& card) {
     return {card.rect.left + 9, card.rect.top + 9, card.rect.right - 9, card.rect.top + 9 + 72};
+}
+
+static float UiGalleryCaptionWidth(const UiItem& card) {
+    return std::max(card.rect.right - card.rect.left - 18 - 4, 0.0f);
 }
 
 // The popup's rows. A dropdown's (WinUI combo box items): 32 DIP rows on a 36 DIP pitch, 5 DIP

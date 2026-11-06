@@ -1173,9 +1173,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Nicht verfügbare Kontingente werden automatisch ausgeblendet. Mindestens eines bleibt ausgewählt."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
-          L"on the 7d chart.",
+          L"on the {key7d} chart.",
      L"Nicht verfügbare Kontingente werden automatisch ausgeblendet. Mindestens eines bleibt ausgewählt. "
-     L"Nutzungsdiagramme zeigen Guthaben als Zahl im 7T-Diagramm."},
+     L"Nutzungsdiagramme zeigen Guthaben als Zahl im {key7d}-Diagramm."},
     {L"", L"Usage below this is blue.", L"Nutzung unter diesem Wert ist blau."},
     {L"", L"Usage below this is blue. Also the level for threshold notifications.",
      L"Nutzung unter diesem Wert ist blau. Zugleich die Stufe für Schwellenwert-Benachrichtigungen."},
@@ -2401,9 +2401,9 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Las cuotas no disponibles se ocultan automáticamente. Al menos una queda seleccionada."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
-          L"on the 7d chart.",
+          L"on the {key7d} chart.",
      L"Las cuotas no disponibles se ocultan automáticamente. Al menos una queda seleccionada. Los gráficos de uso "
-     L"muestran los créditos como un número en el gráfico de 7d."},
+     L"muestran los créditos como un número en el gráfico de {key7d}."},
     {L"", L"Usage below this is blue.", L"El uso por debajo de este valor es azul."},
     {L"", L"Usage below this is blue. Also the level for threshold notifications.",
      L"El uso por debajo de este valor es azul. También es el nivel de las notificaciones de umbral."},
@@ -3655,9 +3655,9 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Les quotas indisponibles sont masqués automatiquement. Au moins un reste sélectionné."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
-          L"on the 7d chart.",
+          L"on the {key7d} chart.",
      L"Les quotas indisponibles sont masqués automatiquement. Au moins un reste sélectionné. Les graphiques "
-     L"d’utilisation affichent les crédits sous forme de nombre sur le graphique 7j."},
+     L"d’utilisation affichent les crédits sous forme de nombre sur le graphique {key7d}."},
     {L"", L"Usage below this is blue.", L"Sous ce seuil, l’utilisation s’affiche en bleu."},
     {L"", L"Usage below this is blue. Also the level for threshold notifications.",
      L"Sous ce seuil, l’utilisation s’affiche en bleu. C’est aussi le niveau des notifications de seuil."},
@@ -4791,8 +4791,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"利用できないクォータは自動的に非表示になります。少なくとも 1 つは選択されたままです。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
-          L"on the 7d chart.",
-     L"利用できないクォータは自動的に非表示になります。少なくとも 1 つは選択されたままです。使用量グラフでは、クレジットは 7日 のグラフに数値で表示されます。"},
+          L"on the {key7d} chart.",
+     L"利用できないクォータは自動的に非表示になります。少なくとも 1 つは選択されたままです。使用量グラフでは、クレジットは {key7d} のグラフに数値で表示されます。"},
     {L"", L"Usage below this is blue.", L"これ未満の使用量は青になります。"},
     {L"", L"Usage below this is blue. Also the level for threshold notifications.",
      L"これ未満の使用量は青になります。しきい値の通知のレベルでもあります。"},
@@ -5962,9 +5962,9 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Cotas indisponíveis são ocultadas automaticamente. Pelo menos uma fica selecionada."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
-          L"on the 7d chart.",
+          L"on the {key7d} chart.",
      L"Cotas indisponíveis são ocultadas automaticamente. Pelo menos uma fica selecionada. Os gráficos de uso "
-     L"mostram os créditos como um número no gráfico de 7d."},
+     L"mostram os créditos como um número no gráfico de {key7d}."},
     {L"", L"Usage below this is blue.", L"O uso abaixo deste valor fica azul."},
     {L"", L"Usage below this is blue. Also the level for threshold notifications.",
      L"O uso abaixo deste valor fica azul. Também é o nível das notificações de limite."},
@@ -7172,9 +7172,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Недоступные квоты скрываются автоматически. Хотя бы одна остаётся выбранной."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
-          L"on the 7d chart.",
+          L"on the {key7d} chart.",
      L"Недоступные квоты скрываются автоматически. Хотя бы одна остаётся выбранной. На графиках использования "
-     L"кредиты показываются числом на графике 7д."},
+     L"кредиты показываются числом на графике {key7d}."},
     {L"", L"Usage below this is blue.", L"Ниже этого уровня использование отображается синим."},
     {L"", L"Usage below this is blue. Also the level for threshold notifications.",
      L"Ниже этого уровня использование отображается синим. Это также уровень уведомлений о пороге."},
@@ -8248,8 +8248,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Turn on Record usage history to change this.", L"开启“记录使用历史”后即可更改。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.", L"不可用的配额会自动隐藏。至少保留一个选中。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
-          L"on the 7d chart.",
-     L"不可用的配额会自动隐藏。至少保留一个选中。用量图表会在 7天 图表上以数字显示积分。"},
+          L"on the {key7d} chart.",
+     L"不可用的配额会自动隐藏。至少保留一个选中。用量图表会在 {key7d} 图表上以数字显示积分。"},
     {L"", L"Usage below this is blue.", L"低于此值的用量显示为蓝色。"},
     {L"", L"Usage below this is blue. Also the level for threshold notifications.", L"低于此值的用量显示为蓝色。也是阈值通知的触发级别。"},
     {L"", L"Usage below this is green.", L"低于此值的用量显示为绿色。"},
@@ -25747,7 +25747,8 @@ static IDWriteTextLayout* UiInkedLayout(ID2D1RenderTarget* target, UiTargetCache
 // centered alone without one; with options, a menu button whose activation opens them in the
 // popup. Toggle: selected = on; its `text` (the state's, or a label) leads the
 // switch, or follows a leading switch when align is trailing. Dropdown: text = the chosen
-// option's label, action.value = its value; activating it opens the popup (ui/popup.h).
+// option's label (ellipsized), action.value = its value; activating it opens the popup
+// (ui/popup.h).
 // NumberBox: the drawn frame of a native text box (ui/text-box.h) showing `text`, centered
 // without spin buttons when align is center; SpinButton: its up/down buttons (not tab stops).
 // TextBox: the frame of a native text box for free text, `runs` its placeholder while empty,
@@ -25755,7 +25756,8 @@ static IDWriteTextLayout* UiInkedLayout(ID2D1RenderTarget* target, UiTargetCache
 // (title `text`, detail `runs`, an icon from `parts`); with a glyph (`icon`), a one-line menu row,
 // a separator line above it when `separator` is set. Slider: action.value within [minimum,
 // maximum]. Swatch: a color choice, action.value = 0xBBGGRR, selected = current; without an
-// action kind, a color dot. Gallery: a choice card named `text` with a client-drawn thumbnail.
+// action kind, a color dot. Gallery: a choice card named `text` (wrapped) under a client-drawn
+// thumbnail.
 // Preview: a client-drawn strip that pans sideways (not a tab stop). Chip: a pill named `text`,
 // selected = on; without an action it only shows. Handle: a drag handle (glyph `text`, not a
 // tab stop) for its `owner`, which holds keyboard focus for it. Rule: a 1 px separator along the
@@ -26106,6 +26108,14 @@ struct UiCardLayout {
     D2D1_RECT_F card{}, trailing{};
 };
 
+// The width a card of `width` has for its text, its trailing slot and the 16 DIP between them:
+// less its padding (a nested card's indent) and a leading glyph or dot with its gap. UiAddCard's
+// geometry.
+static float UiCardRoom(const UiCardSpec& spec, float width) {
+    float lead = !spec.glyph.empty() ? 22 : spec.dot ? 14 : 0;
+    return width - (spec.nested ? 55 + 18 : 2 * (1 + 18)) - (lead > 0 ? lead + 16 : 0);
+}
+
 static UiCardLayout UiAddCard(UiGraphics& g, std::vector<UiItem>& items, uint32_t& id, float x,
                               float y, float width, const UiCardSpec& spec) {
     constexpr float kBorder = 1, kPadX = 18, kPadY = 12, kGap = 16, kLeadWidth = 22, kDot = 14;
@@ -26389,8 +26399,22 @@ static void UiAddToggle(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slo
     items.push_back(std::move(pill));
 }
 
-// Dropdown field (mockup .combo): the option whose value is action.value.
-static void UiAddDropdown(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot,
+// Dropdown field (mockup .combo): the option whose value is action.value, its label 11 DIP in and
+// ellipsized 30 DIP before the edge (the chevron's room); cut, its tooltip holds it whole.
+static float UiDropdownTextWidth(const UiItem& field) {
+    return std::max(field.rect.right - field.rect.left - 11 - 30, 0.0f);
+}
+
+// The field width that shows every option whole.
+static float UiDropdownWidth(UiGraphics& g, const std::vector<UiOption>& options) {
+    float widest = 0;
+    for (const UiOption& option : options) {
+        widest = std::max(widest, UiLayoutSize(UiLayout(g, option.text, UiTextStyleFor(UiFont::Body), 10000, false)).width);
+    }
+    return std::ceil(widest) + 11 + 30;
+}
+
+static void UiAddDropdown(UiGraphics& g, std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F slot,
                           std::vector<UiOption> options, bool enabled, UiAction action) {
     UiItem field;
     field.id = id;
@@ -26398,6 +26422,10 @@ static void UiAddDropdown(std::vector<UiItem>& items, uint32_t id, D2D1_RECT_F s
     field.rect = slot;
     for (const UiOption& option : options) {
         if (option.value == action.value) field.text = option.text;
+    }
+    if (UiLayoutSize(UiLayout(g, field.text, UiTextStyleFor(UiFont::Body), 10000, false)).width >
+        UiDropdownTextWidth(field)) {
+        field.tooltip = {{field.text}};
     }
     field.options = std::move(options);
     field.enabled = enabled;
@@ -26484,9 +26512,13 @@ static float UiSliderThumbX(const UiItem& slider) {
 }
 
 // A gallery card's thumbnail (mockup .gcard .thumb): 72 DIP tall inside its 1 DIP border and
-// 8 DIP padding; the name sits 8 DIP below it.
+// 8 DIP padding; the name sits 8 DIP below it, 2 DIP in from each side, and wraps.
 static D2D1_RECT_F UiGalleryThumbRect(const UiItem& card) {
     return {card.rect.left + 9, card.rect.top + 9, card.rect.right - 9, card.rect.top + 9 + 72};
+}
+
+static float UiGalleryCaptionWidth(const UiItem& card) {
+    return std::max(card.rect.right - card.rect.left - 18 - 4, 0.0f);
 }
 
 // The popup's rows. A dropdown's (WinUI combo box items): 32 DIP rows on a 36 DIP pitch, 5 DIP
@@ -26908,7 +26940,7 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 break;
             }
             // Dropdown field: a standard control fill (pressed while its popup shows), the
-            // chosen label clipped before the chevron.
+            // chosen label ellipsized before the chevron (UiDropdownTextWidth).
             case UiItemKind::Dropdown: {
                 bool down = item.enabled && (pressed || state.open == item.id);
                 bool active = item.enabled && (hot || down);
@@ -26918,11 +26950,10 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 UiFillRect(target, cache, r, 4, fill, scale);
                 UiStrokeRect(target, cache, r, 4, p.controlBorder, 1, scale);
                 UiTextStyle label = UiTextStyleFor(UiFont::Body);
-                D2D1_RECT_F clip{r.left + 11, r.top, r.right - 30, r.bottom};
-                target->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
-                UiDrawLayout(target, cache, UiLayout(g, item.text, label, 10000, false),
-                             {clip.left, centerY - label.lineHeight / 2}, ink);
-                target->PopAxisAlignedClip();
+                UiDrawLayout(target, cache,
+                             UiLayout(g, item.text, label, UiDropdownTextWidth(item), false,
+                                      DWRITE_TEXT_ALIGNMENT_LEADING, true),
+                             {r.left + 11, centerY - label.lineHeight / 2}, ink);
                 UiDrawLayout(target, cache,
                              UiLayout(g, L"\uE70D", UiIconStyle(10), 12, false,
                                       DWRITE_TEXT_ALIGNMENT_CENTER),
@@ -27107,7 +27138,8 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 break;
             }
             // Gallery card: reacts to the pointer as a whole; the chosen one has a 2 DIP accent
-            // border. The client draws the thumbnail; the name sits under it.
+            // border. The client draws the thumbnail; the name sits under it, wrapped to its width
+            // (UiGalleryCaptionWidth).
             case UiItemKind::Gallery: {
                 bool active = UiActive(item);
                 D2D1_COLOR_F fill = active && pressed ? p.cardPressed : active && hot ? p.cardHover : p.card;
@@ -27125,9 +27157,7 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                 } else {
                     UiFillRect(target, cache, thumb, 4, p.control, scale);
                 }
-                UiDrawLayout(target, cache,
-                             UiLayout(g, item.text, UiTextStyleFor(UiFont::Note),
-                                      std::max(thumb.right - thumb.left - 4, 0.0f), false),
+                UiDrawLayout(target, cache, UiLayout(g, item.text, UiTextStyleFor(UiFont::Note), UiGalleryCaptionWidth(item)),
                              {thumb.left + 2, thumb.bottom + 8}, item.enabled ? p.text : p.textDisabled);
                 break;
             }
@@ -33271,25 +33301,20 @@ static float SettingsAddToggleCard(UiGraphics& g, const SettingsView& view,
     return card.card.bottom;
 }
 
-// The field is at least `fieldWidth` wide, wider when its widest option needs it (the label's 11
-// DIP before it and 30 DIP chevron after it), growing to at most half the card.
+// The field is at least `fieldWidth` wide, wider when its widest option needs it, growing to at
+// most half the card; a label cut there shows whole in its tooltip and the popup.
 static float SettingsAddDropdownCard(UiGraphics& g, const SettingsView& view,
                                      std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                      float width, UiCardSpec spec, SettingsField field,
                                      float fieldWidth, std::vector<UiOption> options, int value,
                                      uint32_t part = 0) {
-    float widest = 0;
-    for (const UiOption& option : options) {
-        float text = UiLayoutSize(UiLayout(g, option.text, UiTextStyleFor(UiFont::Body), 10000, false)).width;
-        widest = std::max(widest, std::ceil(text) + 11 + 30);
-    }
-    fieldWidth = std::max(fieldWidth, std::min(widest, width / 2));
+    fieldWidth = std::max(fieldWidth, std::min(UiDropdownWidth(g, options), width / 2));
     spec.trailing = {fieldWidth, 32};
     if (const SettingsDraft* draft = SettingsViewDraft(view, field); draft && !draft->text) {
         spec.error = SettingsDraftErrorText(view.locale, *draft);
     }
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
-    UiAddDropdown(items, SettingsControlId(field, part), card.trailing, std::move(options),
+    UiAddDropdown(g, items, SettingsControlId(field, part), card.trailing, std::move(options),
                   spec.enabled, SettingsCommand(field, value));
     return card.card.bottom;
 }
@@ -33312,15 +33337,16 @@ static float SettingsAddNumberCard(UiGraphics& g, const SettingsView& view,
 }
 
 // A slider with a centered number box before it (mockup .sldwrap: 60 DIP box, 14 DIP gap,
-// 220 DIP slider). The box shows its draft's text while there is one, else the projected
-// value; the slider shows the projected value.
+// 220 DIP slider). On a narrow card the slider gives up to 100 DIP so the text keeps 200. The box
+// shows its draft's text while there is one, else the projected value; the slider shows the
+// projected value.
 static float SettingsAddSliderCard(UiGraphics& g, const SettingsView& view,
                                    std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                    float width, UiCardSpec spec, SettingsField field) {
     SettingsNumberRange range = SettingsFieldRange(field).value_or(SettingsNumberRange{});
     int value = SettingsFieldValue(view.settings, field);
     const SettingsDraft* draft = SettingsViewDraft(view, field);
-    spec.trailing = {60 + 14 + 220, 32};
+    spec.trailing = {60 + 14 + std::clamp(UiCardRoom(spec, width) - 16 - 60 - 14 - 200, 120.0f, 220.0f), 32};
     if (draft) spec.error = SettingsDraftErrorText(view.locale, *draft);
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     const D2D1_RECT_F& slot = card.trailing;
@@ -33339,8 +33365,9 @@ static float SettingsAddSliderCard(UiGraphics& g, const SettingsView& view,
 }
 
 // A color card's swatches (mockup .swrow): 24 DIP circles 10 DIP apart, Custom... (the `custom`
-// command with `customValue`, also its control part) 16 DIP after them. A color picked in
-// Custom... shows as one more swatch.
+// command with `customValue`, also its control part) 16 DIP after them, or 8 DIP under them on a
+// card too narrow to leave the text 200 DIP beside both. A color picked in Custom... shows as one
+// more swatch.
 static float SettingsAddColorCard(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
                                   uint32_t& id, float x, float y, float width, UiCardSpec spec,
                                   SettingsField field, SettingsField custom, std::vector<COLORREF> colors,
@@ -33350,17 +33377,19 @@ static float SettingsAddColorCard(UiGraphics& g, const SettingsView& view, std::
     float buttonWidth =
         std::ceil(UiLayoutSize(UiLayout(g, customText, UiTextStyleFor(UiFont::Body), 1000, false)).width) + 28;
     float swatches = float(colors.size()) * 24 + float(colors.size() - 1) * 10;
-    spec.trailing = {swatches + 16 + buttonWidth, 32};
+    const bool stacked = UiCardRoom(spec, width) - 16 - (swatches + 16 + buttonWidth) < 200;
+    spec.trailing = stacked ? D2D1_SIZE_F{std::max(swatches, buttonWidth), 32 + 8 + 32} :
+                              D2D1_SIZE_F{swatches + 16 + buttonWidth, 32};
     if (const SettingsDraft* draft = SettingsViewDraft(view, field)) {
         spec.error = SettingsDraftErrorText(view.locale, *draft);
     }
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
-    float center = (card.trailing.top + card.trailing.bottom) / 2;
+    float center = card.trailing.top + 16, swatchLeft = stacked ? card.trailing.right - swatches : card.trailing.left;
     for (size_t i = 0; i < colors.size(); i++) {
         UiItem swatch;
         swatch.id = SettingsControlId(field, uint32_t(1 + i));
         swatch.kind = UiItemKind::Swatch;
-        float left = card.trailing.left + float(i) * 34;
+        float left = swatchLeft + float(i) * 34;
         swatch.rect = {left, center - 12, left + 24, center + 12};
         swatch.selected = colors[i] == current;
         swatch.enabled = spec.enabled;
@@ -33370,7 +33399,7 @@ static float SettingsAddColorCard(UiGraphics& g, const SettingsView& view, std::
     UiItem button;
     button.id = SettingsControlId(custom, uint32_t(customValue));
     button.kind = UiItemKind::Button;
-    button.rect = {card.trailing.right - buttonWidth, card.trailing.top, card.trailing.right, card.trailing.bottom};
+    button.rect = {card.trailing.right - buttonWidth, card.trailing.bottom - 32, card.trailing.right, card.trailing.bottom};
     button.text = customText;
     button.enabled = spec.enabled;
     button.action = SettingsCommand(custom, customValue);
@@ -33378,11 +33407,16 @@ static float SettingsAddColorCard(UiGraphics& g, const SettingsView& view, std::
     return card.card.bottom;
 }
 
-// A card with a standard button (mockup .btn: 14 DIP padding, optional 12 DIP glyph).
+// A card with a standard button (mockup .btn: 14 DIP padding, optional 12 DIP glyph), as wide as
+// its label or the widest of the labels it can switch to (`states`), so it keeps its width.
 static float SettingsAddButtonCard(UiGraphics& g, std::vector<UiItem>& items, uint32_t& id,
                                    float x, float y, float width, UiCardSpec spec,
-                                   SettingsField command, std::wstring label, std::wstring icon = {}) {
+                                   SettingsField command, std::wstring label, std::wstring icon = {},
+                                   const std::vector<std::wstring>& states = {}) {
     float labelWidth = UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Body), 1000, false)).width;
+    for (const std::wstring& state : states) {
+        labelWidth = std::max(labelWidth, UiLayoutSize(UiLayout(g, state, UiTextStyleFor(UiFont::Body), 1000, false)).width);
+    }
     spec.trailing = {std::ceil(labelWidth) + 28 + (icon.empty() ? 0 : 12 + 8), 32};
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
     UiItem button;
@@ -34622,7 +34656,8 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
         y += height;
     }
 
-    // Version info for bug reports; the button says for a moment whether it copied.
+    // Version info for bug reports; the button says for a moment whether it copied, as wide as its
+    // widest state.
     {
         UiCardSpec spec;
         spec.glyph = L"\uE8C8";
@@ -34630,10 +34665,11 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
         spec.description = {{I18nText(locale, Tr(L"The mod\u2019s name and version and the Windows build, for bug "
                                                  L"reports."))}};
         spec.minHeight = 62;
-        std::wstring label = I18nText(locale, !view.versionCopied ? TrCtx(L"button", L"Copy") :
-                                              *view.versionCopied ? TrCtx(L"button", L"Copied") :
-                                                                    TrCtx(L"button", L"Copy failed"));
-        y = SettingsAddButtonCard(g, items, id, x, y + 3, width, spec, SettingsField::CopyVersionInfo, label);
+        const std::vector<std::wstring> states = {I18nText(locale, TrCtx(L"button", L"Copy")),
+                                                  I18nText(locale, TrCtx(L"button", L"Copied")),
+                                                  I18nText(locale, TrCtx(L"button", L"Copy failed"))};
+        y = SettingsAddButtonCard(g, items, id, x, y + 3, width, spec, SettingsField::CopyVersionInfo,
+                                  states[!view.versionCopied ? 0 : *view.versionCopied ? 1 : 2], {}, states);
     }
 
     // Links: whole cards open the page in the browser.
@@ -35054,24 +35090,35 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
     auto key = [&](size_t index) { return text(kQuotaKeys[index]); };
     const std::wstring pixels = text(TrCtx(L"pixel-unit", L"px"));
 
-    // Tile style (mockup .gallery): three cards a row, 8 DIP apart, the chosen one outlined.
+    // Tile style (mockup .gallery): three cards a row, 8 DIP apart, the chosen one outlined; every
+    // card as tall as the longest name wraps.
     y = section(y + 16, TrCtx(L"settings-section", L"Tile style"));
     {
-        constexpr float kCardHeight = 1 + 8 + 72 + 8 + 17 + 2 + 8 + 1, kGap = 8;
+        constexpr float kGap = 8;
         constexpr int kRows = int(std::size(kSettingsTileStyles) + 2) / 3;
         float cardWidth = std::max((width - 2 * kGap) / 3, 1.0f);
+        std::vector<UiItem> cards;
+        float captionHeight = 0;
         for (int i = 0; i < int(std::size(kSettingsTileStyles)); i++) {
-            float left = x + float(i % 3) * (cardWidth + kGap), top = y + float(i / 3) * (kCardHeight + kGap);
+            float left = x + float(i % 3) * (cardWidth + kGap);
             UiItem card;
             card.id = SettingsControlId(SettingsField::BarLayout, uint32_t(i));
             card.kind = UiItemKind::Gallery;
-            card.rect = {left, top, left + cardWidth, top + kCardHeight};
+            card.rect = {left, 0, left + cardWidth, 0};
             card.text = text(kSettingsTileStyles[i]);
             card.selected = i == int(layout);
             card.action = SettingsCommand(SettingsField::BarLayout, i);
-            items.push_back(std::move(card));
+            captionHeight = std::max(captionHeight, UiLayoutSize(UiLayout(g, card.text, UiTextStyleFor(UiFont::Note),
+                                                                          UiGalleryCaptionWidth(card))).height);
+            cards.push_back(std::move(card));
         }
-        y += kRows * kCardHeight + (kRows - 1) * kGap;
+        const float cardHeight = 1 + 8 + 72 + 8 + captionHeight + 8 + 1;
+        for (int i = 0; i < int(cards.size()); i++) {
+            cards[size_t(i)].rect.top = y + float(i / 3) * (cardHeight + kGap);
+            cards[size_t(i)].rect.bottom = cards[size_t(i)].rect.top + cardHeight;
+            items.push_back(std::move(cards[size_t(i)]));
+        }
+        y += kRows * cardHeight + (kRows - 1) * kGap;
     }
 
     // Placement: the position, then the taskbars that show the bars in the tray instead of beside
@@ -35983,12 +36030,13 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         }
         for (auto item = trailing.rbegin(); item != trailing.rend(); ++item) push(std::move(*item));
 
-        // Label and "Provider · plan · status", the status in its color.
+        // Label and "Provider · plan · status", the status in its color (the last poll's error on
+        // its own), each one line before the controls. Where the details don't fit they drop the
+        // plan, then the provider (its logo stays), then the status ellipsizes; the label
+        // ellipsizes. Anything left out or cut, the header's tooltip holds both lines whole.
         std::wstring stateText;
         UiInk stateInk = UiInk::Success;
-        // The last poll's error on its own, cut at 60 characters.
         std::wstring error = AccountErrorText(view.locale, status.error, AccountErrorForm::Alone);
-        if (error.size() > 60) error = error.substr(0, 59) + L"\u2026";
         if (status.signingIn) {
             stateText = I18nText(locale, TrCtx(L"account-state", L"Signing in\u2026"));
             stateInk = UiInk::Accent;
@@ -36011,28 +36059,44 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         }
         PCWSTR provider = anthropic ? L"Anthropic" : openai ? L"OpenAI" :  // i18n-en
                           copilot ? L"GitHub Copilot" : opencode ? L"OpenCode Go" : L"Antigravity";  // i18n-en
-        std::vector<UiRun> details = SettingsStatusRuns(
-            status.plan.empty() ?
-                I18nRuns(locale, TrCtx(L"account-details", L"{provider} \u00B7 {state}"),
-                         {{L"provider", provider}, {L"state", SettingsStatusArg(stateText)}}) :
-                I18nRuns(locale, TrCtx(L"account-details", L"{provider} \u00B7 {plan} \u00B7 {state}"),
-                         {{L"provider", provider}, {L"plan", status.plan}, {L"state", SettingsStatusArg(stateText)}}),
+        std::vector<UiRun> withProvider = SettingsStatusRuns(
+            I18nRuns(locale, TrCtx(L"account-details", L"{provider} \u00B7 {state}"),
+                     {{L"provider", provider}, {L"state", SettingsStatusArg(stateText)}}),
             stateInk);
-        float textRight = std::max(right, x + 77 + 40);
+        std::vector<UiRun> details =
+            status.plan.empty() ?
+                withProvider :
+                SettingsStatusRuns(I18nRuns(locale, TrCtx(L"account-details", L"{provider} \u00B7 {plan} \u00B7 {state}"),
+                                            {{L"provider", provider}, {L"plan", status.plan},
+                                             {L"state", SettingsStatusArg(stateText)}}),
+                                   stateInk);
+        const float textLeft = x + 77, textRight = std::max(right, textLeft + 40);
+        auto fits = [&](const std::vector<UiRun>& runs, UiFont font) {
+            return textWidth(UiRunsText(runs), font) <= textRight - textLeft;
+        };
+        std::vector<UiRun> shown = fits(details, UiFont::Caption)      ? details :
+                                   fits(withProvider, UiFont::Caption) ? withProvider :
+                                                                         std::vector<UiRun>{{stateText, UiRunStyle::Normal, stateInk}};
         UiItem title;
         title.id = id++;
         title.kind = UiItemKind::Text;
-        title.rect = {x + 77, cy - 18, textRight, cy + 2};
+        title.rect = {textLeft, cy - 18, textRight, cy + 2};
         title.runs.push_back({account.label});
-        push(title);
+        title.trim = true;
         UiItem state;
         state.id = id++;
         state.kind = UiItemKind::Text;
         state.font = UiFont::Caption;
         state.ink = UiInk::Muted;
-        state.rect = {x + 77, cy + 2, textRight, cy + 18};
-        state.runs = std::move(details);
-        push(state);
+        state.rect = {textLeft, cy + 2, textRight, cy + 18};
+        state.runs = shown;
+        state.trim = true;
+        if (!fits(title.runs, UiFont::Body) || !fits(details, UiFont::Caption)) {
+            cardItems[1].tooltip = {{account.label, UiRunStyle::Strong}, {L"\n"}};
+            cardItems[1].tooltip.insert(cardItems[1].tooltip.end(), details.begin(), details.end());
+        }
+        push(std::move(title));
+        push(std::move(state));
 
         // Expanded rows (mockup .scard.sub).
         float bottom = top + kHeader;
@@ -36051,7 +36115,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 spec.description = {{I18nText(locale, Tr(L"Shown in details, and next to bars when Identity is "
                                                          L"Label. Unique per provider; renaming keeps the sign-in "
                                                          L"and history."))}};
-                spec.trailing = {200, 32};
+                // 200 DIP, down to 160 on a narrow card so the text keeps 200.
+                spec.trailing = {std::clamp(width - 2 - 55 - 18 - 16 - 200, 160.0f, 200.0f), 32};
                 if (draft) spec.error = SettingsDraftErrorText(locale, *draft);
                 UiCardLayout layout = row(spec);
                 UiItem box;
@@ -36090,25 +36155,42 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 } else {
                     quotas.push_back({kFableWeeklyBar, weekly(L"Argon")});  // i18n-en
                 }
-                float chipsWidth = 0;
-                for (const Quota& quota : quotas) chipsWidth += textWidth(quota.name, UiFont::Note) + 26 + 4;
+                // 26 DIP chips 4 DIP apart, in lines that leave the text 200 DIP, wider only for a
+                // chip that needs it.
+                std::vector<float> chipWidths;
+                for (const Quota& quota : quotas) chipWidths.push_back(textWidth(quota.name, UiFont::Note) + 26);
+                const float lineWidth = std::max(*std::max_element(chipWidths.begin(), chipWidths.end()),
+                                                 width - 2 - 55 - 18 - 16 - 200);
+                std::vector<D2D1_RECT_F> chipRects;
+                float chipsWidth = 0, chipLeft = 0, chipTop = 0;
+                for (float chipWidth : chipWidths) {
+                    if (chipLeft > 0 && chipLeft + chipWidth > lineWidth) {
+                        chipLeft = 0;
+                        chipTop += 26 + 4;
+                    }
+                    chipRects.push_back({chipLeft, chipTop, chipLeft + chipWidth, chipTop + 26});
+                    chipsWidth = std::max(chipsWidth, chipLeft + chipWidth);
+                    chipLeft += chipWidth + 4;
+                }
                 UiCardSpec spec;
                 spec.title = I18nText(locale, Tr(L"Quotas on taskbar"));
-                spec.description = {{I18nText(
-                    locale, openai && s.barLayout == BarLayout::Sparkline ?
-                                Tr(L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs "
-                                   L"show Credits as a number on the 7d chart.") :
-                                Tr(L"Unavailable quotas hide automatically. At least one stays selected."))}};
-                spec.trailing = {chipsWidth - 4, 26};
+                spec.description = {{openai && s.barLayout == BarLayout::Sparkline ?
+                                         I18nText(locale,
+                                                  Tr(L"Unavailable quotas hide automatically. At least one stays "
+                                                     L"selected. Usage graphs show Credits as a number on the {key7d} "
+                                                     L"chart."),
+                                                  {{L"key7d", QuotaKey(locale, account.provider, kWeeklyBar)}}) :
+                                         I18nText(locale, Tr(L"Unavailable quotas hide automatically. At least one "
+                                                             L"stays selected."))}};
+                spec.trailing = {chipsWidth, chipTop + 26};
                 if (openai && !account.creditsMax) {
                     spec.reason = I18nText(locale, Tr(L"Set Credits max to show the Credits bar."));
                 }
                 UiCardLayout layout = row(spec);
-                float left = layout.trailing.left;
-                for (const Quota& quota : quotas) {
+                for (size_t i = 0; i < quotas.size(); i++) {
+                    const Quota& quota = quotas[i];
                     bool on = (bars >> quota.bar) & 1;
                     int desired = bars ^ (1 << quota.bar);
-                    float chipWidth = textWidth(quota.name, UiFont::Note) + 26;
                     UiItem chip;
                     chip.id = control(SettingsField::AccountBars, uint32_t(quota.bar));
                     chip.kind = UiItemKind::Chip;
@@ -36116,10 +36198,10 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                     chip.text = quota.name;
                     chip.selected = on;
                     chip.enabled = !(openai && quota.bar == kExtraUsageBar && !account.creditsMax);
-                    chip.rect = {left, layout.trailing.top, left + chipWidth, layout.trailing.bottom};
+                    chip.rect = {layout.trailing.left + chipRects[i].left, layout.trailing.top + chipRects[i].top,
+                                 layout.trailing.left + chipRects[i].right, layout.trailing.top + chipRects[i].bottom};
                     chip.action = command(SettingsField::AccountBars, desired ? desired : bars);
                     push(chip);
-                    left += chipWidth + 4;
                 }
             }
             if (openai) {
@@ -36146,17 +36228,19 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                                                          L"shows the label on bars and its short text on tiles. The "
                                                          L"number badge appears when several accounts share a "
                                                          L"provider, hidden ones included."))}};
-                spec.trailing = {220, 32};
+                // At least 220 DIP, wider for its widest option up to half the row.
+                std::vector<UiOption> options = {
+                    {I18nText(locale, TrCtx(L"tile-identity", L"Logo + number badge")), int(TileIdentity::LogoBadge)},
+                    {I18nText(locale, TrCtx(L"tile-identity", L"Logo only")), int(TileIdentity::Logo)},
+                    {I18nText(locale, TrCtx(L"tile-identity", L"Label")), int(TileIdentity::Text)}};
+                spec.trailing = {std::max(220.0f, std::min(UiDropdownWidth(g, options), (width - 2) / 2)), 32};
                 if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileIdentity)) {
                     spec.error = SettingsDraftErrorText(locale, *draft);
                 }
                 UiCardLayout layout = row(spec);
-                UiAddDropdown(cardItems, control(SettingsField::AccountTileIdentity), layout.trailing,
-                              {{I18nText(locale, TrCtx(L"tile-identity", L"Logo + number badge")),
-                                int(TileIdentity::LogoBadge)},
-                               {I18nText(locale, TrCtx(L"tile-identity", L"Logo only")), int(TileIdentity::Logo)},
-                               {I18nText(locale, TrCtx(L"tile-identity", L"Label")), int(TileIdentity::Text)}},
-                              true, command(SettingsField::AccountTileIdentity, int(account.tileIdentity)));
+                UiAddDropdown(g, cardItems, control(SettingsField::AccountTileIdentity), layout.trailing,
+                              std::move(options), true,
+                              command(SettingsField::AccountTileIdentity, int(account.tileIdentity)));
             }
             {
                 // Its placeholder is what the tile shows without it: the label without spaces.
@@ -36224,19 +36308,26 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                             command(SettingsField::AccountRecordHistory, !account.recordHistory), states);
             }
 
-            // Actions (mockup .aact): dashboard and sign-in buttons, Remove account at the right.
-            // Sign in again is the header's Sign in when no sign-in is needed (its own id).
+            // Actions (mockup .aact): dashboard and sign-in buttons from the left, Remove account at
+            // the right. A button that would reach the edge starts a row 8 DIP below; so does Remove
+            // account when it would meet the last row's buttons. Sign in again is the header's Sign
+            // in when no sign-in is needed (its own id).
             UiItem rule;
             rule.id = id++;
             rule.kind = UiItemKind::Rule;
             rule.rect = {x + 1, bottom, x + width - 1, bottom + 1};
             push(rule);
-            float buttonTop = bottom + 12, left = x + 56;
+            const float rowLeft = x + 56, edge = x + width - 19;
+            float buttonTop = bottom + 12, left = rowLeft;
             auto addButton = [&](SettingsField field, I18nKey key, PCWSTR icon, UiButtonStyle style, bool enabled,
                                  bool trailing) {
                 std::wstring text = I18nText(locale, key);
                 float buttonWidth = textWidth(text, UiFont::Body) + 28 + (icon[0] ? 12 + 8 : 0);
-                float buttonLeft = trailing ? x + width - 19 - buttonWidth : left;
+                if (left > rowLeft && left + buttonWidth > edge) {
+                    left = rowLeft;
+                    buttonTop += 32 + 8;
+                }
+                float buttonLeft = trailing ? edge - buttonWidth : left;
                 UiItem button;
                 button.id = control(field, 1);
                 button.kind = UiItemKind::Button;
@@ -36248,7 +36339,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 button.enabled = enabled;
                 button.action = command(field);
                 push(button);
-                if (!trailing) left += buttonWidth + 8;
+                left += buttonWidth + 8;
             };
             if (signsIn) {
                 addButton(SettingsField::AccountDashboard, TrCtx(L"button", L"Open dashboard"), L"\uE8A7",
@@ -36264,7 +36355,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             }
             addButton(SettingsField::AccountRemove, TrCtx(L"button", L"Remove account"), L"", UiButtonStyle::Danger,
                       true, true);
-            bottom += 12 + 32 + 14;
+            bottom = buttonTop + 32 + 14;
         }
         cardItems.front().rect.bottom = bottom;
 
@@ -36290,6 +36381,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
 // snapshot (settings/view.h; approved mockups: nav and header of layout-v2.png, accounts-add.png).
 // Pure.
 
+// The window's smallest outer size, DIPs: every page lays out from its client area up.
+static constexpr D2D1_SIZE_F kSettingsWindowMinSize{800, 590};
 static constexpr float kSettingsNavWidth = 260;
 static constexpr float kSettingsHeaderHeight = 56;
 static constexpr float kSettingsContentMaxWidth = 1000;
@@ -36336,7 +36429,8 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
     uint32_t id = uint32_t(page + 1) << 12;
     float header = kSettingsHeaderHeight, contentTop = 0;
     // Accounts: Add account (mockup .btn.accent: 14 DIP padding, 12 DIP glyph) at the title row's
-    // right opens the provider menu; while accounts exist, a note under the title.
+    // right opens the provider menu; while accounts exist, a note under the title, the header as
+    // tall as it wraps.
     if (SettingsUiPage(page) == SettingsUiPage::Accounts) {
         std::wstring label = I18nText(view.locale, TrCtx(L"button", L"Add account"));
         float labelWidth = UiLayoutSize(UiLayout(g, label, UiTextStyleFor(UiFont::Body), 1000, false)).width;
@@ -36372,14 +36466,15 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             note.kind = UiItemKind::Text;
             note.font = UiFont::Note;
             note.ink = UiInk::Muted;
-            note.rect = {kSettingsNavWidth + left, 50, right, 69};
             note.runs.push_back({I18nText(view.locale, view.settings.skipHiddenPolling ?
                                                            Tr(L"Drag to reorder. Toggle hides an account from the "
                                                               L"taskbar; hidden accounts are not polled.") :
                                                            Tr(L"Drag to reorder. Toggle hides an account from the "
                                                               L"taskbar."))});
+            float noteLeft = kSettingsNavWidth + left;
+            header = 50 + UiLayoutSize(UiRichLayout(g, note.runs, UiFont::Note, right - noteLeft)).height;
+            note.rect = {noteLeft, 50, right, header};
             frame.main.push_back(std::move(note));
-            header = 69;
         }
     }
     if (SettingsUiPage(page) == SettingsUiPage::Layout || SettingsUiPage(page) == SettingsUiPage::Display) {
@@ -36431,6 +36526,8 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
 static constexpr PCWSTR kSettingsUiClass = L"AiQuotaSettingsUi_" WH_MOD_ID;
 static constexpr PCWSTR kSettingsUiViewportClass = L"AiQuotaSettingsUiView_" WH_MOD_ID;
 static constexpr PCWSTR kSettingsUiPopupClass = L"AiQuotaSettingsUiPopup_" WH_MOD_ID;
+// Tooltips hold text a control shows cut (an account's state line, a dropdown's value).
+static constexpr PCWSTR kSettingsUiTooltipClass = L"AiQuotaSettingsUiTip_" WH_MOD_ID;
 // Posted to run the commit queue outside the handler that queued (focus loss, Enter, a slider's
 // release).
 static constexpr UINT kSettingsProcessMessage = WM_APP + 40;
@@ -37322,8 +37419,10 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
             config.mainClass = kSettingsUiClass;
             config.viewportClass = kSettingsUiViewportClass;
             config.popupClass = kSettingsUiPopupClass;
+            config.tooltipClass = kSettingsUiTooltipClass;
             config.title = title.c_str();
             config.activateMessage = GetSettingsActivateMessage();
+            config.minSize = kSettingsWindowMinSize;
             config.icon = SettingsAppIcon({});
             config.appId = kWindowAppId;
             if (!UiHostRun(config, client)) Wh_Log(L"Could not open the settings window");

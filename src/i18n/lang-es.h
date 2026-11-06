@@ -603,9 +603,9 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Las cuotas no disponibles se ocultan automáticamente. Al menos una queda seleccionada."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
-          L"on the 7d chart.",
+          L"on the {key7d} chart.",
      L"Las cuotas no disponibles se ocultan automáticamente. Al menos una queda seleccionada. Los gráficos de uso "
-     L"muestran los créditos como un número en el gráfico de 7d."},
+     L"muestran los créditos como un número en el gráfico de {key7d}."},
     {L"", L"Usage below this is blue.", L"El uso por debajo de este valor es azul."},
     {L"", L"Usage below this is blue. Also the level for threshold notifications.",
      L"El uso por debajo de este valor es azul. También es el nivel de las notificaciones de umbral."},

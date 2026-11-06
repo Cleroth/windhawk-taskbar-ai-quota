@@ -116,8 +116,10 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
             config.mainClass = kSettingsUiClass;
             config.viewportClass = kSettingsUiViewportClass;
             config.popupClass = kSettingsUiPopupClass;
+            config.tooltipClass = kSettingsUiTooltipClass;
             config.title = title.c_str();
             config.activateMessage = GetSettingsActivateMessage();
+            config.minSize = kSettingsWindowMinSize;
             config.icon = SettingsAppIcon({});
             config.appId = kWindowAppId;
             if (!UiHostRun(config, client)) Wh_Log(L"Could not open the settings window");
