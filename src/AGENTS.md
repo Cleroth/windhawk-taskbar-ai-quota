@@ -1,7 +1,22 @@
 # Mod source rules
 
-Rules for code under `src/`. Generation, checks, testing and publishing are in the root
-`AGENTS.md`.
+Rules for code under `src/`. Generation, checks, testing and publishing: the root `AGENTS.md`.
+
+## Source map
+
+Each file opens with a comment naming what it holds.
+
+- `core/`: the shared model, settings and runtime state, JSON, crypto (DPAPI), the UI language,
+  account errors, forward declarations.
+- `net/`: WinHTTP with handle tracking. `providers/`: each provider's usage requests and parsing.
+- `auth/`: OAuth clients, the token store, the sign-in thread and window.
+- `fetch/`: the polling loop, threshold notifications, provider status pages.
+- `taskbar/`: XAML injection and placement, quota grids and tiles, the meter model, the details
+  flyout, logos, marshaling.
+- `settings/`: the settings window (pages, edit controller, store, account commands, preview).
+- `history/`: the journal, series model, burn-up curves and the usage history window.
+- `ui/`: the custom-drawn window toolkit ([ui/AGENTS.md](ui/AGENTS.md)); `i18n/`: localization
+  ([i18n/AGENTS.md](i18n/AGENTS.md)).
 
 ## Fragments
 
@@ -22,45 +37,45 @@ Rules for code under `src/`. Generation, checks, testing and publishing are in t
 
 The mod is injected into `explorer.exe`. Execution domains:
 
-- **Fetch thread** (`FetchThreadProc`): usage HTTP, JSON parsing, retry/backoff, token refresh,
-  and after each round the providers' public status pages (`PollProviderStatuses`, its own
-  cadence, unauthenticated, rereading the setting and visibility before each request); owns the
-  notifications: their HKCU app identity (registered before each toast, removed while
-  they are off and at unload) and the fallback tray icon. It must NEVER touch XAML. It runs
-  rounds only while `IsTaskbarOwnerProcess()`; other Explorer processes never poll, refresh
-  tokens or notify.
-- **Login thread** (`LoginThreadProc`, one at a time, guarded by `g_loginInProgress`; spawned from
-  a taskbar UI thread by `StartLogin`): runs a sign-in in the sign-in window (`g_loginWnd`,
-  own message loop), which offers the authorize link to copy or open; never launch a browser
-  unprompted. The Anthropic (any free port) and OpenAI (1455/1457) loopback listener
-  (`g_loginSocket`) notifies that window via `WSAAsyncSelect`; Anthropic's "Use a code" closes it
-  for a second window, with the paste redirect, taking the pasted code#state, as OpenCode Go's
-  window takes its API key (masked); GitHub Copilot's device flow shows its code there
-  and polls the token endpoint from that message loop between pumps, never from the window
-  procedure, discarding a result once the window closed; the loop also sets its status line, and
-  a sign-in that ends without a token keeps the window open, not polling, until closed. The
-  window is laid out by its text's measure (`auth/login-controls.h`, the pure layout in
-  `auth/login-layout.h`), all of it built before the window: neither the layout nor the loop
-  allocates. Network and token storage only; NEVER XAML.
+- **Fetch thread** (`FetchThreadProc`): usage HTTP, JSON parsing, retry/backoff and token refresh;
+  after each round, the providers' public status pages (`PollProviderStatuses`: its own cadence,
+  unauthenticated, rereading the setting and visibility before each request). It owns the
+  notifications: their HKCU app identity (registered before each toast, removed while they are
+  off and at unload) and the fallback tray icon. NEVER XAML. It runs rounds only while
+  `IsTaskbarOwnerProcess()`; other Explorer processes never poll, refresh tokens or notify.
+- **Login thread** (`LoginThreadProc`, one at a time, guarded by `g_loginInProgress`; started from
+  a taskbar UI thread by `StartLogin`): network and token storage only; NEVER XAML. It runs each
+  sign-in in the sign-in window (`g_loginWnd`, own message loop), which offers the authorize link
+  to copy or open; never launch a browser unprompted.
+  - The Anthropic (any free port) and OpenAI (1455/1457) loopback listener (`g_loginSocket`)
+    notifies the window via `WSAAsyncSelect`. Anthropic's "Use a code" closes it for a second
+    window, with the paste redirect, that takes the pasted code#state; OpenCode Go's window takes
+    its API key (masked).
+  - GitHub Copilot's device flow shows its code in the window and polls the token endpoint from
+    the message loop between pumps, never from the window procedure, discarding a result once the
+    window closed; the loop also sets the status line. A sign-in that ends without a token keeps
+    the window open, not polling, until closed.
+  - The window is laid out by its text's measure (`auth/login-controls.h`; the pure layout in
+    `auth/login-layout.h`), all built before the window: neither the layout nor the loop
+    allocates.
 - **Settings thread** (`SettingsWindowThreadProc`, one at a time): owns the custom-drawn settings
-  window (`settings/ui-window.h`, a client of the `ui/` toolkit host; toolkit rules:
-  [ui/AGENTS.md](ui/AGENTS.md)), persists autosaved configuration to mod LocalStorage and
-  requests taskbar UI rebuilds. It must NEVER touch XAML directly. The window writes settings
-  only through the edit controller (`settings/edits.h`: drafts, revisioned commit queue,
+  window (`settings/ui-window.h`, a `ui/` toolkit client), persists autosaved configuration to mod
+  LocalStorage and requests taskbar UI rebuilds; it NEVER touches XAML directly. The window writes
+  settings only through the edit controller (`settings/edits.h`: drafts, revisioned commit queue,
   navigation and close flushes) and its store (`settings/store.h`, one transaction per edit);
   notifications reload its baseline and never commit drafts. Account edits and actions run the
   UI-free account commands (`settings/account-commands.h`: the rename's sign-in move, removal,
   reorder, visibility).
 - **History thread** (`HistoryUiThreadProc`, one at a time; `OpenHistoryWindow` starts it, or
   hands the open window its request): runs the custom-drawn usage history window
-  (`history/ui-window.h`, a client of the `ui/` toolkit host), whose controller
-  (`history/controller.h`) owns all window state and reaches the journal, settings and live
-  readings only through the stateless ops in `history/ops.h`. `NotifySettingsWindowChanged` also
-  reaches it: its refresh reads the journal only through the memory-only `PeekHistorySnapshot`;
-  only its explicit loads may initialize or retry storage. Its dialogs (message boxes, the save
-  dialog and its overwrite prompt) run in the scope of `history/modal.h` (the close latch, then
-  unload, ends them, nested and late ones included); a Yes/No prompt ignores Cancel, so the scope
-  answers No there. No XAML. Cancel tracked modal dialogs and join it before unloading.
+  (`history/ui-window.h`, a `ui/` toolkit client), whose controller (`history/controller.h`) owns
+  all window state and reaches the journal, settings and live readings only through the stateless
+  ops in `history/ops.h`. `NotifySettingsWindowChanged` also reaches it: its refresh reads the
+  journal only through the memory-only `PeekHistorySnapshot`; only its explicit loads may
+  initialize or retry storage. Its dialogs (message boxes, the save dialog and its overwrite
+  prompt) run in the scope of `history/modal.h` (the close latch, then unload, ends them, nested
+  and late ones included); a Yes/No prompt ignores Cancel, so the scope answers No there. NEVER
+  XAML. Before unloading, cancel its tracked modal dialogs and join it.
 - **Link launch threads** (`OpenUrl`, one per browser launch, tracked under the leaf
   `g_urlLaunchMutex`): `ShellExecuteExW` in an STA with error dialogs suppressed. `Wh_ModUninit`
   joins them after the login thread, which can start them; a stuck launch delays unload.
@@ -172,11 +187,11 @@ access token without refresh or expiry and sent only to its usage endpoint.
   or Copilot credentials (Visual Studio, GitHub CLI, Credential Manager). Tokens live only in the
   mod's Windhawk storage (`auth_<identityHash>`), DPAPI-encrypted for the current user via
   `DpapiProtect`/`DpapiUnprotect`; never persist them in plaintext.
-- Why (decided 2026-11-05; revisit only on new evidence): borrowed sessions go stale while their
-  app is idle (Claude Code 8 h, Codex 10 days; gh 2.103+ can opt into expiring tokens); refresh
-  tokens are single-use, so renewing one signs its app out, and launching the app to renew joins
-  its refresh race; a borrowed account follows the app's current login and gives one account per
-  source; gh tokens carry repo/workflow scopes. Cut setup friction in the mod's own sign-in instead.
+- Don't revisit borrowing other apps' sessions without new evidence: they go stale while the app
+  is idle (Claude Code 8 h, Codex 10 days; gh can opt into expiring tokens), single-use refresh
+  tokens mean renewing one signs the app out (launching it to renew races its refresh), a borrowed
+  account follows the app's current login (one per source), and gh tokens carry repo/workflow
+  scopes. Cut setup friction in the mod's own sign-in instead.
 - Refresh tokens go only to provider token endpoints, never as a bearer token to a quota endpoint.
 - The token store is keyed by `AccountIdentityHash` (provider+label). Keep it stable or sign-ins
   get orphaned.
@@ -198,10 +213,11 @@ access token without refresh or expiry and sent only to its usage endpoint.
 - Keep the journal's size cap (maintenance and appends apply it with a number of days; kept
   forever, nothing may prune or cap it), checksum validation, atomic compaction and exclusive
   writer handle. Loads read the whole file whatever the retention; one that stops part-way (out
-  of memory, unload) leaves the journal unwritable until Clear. Only the shell process records; save pending history IDs before recording. History IDs
-  are separate from auth identities and follow configured entries, not verified logins.
-- User-facing recording/storage/export behavior and its manual verification:
-  [README > Usage history](../README.md#usage-history).
+  of memory, unload) leaves the journal unwritable until Clear. Only the shell process records;
+  save pending history IDs before recording. History IDs are separate from auth identities and
+  follow configured entries, not verified logins.
+- User-facing recording/storage/export behavior: [docs/usage-history.md](../docs/usage-history.md);
+  its manual runtime checks: [docs/usage-history-verification.md](../docs/usage-history-verification.md).
 
 ## Conventions
 
@@ -214,9 +230,9 @@ access token without refresh or expiry and sent only to its usage endpoint.
 - Keep a new setting in sync across `Settings`, JSON serialization/deserialization,
   normalization, the settings window (its `SettingsField` value, assignment, range and page
   reset in `settings/edits.h`, its page builder) and the
-  [README settings list](../README.md#settings). A per-user one (consent, language) skips JSON:
+  [settings reference](../docs/settings.md). A per-user one (consent, language) skips JSON:
   deserialization keeps the caller's value, `LoadSettings` reads it in every branch and
   `ApplyOwnedSettings` writes it.
 - Wide strings throughout; `swprintf`'s `%s` is wide here.
-- Localization (message keys, grammar, catalogs, translator notes, the catalog checker):
-  [i18n/AGENTS.md](i18n/AGENTS.md).
+- UI text: wrap it for localization and update every catalog in the same change; before adding
+  or changing UI text, read [i18n/AGENTS.md](i18n/AGENTS.md).

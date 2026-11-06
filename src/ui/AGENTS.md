@@ -87,8 +87,8 @@ a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
 - `WM_KEYDOWN` that neither surface uses (no focus move, scroll, activation, popup, drag or
   control key) goes to `UiHostClient::Message` before default handling: window shortcuts (F5,
   Esc) live in the client. So does `WM_SETTINGCHANGE`, after the host's theme handling (clients
-  recompose on a regional format change, `intl`). The activation request reaches the client after the host closed the
-  popup and brought the window (or its modal) back.
+  recompose on a regional format change, `intl`). The activation request reaches the client after
+  the host closed the popup and brought the window (or its modal) back.
 - Navigation pane (`UiFrame::nav`, `navPane`, `navHeight`; surface `Nav`): main-surface items in
   main coordinates at offset 0, clipped to the pane, with its own pixel-aligned scroll and thin
   scrollbar (widened under the pointer, thumb drag, page on the track). Inside the pane the
@@ -141,26 +141,29 @@ a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
   whole from the paint state (the history window's legend chips), hot, pressed, a tab stop,
   activated and with its tooltip like a button; the toolkit adds only its focus ring, rounded at
   its ends. A disabled one blocks the pointer like any disabled control.
-- Tooltip (`ui/tooltip.h`, layout and placement in `ui/tooltip-layout.h`; `UiHostConfig::
-  tooltipClass`, none: no tooltips or readouts): one owned popup, `WS_EX_NOACTIVATE |
-  WS_EX_TOOLWINDOW`, `CS_DROPSHADOW`, shown with `SWP_NOACTIVATE`, never capture or focus;
-  `WM_NCHITTEST` answers `HTTRANSPARENT` (the pointer reaches the window under it on this thread),
-  `WM_MOUSEACTIVATE` `MA_NOACTIVATE`, any mouse message that still arrives hides it. Its own
-  surface at its monitor's DPI, target-bound resources in its surface cache (inked layouts cleared
-  with each new content). A chart's readout shows at once; an item's `tooltip` (complete text,
-  wrapped, never cut) after the double-click time (the main window's timer `0x7E02`; client
-  timers use other ids), only if its item is still hot in the same frame generation. Neither shows during a press, with the popup open or with the owner disabled.
-  Placement (`UiTooltipPlacement`) keeps clear of the cursor image and hotspot 8 DIP out and is
-  never clamped afterwards; nothing that fits shows nothing. The same content at the same
-  pointer, cursor image and work area does nothing; a moved pointer moves it (no new rows).
-  `UiHostHideTooltip` (it ends a chart's hover) runs on every trigger: leave from the pointer's
-  surface, any press, key (also in text boxes), wheel, scroll, rebuild, popup open, a disabled
-  owner, Alt, theme, and every popup close trigger (`UiHostClosePopup` hides it first: cancel
-  mode, deactivation, focus loss, size/move/minimize/hide, `WM_SYSCOMMAND`, activation request,
-  DPI, client modals, close). `UiTooltipHide` is the one idempotent hide: no focus or foreground
-  change, the hover timer killed, the content forgotten. Creation or drawing failure: hidden,
-  retried on the next show; class registration failure: no tooltips. These rest on
-  `tests/settings` host-probe tooltip cases; pointer routing on its `--tooltip-interactive` mode.
+- Tooltip (`ui/tooltip.h`; layout and placement in `ui/tooltip-layout.h`; without
+  `UiHostConfig::tooltipClass`, no tooltips or readouts). These rest on the `tests/settings`
+  host-probe tooltip cases, pointer routing on its `--tooltip-interactive` mode.
+  - Window: one owned popup, `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`, `CS_DROPSHADOW`, shown with
+    `SWP_NOACTIVATE`, never capture or focus; `WM_NCHITTEST` answers `HTTRANSPARENT` (the pointer
+    reaches the window under it on this thread), `WM_MOUSEACTIVATE` `MA_NOACTIVATE`; any mouse
+    message that still arrives hides it. Its own surface at its monitor's DPI, target-bound
+    resources in its surface cache (inked layouts cleared with each new content).
+  - Showing: a chart's readout at once; an item's `tooltip` (complete text, wrapped, never cut)
+    after the double-click time (the main window's timer `0x7E02`; client timers use other ids),
+    only if its item is still hot in the same frame generation. Neither shows during a press,
+    with the popup open or with the owner disabled.
+  - Placement (`UiTooltipPlacement`) keeps clear of the cursor image and hotspot 8 DIP out and is
+    never clamped afterwards; nothing that fits shows nothing. The same content at the same
+    pointer, cursor image and work area does nothing; a moved pointer moves it (no new rows).
+  - Hiding: `UiHostHideTooltip` (it ends a chart's hover) runs on every trigger: leave from the
+    pointer's surface, any press, key (also in text boxes), wheel, scroll, rebuild, popup open, a
+    disabled owner, Alt, theme, and every popup close trigger (`UiHostClosePopup` hides it first:
+    cancel mode, deactivation, focus loss, size/move/minimize/hide, `WM_SYSCOMMAND`, activation
+    request, DPI, client modals, close). `UiTooltipHide` is the one idempotent hide: no focus or
+    foreground change, the hover timer killed, the content forgotten.
+  - Creation or drawing failure hides it until the next show retries; class registration failure
+    means no tooltips.
 - Hit testing: an enabled item without an action is decoration (the pointer passes through; a
   chart needs none); a disabled interactive one blocks.
 - Sliders: a press focuses and jumps (unless it grabs the thumb, which hit-tests beyond the

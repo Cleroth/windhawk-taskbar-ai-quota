@@ -18,9 +18,8 @@ are native: `core/language.h` (rules: [../AGENTS.md](../AGENTS.md) Concurrency).
   bold or a link ID (never a bold link: bold around a link is dropped); `I18nUiRuns(runs,
   {{L"id", action}, ...})` makes them `UiRun`s, each link bound to the action its ID names (an
   unbound one plain), in the translation's order, which is the links' focus order;
-  `I18nRunsText` joins them. `I18nList(locale,
-  items)`: items' runs joined by the catalog's list patterns (contexts `list-pair`, `list-start`,
-  `list-middle`, `list-end`).
+  `I18nRunsText` joins them. `I18nList(locale, items)`: items' runs joined by the catalog's list
+  patterns (contexts `list-pair`, `list-start`, `list-middle`, `list-end`).
 - Arguments: text (inserted as is, never parsed), integers of any type (ASCII digits, `-` when
   negative, no grouping), an integer with its shown text (`{L"rows", rows, I18nInteger(locale,
   rows)}`: a plural selects by the number, `#` and `{rows}` show the text), or trusted runs (keep
@@ -130,7 +129,7 @@ English keys, catalogs outside the registry, and per language missing, unused or
 and unsorted entries and argument, link and plural mismatches (the runtime's rules); then wide
 literals outside `src/i18n/` that look user-facing and are neither wrapped, `Wh_Log` arguments
 nor marked (a heuristic, not an inventory: single lowercase words such as `left` slip through);
-then lines anywhere in `src/` holding a non-standard space or format character literally.
-Any other use of `Tr`/`TrCtx` than a literal call or an `I18nKey` declaration is reported. Exit 0 with a report whatever it finds; 1 when it can't read the sources or parse a
-catalog or the registry. A complete string change shows none of the catalog findings for its
-keys.
+then lines anywhere in `src/` holding a non-standard space or format character literally. Any
+use of `Tr`/`TrCtx` other than a literal call or an `I18nKey` declaration is reported. Exit 0
+with a report whatever it finds; 1 when it can't read the sources or parse a catalog or the
+registry. A complete string change shows none of the catalog findings for its keys.

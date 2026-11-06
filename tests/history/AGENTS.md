@@ -65,8 +65,8 @@ evidence is a fresh successful run, not a result from an older source hash.
   retention pruning is `burn-up.inc`'s; the prune's revision bump in `MaintainHistory` is not
   extracted.
 - **Host integration:** real taskbar threads, XAML, Windhawk unload, storage, OAuth, upgrades and
-  Explorer are outside this suite, and passing proves none of them. Follow root/README guidance
-  for separately authorized runtime verification.
+  Explorer are outside this suite, and passing proves none of them. Separately authorized runtime
+  checks: [docs/usage-history-verification.md](../../docs/usage-history-verification.md).
 
 ## Maintenance rules
 
