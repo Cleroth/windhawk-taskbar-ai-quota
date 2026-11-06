@@ -223,11 +223,12 @@ static void HistoryChartLayout(UiGraphics& g, HistoryChart& c, D2D1_RECT_F rect,
 // `Sat 31`); at most 14 days: every 1 or 2 days (`Sat 24`); at most 120 days: every 1 or 2 days,
 // or Mondays every 1, 2 or 4 weeks (`Oct 5`); beyond: every 1, 2, 3, 6, 12, 24 or 60 months from
 // January (`Oct 2026`). The step is the smallest keeping labels 52, 56 and 64 DIP apart over
-// `width`. A boundary is where the local clock (`localTime`) first reaches a new hour, day or
-// month: daylight saving moves it, a repeated hour counts once, a skipped one never. A scan in
+// `width` and each label 12 DIP from the next, as wide as `g` measures it (the axis style, the
+// frame's locale). A boundary is where the local clock (`localTime`) first reaches a new hour, day
+// or month: daylight saving moves it, a repeated hour counts once, a skipped one never. A scan in
 // steps shorter than the unit finds each, a bisection its millisecond.
-static std::vector<HistoryChartTick> HistoryChartTicks(const I18nLocale& locale, ULONGLONG from, ULONGLONG to,
-                                                       float width, const HistoryUiLocalTime& localTime) {
+static std::vector<HistoryChartTick> HistoryChartTicks(UiGraphics& g, const I18nLocale& locale, ULONGLONG from,
+                                                       ULONGLONG to, float width, const HistoryUiLocalTime& localTime) {
     std::vector<HistoryChartTick> ticks;
     if (to <= from + 1 || width <= 0) return ticks;
     enum class Unit { Hour, Day, Month };
@@ -253,15 +254,8 @@ static std::vector<HistoryChartTick> HistoryChartTicks(const I18nLocale& locale,
                              days <= 14          ? std::vector<int>{1, 2} : std::vector<int>{1, 2, 7, 14, 28};
     double unitMs = unit == Unit::Hour ? 3600000.0 : unit == Unit::Day ? double(kHistoryDayMs) : 30.44 * kHistoryDayMs;
     float spacing = unit == Unit::Hour ? 52.0f : unit == Unit::Day ? 56.0f : 64.0f;
-    int step = steps.back();
-    for (int s : steps) {
-        if (width * float(double(s) * unitMs / span) >= spacing) {
-            step = s;
-            break;
-        }
-    }
     // Mondays are days 4 + 7k; every second or fourth one by k.
-    auto chosen = [&](int64_t b) {
+    auto chosen = [&](int64_t b, int step) {
         if (unit != Unit::Day || step < 7) return mod(b, step) == 0;
         return mod(b, 7) == 4 && mod((b - 4) / 7, step / 7) == 0;
     };
@@ -279,6 +273,15 @@ static std::vector<HistoryChartTick> HistoryChartTicks(const I18nLocale& locale,
                         {{L"weekday", I18nText(locale, kHistoryUiDays[mod(day(t) + 4, 7)])}, {L"day", t.wDay}});
     };
 
+    // Every boundary in the period, its label made and measured once a step needs it.
+    struct Boundary {
+        ULONGLONG time;
+        int64_t bucket;
+        SYSTEMTIME at;
+        std::wstring label{};
+        float width = -1;
+    };
+    std::vector<Boundary> boundaries;
     SYSTEMTIME start = localTime(from);
     if (!valid(start)) return ticks;
     int64_t seen = bucket(start);
@@ -299,8 +302,38 @@ static std::vector<HistoryChartTick> HistoryChartTicks(const I18nLocale& locale,
         }
         SYSTEMTIME at = localTime(hi);
         seen = bucket(at);
-        if (chosen(seen)) ticks.push_back({hi, label(at)});
+        boundaries.push_back({hi, seen, at});
         lo = hi;
+    }
+    auto labeled = [&](Boundary& b) -> Boundary& {
+        if (b.width < 0) {
+            b.label = label(b.at);
+            b.width = UiLayoutSize(UiLayout(g, b.label, kHistoryChartAxisStyle, 10000, false)).width;
+        }
+        return b;
+    };
+    int step = steps.back();
+    for (int s : steps) {
+        if (width * float(double(s) * unitMs / span) < spacing) continue;
+        bool apart = true;
+        float previous = 0, previousWidth = -1;
+        for (Boundary& b : boundaries) {
+            if (!chosen(b.bucket, s)) continue;
+            float x = width * float(double(b.time - from) / span), labelWidth = labeled(b).width;
+            if (previousWidth >= 0 && x - previous < (previousWidth + labelWidth) / 2 + 12) {
+                apart = false;
+                break;
+            }
+            previous = x;
+            previousWidth = labelWidth;
+        }
+        if (apart) {
+            step = s;
+            break;
+        }
+    }
+    for (Boundary& b : boundaries) {
+        if (chosen(b.bucket, step)) ticks.push_back({b.time, labeled(b).label});
     }
     return ticks;
 }
@@ -436,9 +469,10 @@ static std::vector<size_t> HistoryChartEmphasis(const std::vector<HistoryUiLine>
 // Scene ------------------------------------------------------------------------------------------
 
 // Fill and Hatch: a rectangle (the band; high contrast hatches it). Rule: a horizontal line
-// (gridlines, the threshold). Label: text in its box (a message over a backdrop of `fill`). Run:
-// a polyline of one continuous stretch, round-capped and joined. Dot: a lone reading, `fill`
-// inside (the background: hollow). Square: a flat run compressed into one point, stroke-wide.
+// (gridlines, the threshold). Label: text in its box (a message over a backdrop of `fill`, wrapped
+// in its width and centered on it). Run: a polyline of one continuous stretch, round-capped and
+// joined. Dot: a lone reading, `fill` inside (the background: hollow). Square: a flat run
+// compressed into one point, stroke-wide.
 enum class HistoryChartMark : uint8_t { Fill, Hatch, Rule, Label, Run, Dot, Square };
 
 struct HistoryChartPrim {

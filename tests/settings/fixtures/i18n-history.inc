@@ -48,7 +48,7 @@ static void RunHistoryI18nTests() {
         "a Russian month in a date takes its form (5 мая), alone the other (май 2026)", [] {
         HistoryUiLocalTime zone = TestZone();
         auto labels = [&](PCWSTR tag, ULONGLONG from, ULONGLONG to) {
-            return TestLabels(HistoryChartTicks(TestLocale(tag), from, to, 704, zone));
+            return TestLabels(HistoryChartTicks(TestGraphics(), TestLocale(tag), from, to, 704, zone));
         };
         ULONGLONG may = TestLocalMs(2026, 5, 31, 12, 0);
         // A week: each local midnight.

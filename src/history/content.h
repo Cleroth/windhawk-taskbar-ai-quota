@@ -160,89 +160,120 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
     // comparing, whose cards hold both periods), 8 DIP apart, each row as tall as its tallest card;
     // the No readings card last. A card: 11 DIP (border and padding) around a 16 DIP head, the
     // headline row (4 DIP above it, 30, 2 below) and 16 DIP lines; No readings: 24 DIP rows 4 DIP
-    // under its head.
-    std::vector<float> heights;
-    for (const HistoryUiCard& card : view.cards) {
-        heights.push_back(11 + 16 + (card.value.empty() ? 4 : 36) + 16 * float(card.lines.size()) + 11);
-    }
-    if (!view.noReadings.empty()) heights.push_back(11 + 16 + 4 + 24 * float(view.noReadings.size()) + 11);
-    if (heights.empty()) return y - 10;
+    // under its head. Text longer than its line wraps and the card grows with it; the headline's
+    // time that doesn't fit beside its value takes a line under it, and an account's detail that
+    // doesn't fit beside its label the lines under that.
+    if (view.cards.empty() && view.noReadings.empty()) return y - 10;
     size_t columns = size_t(std::clamp(int((width + 8) / 248), 1, view.compare ? 2 : 3));
     float cardWidth = (width - 8 * float(columns - 1)) / float(columns);
-    // A card's line (mockup .sthead svg: 16 x 8 DIP, 3 DIP wide whatever the series' width) in its
-    // chart line's color (history/chart.h; high contrast: text and link alternating as inks).
+    UiTextStyle number = UiTextStyleFor(UiFont::Subtitle), caption = UiTextStyleFor(UiFont::Caption);
+    auto measure = [&](const std::wstring& text, const UiTextStyle& style) {
+        return UiLayoutSize(UiLayout(g, text, style, 10000, false)).width;
+    };
+    // How tall text is wrapped at `textWidth`: at least one line.
+    auto wrapped = [&](const std::vector<UiRun>& runs, UiFont font, float textWidth) {
+        return std::max(UiTextStyleFor(font).lineHeight,
+                        UiLayoutSize(UiRichLayout(g, runs, font, std::max(textWidth, 1.0f))).height);
+    };
+    // Card `i` at (cx, top), its items added only when `place`; returns its height. A card's line
+    // (mockup .sthead svg: 16 x 8 DIP, 3 DIP wide whatever the series' width) in its chart line's
+    // color (history/chart.h; high contrast: text and link alternating as inks).
+    auto lay = [&](size_t i, float cx, float top, bool place) {
+        float left = cx + 13, right = cx + cardWidth - 13;
+        // One line stays ellipsized at its width (it fits); more wrap.
+        auto add = [&](D2D1_RECT_F rect, std::vector<UiRun> runs, UiFont font, UiInk ink) {
+            if (place) text(rect, std::move(runs), font, ink, rect.bottom - rect.top <= UiTextStyleFor(font).lineHeight);
+        };
+        if (i == view.cards.size()) {
+            std::vector<UiRun> head{{I18nText(locale, TrCtx(L"history-card", L"No readings in range"))}};
+            float extra = wrapped(head, UiFont::Caption, right - left) - 16;
+            add({left, top + 11, right, top + 27 + extra}, std::move(head), UiFont::Caption, UiInk::Primary);
+            float row = top + 31 + extra;
+            for (const HistoryUiNoReadings& entry : view.noReadings) {
+                if (std::vector<UiShapePart> logo = HistoryUiLogo(view, entry.provider, true); place && !logo.empty()) {
+                    shape({left, row + 4, left + 16, row + 20}, 24, std::move(logo));
+                }
+                float labelLeft = left + 24;
+                float labelWidth = std::min(std::ceil(measure(entry.label, UiTextStyleFor(UiFont::Note))),
+                                            std::max(right - labelLeft, 0.0f));
+                if (place) {
+                    text({labelLeft, row + 2.5f, labelLeft + labelWidth, row + 21.5f}, {{entry.label}}, UiFont::Note,
+                         UiInk::Primary, true);
+                }
+                if (measure(entry.detail, caption) <= right - (labelLeft + labelWidth + 8)) {
+                    add({labelLeft + labelWidth + 8, row + 4, right, row + 20}, {{entry.detail}}, UiFont::Caption,
+                        UiInk::Muted);
+                    row += 24;
+                } else {
+                    float detail = wrapped({{entry.detail}}, UiFont::Caption, right - labelLeft);
+                    add({labelLeft, row + 22, right, row + 22 + detail}, {{entry.detail}}, UiFont::Caption, UiInk::Muted);
+                    row += 24 + detail;
+                }
+            }
+            return row + 11 - top;
+        }
+        const HistoryUiCard& card = view.cards[i];
+        float titleLeft = left;
+        if (!card.detailsOnly) {
+            UiShapePart line{L"M1 4H15", {}, UiInk::Inherit, 1, 3};
+            if (hc) line.ink = i % 2 ? UiInk::Link : UiInk::Primary;
+            else line.color = HistoryUiHue(card.color, light);
+            if (place) shape({left, top + 15, left + 16, top + 23}, 16, {line});
+            titleLeft = left + 24;
+        }
+        // The account's recording status muted after the title: the template's `status` link
+        // marks it.
+        std::vector<UiRun> title{{card.title}};
+        if (!card.status.empty()) {
+            title.clear();
+            for (const I18nRun& run : I18nRuns(locale, TrCtx(L"history-card", L"{title}<link id=\"status\"> \u00B7 "
+                                                                              L"{status}</link>"),
+                                               {{L"title", card.title}, {L"status", card.status}})) {
+                title.push_back(run.link.empty() ? UiRun{run.text} : UiRun{run.text, UiRunStyle::Normal, UiInk::Muted});
+            }
+        }
+        float extra = wrapped(title, UiFont::Caption, right - titleLeft) - 16;
+        add({titleLeft, top + 11, right, top + 27 + extra}, std::move(title), UiFont::Caption, UiInk::Primary);
+        float lineTop = top + 31 + extra;
+        if (!card.value.empty()) {
+            // Headline (mockup .stnum, .stunit): the value in display type, then its time in
+            // caption type 5 DIP after it, on the value's baseline.
+            UiFontMetrics a = UiFontMetricsFor(g, number), b = UiFontMetricsFor(g, caption);
+            float numberTop = top + 33 + extra;
+            float whenTop = numberTop + (number.lineHeight - a.ascent - a.descent) / 2 + a.ascent -
+                            (caption.lineHeight - b.ascent - b.descent) / 2 - b.ascent;
+            float numberRight = std::min(left + std::ceil(measure(card.value, number)) + 1, right);
+            float valueExtra = wrapped({{card.value}}, UiFont::Subtitle, right - left) - number.lineHeight;
+            add({left, numberTop, valueExtra > 0 ? right : numberRight, numberTop + number.lineHeight + valueExtra},
+                {{card.value}}, UiFont::Subtitle, UiInk::Primary);
+            lineTop = top + 63 + extra + valueExtra;
+            if (valueExtra == 0 && measure(card.when, caption) <= right - (numberRight + 5)) {
+                add({numberRight + 5, whenTop, right, whenTop + caption.lineHeight}, {{card.when}}, UiFont::Caption,
+                    UiInk::Muted);
+            } else {
+                float when = wrapped({{card.when}}, UiFont::Caption, right - left);
+                add({left, lineTop, right, lineTop + when}, {{card.when}}, UiFont::Caption, UiInk::Muted);
+                lineTop += when;
+            }
+        }
+        for (const std::wstring& line : card.lines) {
+            float height = wrapped({{line}}, UiFont::Caption, right - left);
+            add({left, lineTop, right, lineTop + height}, {{line}}, UiFont::Caption, UiInk::Muted);
+            lineTop += height;
+        }
+        return lineTop + 11 - top;
+    };
+    std::vector<float> heights;
+    for (size_t i = 0; i < view.cards.size() + !view.noReadings.empty(); i++) {
+        heights.push_back(lay(i, x + (cardWidth + 8) * float(i % columns), 0, false));
+    }
     for (size_t first = 0; first < heights.size(); first += columns) {
         size_t last = std::min(first + columns, heights.size());
         float rowHeight = *std::max_element(heights.begin() + ptrdiff_t(first), heights.begin() + ptrdiff_t(last));
         for (size_t i = first; i < last; i++) {
-            float cx = x + (cardWidth + 8) * float(i - first), left = cx + 13, right = cx + cardWidth - 13;
+            float cx = x + (cardWidth + 8) * float(i - first);
             panel({cx, y, cx + cardWidth, y + rowHeight});
-            if (i == view.cards.size()) {
-                text({left, y + 11, right, y + 27}, {{I18nText(locale, TrCtx(L"history-card", L"No readings in range"))}},
-                     UiFont::Caption, UiInk::Primary, true);
-                float row = y + 31;
-                for (const HistoryUiNoReadings& entry : view.noReadings) {
-                    if (std::vector<UiShapePart> logo = HistoryUiLogo(view, entry.provider, true); !logo.empty()) {
-                        shape({left, row + 4, left + 16, row + 20}, 24, std::move(logo));
-                    }
-                    float labelLeft = left + 24;
-                    float labelWidth = std::min(
-                        std::ceil(UiLayoutSize(UiLayout(g, entry.label, UiTextStyleFor(UiFont::Note), 10000, false)).width),
-                        std::max(right - labelLeft, 0.0f));
-                    text({labelLeft, row + 2.5f, labelLeft + labelWidth, row + 21.5f}, {{entry.label}}, UiFont::Note,
-                         UiInk::Primary, true);
-                    if (right - (labelLeft + labelWidth + 8) >= 16) {
-                        text({labelLeft + labelWidth + 8, row + 4, right, row + 20}, {{entry.detail}}, UiFont::Caption,
-                             UiInk::Muted, true);
-                    }
-                    row += 24;
-                }
-                continue;
-            }
-            const HistoryUiCard& card = view.cards[i];
-            float titleLeft = left;
-            if (!card.detailsOnly) {
-                UiShapePart line{L"M1 4H15", {}, UiInk::Inherit, 1, 3};
-                if (hc) line.ink = i % 2 ? UiInk::Link : UiInk::Primary;
-                else line.color = HistoryUiHue(card.color, light);
-                shape({left, y + 15, left + 16, y + 23}, 16, {line});
-                titleLeft = left + 24;
-            }
-            // The account's recording status muted after the title: the template's `status` link
-            // marks it.
-            std::vector<UiRun> title{{card.title}};
-            if (!card.status.empty()) {
-                title.clear();
-                for (const I18nRun& run : I18nRuns(locale, TrCtx(L"history-card", L"{title}<link id=\"status\"> \u00B7 "
-                                                                                  L"{status}</link>"),
-                                                   {{L"title", card.title}, {L"status", card.status}})) {
-                    title.push_back(run.link.empty() ? UiRun{run.text} : UiRun{run.text, UiRunStyle::Normal, UiInk::Muted});
-                }
-            }
-            text({titleLeft, y + 11, right, y + 27}, std::move(title), UiFont::Caption, UiInk::Primary, true);
-            float lineTop = y + 31;
-            if (!card.value.empty()) {
-                // Headline (mockup .stnum, .stunit): the value in display type, then its time in
-                // caption type 5 DIP after it, on the value's baseline.
-                UiTextStyle number = UiTextStyleFor(UiFont::Subtitle), caption = UiTextStyleFor(UiFont::Caption);
-                UiFontMetrics a = UiFontMetricsFor(g, number), b = UiFontMetricsFor(g, caption);
-                float numberTop = y + 33;
-                float whenTop = numberTop + (number.lineHeight - a.ascent - a.descent) / 2 + a.ascent -
-                                (caption.lineHeight - b.ascent - b.descent) / 2 - b.ascent;
-                float numberRight = std::min(
-                    left + std::ceil(UiLayoutSize(UiLayout(g, card.value, number, 10000, false)).width) + 1, right);
-                text({left, numberTop, numberRight, numberTop + number.lineHeight}, {{card.value}}, UiFont::Subtitle,
-                     UiInk::Primary, true);
-                if (right - (numberRight + 5) >= 16) {
-                    text({numberRight + 5, whenTop, right, whenTop + caption.lineHeight}, {{card.when}}, UiFont::Caption,
-                         UiInk::Muted, true);
-                }
-                lineTop = y + 63;
-            }
-            for (const std::wstring& line : card.lines) {
-                text({left, lineTop, right, lineTop + 16}, {{line}}, UiFont::Caption, UiInk::Muted, true);
-                lineTop += 16;
-            }
+            lay(i, cx, y, true);
         }
         y += rowHeight + 8;
     }

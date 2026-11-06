@@ -80,18 +80,26 @@ static void HistoryUiPaintCustom(ID2D1RenderTarget* target, UiGraphics& g, UiTar
                     target->DrawEllipse(&dot, UiBrush(target, cache, prim.color), prim.width);
                     break;
                 }
-                // Text on one line in its box; a backdrop 6 DIP around a message's ink.
+                // Text on one line in its box; a message (its backdrop 6 DIP around its ink) wraps
+                // in its box's width, centered on it.
                 case HistoryChartMark::Label: {
-                    IDWriteTextLayout* layout =
-                        UiLayout(g, prim.text, prim.style, std::max(prim.rect.right - prim.rect.left, 0.0f), false, prim.align);
-                    if (prim.fill.a > 0) {
+                    bool message = prim.fill.a > 0;
+                    IDWriteTextLayout* layout = UiLayout(g, prim.text, prim.style,
+                                                         std::max(prim.rect.right - prim.rect.left, 0.0f), message, prim.align);
+                    float top = prim.rect.top;
+                    if (message) {
                         DWRITE_TEXT_METRICS metrics{};
                         winrt::check_hresult(layout->GetMetrics(&metrics));
-                        target->FillRectangle(D2D1::RectF(prim.rect.left + metrics.left - 6, prim.rect.top,
-                                                          prim.rect.left + metrics.left + metrics.width + 6, prim.rect.bottom),
+                        float bottom = prim.rect.bottom;
+                        if (metrics.height > bottom - top) {
+                            top = (prim.rect.top + prim.rect.bottom - metrics.height) / 2;
+                            bottom = top + metrics.height;
+                        }
+                        target->FillRectangle(D2D1::RectF(prim.rect.left + metrics.left - 6, top,
+                                                          prim.rect.left + metrics.left + metrics.width + 6, bottom),
                                               UiBrush(target, cache, prim.fill));
                     }
-                    UiDrawLayout(target, cache, layout, {prim.rect.left, prim.rect.top}, prim.color);
+                    UiDrawLayout(target, cache, layout, {prim.rect.left, top}, prim.color);
                     break;
                 }
             }

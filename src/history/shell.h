@@ -20,7 +20,15 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     // own. All accounts; configured accounts with their logo, label and weekly value (as their
     // flyout's weekly row: used or remaining, in the usage color, muted while stale, a dash while
     // unknown); then the Removed group (mockup .ngroup: a 36 DIP header), muted and without values.
+    // A label an entry cuts shows whole in its tooltip.
     frame.navPane = {0, 0, kHistoryUiNavWidth, std::max(client.height, 0.0f)};
+    auto addEntry = [&](UiItem entry) {
+        if (UiLayoutSize(UiLayout(g, entry.text, UiTextStyleFor(UiFont::Body), 10000, false)).width >
+            UiNavLabelWidth(g, entry)) {
+            entry.tooltip = {{entry.text}};
+        }
+        frame.nav.push_back(std::move(entry));
+    };
     float y = 6;
     UiItem all;
     all.id = kHistoryUiNavAll;
@@ -31,7 +39,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     all.selected = !selected;
     all.enabled = active;
     all.action = HistoryUiAction(HistoryUiCommand::Select);
-    frame.nav.push_back(std::move(all));
+    addEntry(std::move(all));
     y += 41;
     bool removedHeader = false;
     for (size_t i = 0; i < view.accounts.size(); i++) {
@@ -90,7 +98,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
             }
             entry.runs.push_back(std::move(value));
         }
-        frame.nav.push_back(std::move(entry));
+        addEntry(std::move(entry));
         y += 41;
     }
     frame.navHeight = y - 3 + 6;
@@ -151,9 +159,10 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
 
     // Status and pill (mockup .hstat, .pill) 12 DIP before the buttons. The status (or a running
     // export's progress in its place, s-states .upd: a 16 DIP ring and 6 DIP gap before its row
-    // count, drawn by the client so the count changes without a rebuild; as wide as the journal's
-    // largest export, 250,000 samples of 8 rows) stays on the title row while it holds the whole
-    // title too; otherwise it joins the line under the title.
+    // count, drawn by the client so the count changes without a rebuild; as wide as the widest line
+    // the journal's largest export, 250,000 samples of 8 rows, can show in any plural form) stays on
+    // the title row while it holds the whole title too; otherwise it joins the line under the
+    // title. So does the pill, and the status with it, when the title doesn't fit beside the pill.
     auto measure = [&](const std::wstring& text, UiFont font) {
         return std::ceil(UiLayoutSize(UiLayout(g, text, UiTextStyleFor(font), 10000, false)).width);
     };
@@ -166,7 +175,22 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
         item.align = align;
         frame.main.push_back(std::move(item));
     };
-    const std::wstring widest = HistoryUiProgressText(locale, 2000000);
+    // Each plural form at its largest count (digits are tabular): counts below 2,000,000 down to
+    // the first of each form, and the small ones only some forms take.
+    std::vector<std::wstring> progressLines;
+    unsigned forms = 0;
+    auto form = [&](size_t rows) {
+        unsigned bit = 1u << unsigned(I18nPluralCategory(locale.Language().plural, rows));
+        if (!(std::exchange(forms, forms | bit) & bit)) progressLines.push_back(HistoryUiProgressText(locale, rows));
+    };
+    for (size_t rows = 2000000; rows > 1999900; rows--) form(rows);
+    form(1);
+    form(0);
+    auto progressWidth = [&](UiFont font) {
+        float widest = 0;
+        for (const std::wstring& line : progressLines) widest = std::max(widest, measure(line, font));
+        return 22 + widest;
+    };
     struct Pill {
         std::wstring text;
         UiInk ink;
@@ -186,11 +210,15 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     const std::wstring& title = selected ? selected->label : allAccounts;
     D2D1_SIZE_F pillSize = UiPillSize(g, pill.text);
     float titleWidth = std::ceil(UiLayoutSize(UiLayout(g, title, UiTextStyleFor(UiFont::Title), 100000, false)).width);
-    float statusWidth = view.exporting     ? 22 + measure(widest, UiFont::Caption) :
+    float statusWidth = view.exporting     ? progressWidth(UiFont::Caption) :
                         view.status.empty() ? 0 : measure(view.status, UiFont::Caption);
-    bool narrow = statusWidth > 0 && titleWidth + 12 + statusWidth + 12 + pillSize.width + 12 + 104 > width;
-    float pillRight = right - 104 - 12, titleRight = pillRight - pillSize.width - 12;
-    UiAddPill(frame.main, id++, {titleRight + 12, 14, pillRight, 34}, pill.text, pill.ink, pill.on);
+    bool pillUnder = titleWidth + 12 + pillSize.width + 12 + 104 > width;
+    bool narrow = statusWidth > 0 && (pillUnder || titleWidth + 12 + statusWidth + 12 + pillSize.width + 12 + 104 > width);
+    float pillRight = right - 104 - 12, titleRight = pillRight;
+    if (!pillUnder) {
+        titleRight = pillRight - pillSize.width - 12;
+        UiAddPill(frame.main, id++, {titleRight + 12, 14, pillRight, 34}, pill.text, pill.ink, pill.on);
+    }
     if (statusWidth > 0 && !narrow) {
         if (view.exporting) {
             progress({titleRight - statusWidth, 14, titleRight, 34}, UiFont::Caption, DWRITE_TEXT_ALIGNMENT_TRAILING);
@@ -216,7 +244,9 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     frame.main.push_back(std::move(heading));
 
     // Under the title (mockup .psub): one account's provider and recording, then a status that
-    // didn't fit the title row; an export's progress 12 DIP after that line, or starting it.
+    // didn't fit the title row; after that line (or starting it), 12 DIP apart, an export's
+    // progress and the pill that didn't fit beside the title, each starting a line of its own 22
+    // DIP lower where it doesn't fit after what precedes it.
     std::wstring subtitle;
     if (selected) {
         I18nKey recording = selected->removed ? TrCtx(L"history-account-state", L"Removed") :
@@ -234,14 +264,26 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
                                                {{L"account", subtitle}, {L"updated", view.status}});
     }
     float top = 56;
-    if (!subtitle.empty() || narrow) {
-        float lineRight = right;
+    if (!subtitle.empty() || narrow || pillUnder) {
+        float lineRight = right, x = subtitle.empty() ? left : left + measure(subtitle, UiFont::Note) + 12, lineTop = 42;
+        auto flow = [&](float itemWidth) {
+            if (x > left && x + itemWidth > right) {
+                x = left;
+                lineTop += 22;
+            }
+            if (lineTop == 42) lineRight = std::min(lineRight, x - 12);
+            float at = x;
+            x += itemWidth + 12;
+            return at;
+        };
         if (narrow && view.exporting) {
-            float progressWidth = 22 + measure(widest, UiFont::Note);
-            float x = subtitle.empty() ? left :
-                      std::max(std::min(left + measure(subtitle, UiFont::Note) + 12, right - progressWidth), left);
-            progress({x, 42, x + progressWidth, 61}, UiFont::Note, DWRITE_TEXT_ALIGNMENT_LEADING);
-            lineRight = x - 12;
+            float progressLine = progressWidth(UiFont::Note), at = flow(progressLine);
+            progress({at, lineTop, at + progressLine, lineTop + 19}, UiFont::Note, DWRITE_TEXT_ALIGNMENT_LEADING);
+        }
+        if (pillUnder) {
+            float at = flow(pillSize.width);
+            UiAddPill(frame.main, id++, {at, lineTop - 0.5f, at + pillSize.width, lineTop + 19.5f}, pill.text, pill.ink,
+                      pill.on);
         }
         if (!subtitle.empty()) {
             UiItem line;
@@ -254,7 +296,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
             line.trim = true;
             frame.main.push_back(std::move(line));
         }
-        top = 70;
+        top = 70 + (lineTop - 42);
     }
 
     // Command bar (mockup .cmdbar): View and Range segments and the Compare switch (4 DIP more

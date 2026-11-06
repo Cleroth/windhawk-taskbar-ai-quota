@@ -994,7 +994,7 @@ struct HistoryController {
             if (cancelled()) c.key = {};
         }
         if (reduce || plotWidth != c.plot.right - c.plot.left || c.tickLocale != view.locale) {
-            c.ticks = HistoryChartTicks(view.locale, from, to, c.plot.right - c.plot.left,
+            c.ticks = HistoryChartTicks(g, view.locale, from, to, c.plot.right - c.plot.left,
                                         [this](ULONGLONG ms) { return ops->LocalTime(ms); });
             c.tickLocale = view.locale;
         }

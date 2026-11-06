@@ -521,38 +521,87 @@ static void RunHistoryRenders(const std::wstring& directory) {
             }
         }
     }
-    // The localization review's languages, light at 96 and 144 DPI, as the controller composes the
-    // window in each: the default view (pill, status, the cards' times, the ticks), the 30-day and
-    // All retained ticks, and the readout on the chart while comparing.
-    for (std::string_view tag : {"zh-Hans", "qps-ploc"}) {
-        I18nLocale locale(*I18nLanguageByTag(std::wstring(tag.begin(), tag.end())));
-        auto localized = [&](std::shared_ptr<TestChartWindow> window) {
-            window->ops.locale = locale;
-            window->controller.Load();
-            return window;
+    // The localization review's languages, light, each state as the controller composes it in that
+    // language (i18n-history-layout.inc's cases) at the window's default client and its minimum
+    // (-min): the default view (also at 144 DPI), one account's states, comparing with the readout
+    // on the chart, the header's and content's states, each notice, the empty states, the More
+    // menu open, many accounts with the sidebar scrolled to its end, and the chart's views and each
+    // range's ticks (also at 144 DPI at the default size).
+    std::map<std::string, HistoryLayoutCase> cases;
+    for (HistoryLayoutCase& entry : HistoryLayoutCases()) cases.emplace(entry.name, std::move(entry));
+    auto hourSeventy = states[states.size() - 1].hover;
+    for (std::string_view tag : {"qps-ploc", "de", "ru", "ja", "zh-Hans"}) {
+        auto part = [&](const char* name, std::wstring caption, D2D1_SIZE_F client, float crop = 0) {
+            HistoryRenderPart shown{std::move(caption), {}, client, crop};
+            shown.chart = HistoryLayoutWindow(cases.at(name), tag);
+            shown.chartView = true;
+            shown.exported = 1234567;
+            return shown;
         };
-        HistoryRenderPart view = real(L"Default view: All accounts, Weekly, 7 days", localized(TestChartOf(TestMockupWeek())), 0);
-        std::vector<HistoryRenderPart> parts = {view};
-        for (auto [range, caption] : {std::pair{HistoryUiRange::Month, L"30d ticks: dates"},
-                                      std::pair{HistoryUiRange::All, L"All retained (900 days) ticks: months"}}) {
-            int value = int(range);
-            auto spans = TestChartOf(TestMockupLong(900), [value](HistoryController& c) { c.Command(HistoryUiCommand::Range, value); });
-            spans->ops.settings.settings.historyRetentionDays = 900;
-            parts.push_back(real(caption, localized(spans)));
-        }
-        parts.push_back(real(L"The readout on the chart: six coincident lines at hour 70, comparing",
-                             localized(TestChartOf(TestMockupWeek(), [](HistoryController& c) {
-                                 c.Command(HistoryUiCommand::Compare, 1);
-                             })),
-                             640));
-        parts.back().hover = states[states.size() - 1].hover;
-        for (UINT dpi : {96u, 144u}) {
-            std::string name = "render-history-i18n-" + std::string(tag) + "-light-" + std::to_string(dpi) + ".png";
-            Run(name, [&] {
-                RenderHistorySheet(g, wic.get(), directory + L"\\" + std::wstring(name.begin(), name.end()), parts,
-                                   RenderThemes()[0].input, dpi);
-                CHECK(true);
-            });
+        auto sheets = [&](D2D1_SIZE_F client) {
+            bool narrow = client.width < kHistoryLayoutClient.width;
+            float top = narrow ? 300 : 260;
+            std::vector<HistoryRenderPart> menu = {part("default", L"More menu open, the pointer on Open history folder",
+                                                        client, narrow ? 360 : 330)};
+            menu[0].menu = true;
+            std::vector<HistoryRenderPart> compare = {
+                part("compare", L"Comparing CC 2's weekly lines", client),
+                part("compare-all", L"The readout on the chart: six coincident lines at hour 70, comparing", client, 640)};
+            compare.back().hover = hourSeventy;
+            std::vector<HistoryRenderPart> notices;
+            for (const char* name : {"notice-nothing-recorded", "notice-untracked", "notice-save-dialog", "notice-not-started",
+                                     "notice-temporary", "notice-export-failed", "notice-exported", "notice-exported-one",
+                                     "notice-clear-failed", "notice-cleared", "notice-delete-failed", "notice-deleted"}) {
+                notices.push_back(part(name, std::wstring(name, name + std::strlen(name)), client, top));
+            }
+            std::vector<HistoryRenderPart> nav = {part("many", L"Many accounts, the sidebar scrolled to its end", client)};
+            nav[0].navEnd = true;
+            return std::vector<std::pair<std::string, std::vector<HistoryRenderPart>>>{
+                {"default", {part("default", L"", client)}},
+                {"account", {part("account-oai", L"One account: OpenAI, Extra usage, recording off for this account", client),
+                             part("account-paused", L"One account: Anthropic, Extra usage, paused (hidden)", client),
+                             part("account-all-meters", L"One account: CC 2, All meters", client),
+                             part("account-removed", L"One account: removed, its bar with Delete history", client, 640)}},
+                {"compare", compare},
+                {"states", {part("recording-off", L"Recording off: pill Off, caution bar with Enable recording", client, top + 80),
+                            part("consent-failed", L"Enable recording failed: its notice above the recording-off bar", client,
+                                 top + 140),
+                            part("storage", L"Storage failing: pill Not saving, error and cap bars", client, top + 150),
+                            part("waiting", L"Waiting", client, top),
+                            part("exporting", L"Export running: progress in the status slot", client, top),
+                            part("exporting-account", L"Export running, one account", client, top)}},
+                {"notices", notices},
+                {"empty", {part("loading", L"Loading (first load; no status yet)", client, 530),
+                           part("no-accounts", L"No accounts configured", client, 530),
+                           part("unsupported-account", L"View unsupported, one account", client, 530),
+                           part("unsupported-all", L"Extra usage, All accounts: removed accounts' long labels", client),
+                           part("no-readings", L"No readings in range, recording off", client),
+                           part("dollars", L"Dollars only: the spending card below", client),
+                           part("partial", L"No readings card beside plotted accounts", client)}},
+                {"menu", menu},
+                {"nav", nav},
+                {"chart", {part("short-term", L"Short-term, 24h", client, 520), part("extra-usage", L"Extra usage", client),
+                           part("all-meters", L"All meters: percent, USD and credits axes", client),
+                           part("remaining", L"Remaining bar mode, above 100%", client),
+                           part("ticks-24h", L"24h ticks", client, 520), part("ticks-7d", L"7d ticks", client, 520),
+                           part("ticks-30d", L"30d ticks", client, 520), part("ticks-90d", L"90d ticks", client, 520),
+                           part("ticks-all", L"All retained (900 days) ticks", client, 520)}},
+            };
+        };
+        for (D2D1_SIZE_F client : {kHistoryLayoutClient, kHistoryLayoutMinClient}) {
+            bool minimum = client.width < kHistoryLayoutClient.width;
+            for (auto& [sheet, parts] : sheets(client)) {
+                for (UINT dpi : {96u, 144u}) {
+                    if (dpi == 144 && (minimum || (sheet != "default" && sheet != "chart"))) continue;
+                    std::string name = "render-history-i18n-" + sheet + "-" + std::string(tag) + "-light-" +
+                                       std::to_string(dpi) + (minimum ? "-min" : "") + ".png";
+                    Run(name, [&] {
+                        RenderHistorySheet(g, wic.get(), directory + L"\\" + std::wstring(name.begin(), name.end()), parts,
+                                           RenderThemes()[0].input, dpi);
+                        CHECK(true);
+                    });
+                }
+            }
         }
     }
     // A regional number format: de-DE's decimal comma in English and German, light at 96 DPI, as the

@@ -73,7 +73,7 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   plurals, the pixel unit, the quota keys' description, the usage graph's section) and the
   threshold notifications' level as whole texts on the Display page in Chinese.
   `fixtures/i18n-layout.inc`: the settings window in every language and the pseudo-locale: a
-  layout audit of every page (account cards in every state, expanded per provider and empty;
+  layout audit (`fixtures/layout-audit.inc`, shared with the history target) of every page (account cards in every state, expanded per provider and empty;
   Layout per tile style and with placement notes; Display, Behavior, History and About states) at
   the default and the window's minimum size (labels wider than their control, text cut without a
   tooltip holding it whole where the pointer hits, wrapped text taller than its slot or breaking a
@@ -238,11 +238,19 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   chips disabled), `fixtures/history-tooltip.inc` (the single-account readout guarantee: the widest
   mandatory parts the production readout rows print, then ten such rows placed at every pointer
   position of an 800 x 590 DIP work area with 32 and 256 DIP pointers at 96 and 144 DPI, again in
-  zh-Hans and the pseudo-locale, where only the pointer's clearance is checked and the rows placed
-  are reported; complete-text tooltips placed whole there; `OBSERVE` lines report widths and
-  capacities), `fixtures/i18n-history.inc` (compact dates and chart ticks per language, the
-  status pill's plural, and the controller's language switch: status, cards, ticks and readout
-  re-labeled, a modal keeping its language; an export's save dialog title, notice and progress
+  every language, and in the pseudo-locale, where only the pointer's clearance is checked and the
+  rows placed are reported; complete-text tooltips placed whole there; `OBSERVE` lines report
+  widths and capacities), `fixtures/i18n-history-layout.inc` (the window in every language and the
+  pseudo-locale at its default and minimum client: each state its controller composes over the
+  synthetic journals, audited by `fixtures/layout-audit.inc`, plus the header's items in its
+  column, chips' names, time labels apart and inside the chart's card at 96 and 144 DPI and the
+  chart's message in the plot; `OBSERVE` lines report the header's height and command bar rows;
+  then an export's progress reserve over plural forms, the pill under a title that needs the
+  room, the cards' wrapping, the ticks' measured spacing and cut navigation labels' tooltips; its
+  cases are also the localization review renders'), `fixtures/i18n-history.inc` (compact dates
+  and chart ticks per language, the status pill's plural, and the controller's language switch:
+  status, cards, ticks and readout re-labeled, a modal keeping its language; an export's save
+  dialog title, notice and progress
   in Russian with their plurals, its notice re-labeled by a switch; Delete history's dialog and
   notices in Russian with the journal's reason; a dialog keeping the language it opened in; the
   readout's rows in Chinese; regional formats: values, hours, axis labels and cards in de-DE,
@@ -271,10 +279,13 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   (same themes and DPIs): the readout placed on each side of the pointer by the production
   placement, row forms, a shortened name, the production time forms (a previous year's, this
   year's), two columns, the "+N more" hint, and the complete-text tooltips (a chip's, the icon
-  buttons'); also in zh-Hans and the pseudo-locale, light at 96 and 144 DPI
-  (`render-history-tooltips-<tag>-light-*`), with `render-history-i18n-<tag>-light-*`: the
-  default view, the 30-day and All retained ticks and a readout on the chart as the controller
-  composes them in that language; `render-history-i18n-<en|de>-de-DE-light-96`: the default view
+  buttons'); also in the pseudo-locale, de, ru, ja and zh-Hans, light at 96 and 144 DPI
+  (`render-history-tooltips-<tag>-light-*`), with `render-history-i18n-<sheet>-<tag>-light-96`
+  and `-96-min` (the window's default and minimum client) for each state as the controller
+  composes it in that language (`fixtures/i18n-history-layout.inc`'s cases): `default` (also
+  `-144`), `account`, `compare` (with a readout on the chart), `states`, `notices`, `empty`,
+  `menu`, `nav` and `chart` (every view and each range's ticks; also `-144`);
+  `render-history-i18n-<en|de>-de-DE-light-96`: the default view
   with its cards, All meters' axes and a readout under de-DE's number format.
 - `host-compile`, `probe-compile`, `host-probe`: the toolkit with its native host
   (`ui/system-theme.h`, `surface.h`, `window-icon.h`, `popup.h`, `text-box.h`, `host.h`,

@@ -14,6 +14,7 @@
 #include "i18n-taskbar.inc"
 #include "i18n-errors.inc"
 #include "i18n-numbers.inc"
+#include "layout-audit.inc"
 #include "i18n-layout.inc"
 #include "render-support.inc"
 #include "render.inc"

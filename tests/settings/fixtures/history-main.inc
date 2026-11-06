@@ -13,6 +13,8 @@
 #include "history-chart.inc"
 #include "i18n-history.inc"
 #include "i18n-journal.inc"
+#include "layout-audit.inc"
+#include "i18n-history-layout.inc"
 #include "history-render.inc"
 
 int main(int argc, char** argv) {
@@ -38,6 +40,7 @@ int main(int argc, char** argv) {
         RunHistoryChartTests();
         RunHistoryI18nTests();
         RunJournalErrorI18nTests();
+        RunHistoryLayoutTests();
     }
     std::cout << "RESULT " << passed << " passed, " << failed << " failed; " << assertions << " assertions\n";
     CoUninitialize();

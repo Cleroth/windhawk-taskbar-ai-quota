@@ -247,8 +247,7 @@ static std::wstring HistoryUiNumber(const I18nLocale& locale, double value, int 
 }
 
 // An export's progress line: `Exporting 12,345 rows…`, the count in the regional digit groups.
-// Digits are tabular: a count's width bounds every smaller one's in a language whose plural forms
-// are as wide.
+// Digits are tabular: within a plural form, a count's width bounds every smaller one's.
 static std::wstring HistoryUiProgressText(const I18nLocale& locale, size_t rows) {
     return I18nText(locale, TrCtx(L"history-export", L"{rows, plural, one{Exporting # rows\u2026} "
                                                      L"other{Exporting # rows\u2026}}"),

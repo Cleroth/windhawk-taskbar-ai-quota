@@ -375,7 +375,9 @@ static void RunHistoryFrameTests() {
         view.accounts[2].label = L"Claude Max personal";
         CHECK(TestFind(TestHistoryFrame(view, {800, 550}).main,
                        L"Anthropic \u00B7 Recording \u00B7 Updated Sat 31 Oct 14:32"));
-        // Before the first load (no status) nothing moves; a title too long for the row moves it.
+        // Before the first load (no status) nothing moves; a title too long for the row moves it,
+        // and one too long even beside the pill alone moves the pill too: after the account's
+        // line, the title up to the buttons.
         view = TestHistoryView();
         view.status.clear();
         frame = TestHistoryFrame(view, {800, 550});
@@ -384,9 +386,13 @@ static void RunHistoryFrameTests() {
         view.accounts[0].label = L"Research \u2014 shared Max seat for the whole engineering team";
         view.selected = 0;
         frame = TestHistoryFrame(view);
-        CHECK(TestFind(frame.main, L"OpenAI \u00B7 Recording \u00B7 Updated Sat 31 Oct 14:32"));
+        const UiItem* accountLine = TestFind(frame.main, L"OpenAI \u00B7 Recording \u00B7 Updated Sat 31 Oct 14:32");
         const UiItem* longTitle = TestFind(frame.main, view.accounts[0].label);
-        CHECK(longTitle->trim && longTitle->rect.right < TestFind(frame.main, L"Recording \u00B7 90 days")->rect.left);
+        const UiItem* movedPill = TestFind(frame.main, L"Recording \u00B7 90 days");
+        float accountWidth = TestTextWidth(L"OpenAI \u00B7 Recording \u00B7 Updated Sat 31 Oct 14:32", UiFont::Note);
+        CHECK(accountLine && longTitle->trim && longTitle->rect.right == 1100 - 24 - 104 - 12);
+        CHECK(TestSameRect(movedPill->rect, {272 + accountWidth + 12, 41.5f, movedPill->rect.right, 61.5f}));
+        CHECK(accountLine->rect.right == movedPill->rect.left - 12 && UiFindItem(frame, kHistoryUiViews)->rect.top == 70);
     });
 
     Run("history frame: view and range segments, the Compare switch; comparing shows 7d disabled", [] {

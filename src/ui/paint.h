@@ -141,7 +141,6 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                                  {r.left + labelLeft, centerY - label.lineHeight / 2}, ink);
                     break;
                 }
-                float labelRight = r.right - 14;
                 if (!item.runs.empty()) {
                     const UiRun& run = item.runs.front();
                     UiTextStyle value = UiTextStyleFor(UiFont::Caption);
@@ -153,10 +152,9 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                                          run.ink != UiInk::Inherit ? UiInkColor(p, run.ink) : ink;
                     UiDrawLayout(target, cache, text, {valueLeft, centerY - value.lineHeight / 2},
                                  item.enabled ? color : UiFade(color, 0.45f));
-                    labelRight = valueLeft - 30;
                 }
                 UiDrawLayout(target, cache,
-                             UiLayout(g, item.text, label, std::max(labelRight - r.left - labelLeft, 0.0f), false,
+                             UiLayout(g, item.text, label, UiNavLabelWidth(g, item), false,
                                       DWRITE_TEXT_ALIGNMENT_LEADING, true),
                              {r.left + labelLeft, centerY - label.lineHeight / 2}, ink);
                 break;

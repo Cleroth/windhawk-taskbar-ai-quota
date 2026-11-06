@@ -333,6 +333,19 @@ static UiScrollbar UiNavScrollbar(const UiFrame& frame, float offset, bool expan
     return bar;
 }
 
+// A navigation entry's label room (ui/paint.h draws it there, ellipsized): after its glyph (44 DIP
+// in) or shape (40), else 12 DIP in; up to 30 DIP before its trailing value (a semibold caption 14
+// DIP from the edge), else 14 DIP from the edge.
+static float UiNavLabelWidth(UiGraphics& g, const UiItem& item) {
+    float labelLeft = !item.icon.empty() ? 44 : !item.parts.empty() ? 40 : 12, labelRight = item.rect.right - 14;
+    if (!item.runs.empty()) {
+        UiTextStyle value = UiTextStyleFor(UiFont::Caption);
+        value.weight = DWRITE_FONT_WEIGHT_SEMI_BOLD;
+        labelRight = item.rect.right - 14 - UiLayoutSize(UiLayout(g, UiRunsText(item.runs), value, 10000, false)).width - 30;
+    }
+    return std::max(labelRight - item.rect.left - labelLeft, 0.0f);
+}
+
 // Shared builders. Sizes follow the approved mockups (CSS px = DIP).
 
 // Section header (mockup .shead): BodyStrong text at y; returns where the next card starts.

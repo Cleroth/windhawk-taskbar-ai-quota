@@ -26069,6 +26069,19 @@ static UiScrollbar UiNavScrollbar(const UiFrame& frame, float offset, bool expan
     return bar;
 }
 
+// A navigation entry's label room (ui/paint.h draws it there, ellipsized): after its glyph (44 DIP
+// in) or shape (40), else 12 DIP in; up to 30 DIP before its trailing value (a semibold caption 14
+// DIP from the edge), else 14 DIP from the edge.
+static float UiNavLabelWidth(UiGraphics& g, const UiItem& item) {
+    float labelLeft = !item.icon.empty() ? 44 : !item.parts.empty() ? 40 : 12, labelRight = item.rect.right - 14;
+    if (!item.runs.empty()) {
+        UiTextStyle value = UiTextStyleFor(UiFont::Caption);
+        value.weight = DWRITE_FONT_WEIGHT_SEMI_BOLD;
+        labelRight = item.rect.right - 14 - UiLayoutSize(UiLayout(g, UiRunsText(item.runs), value, 10000, false)).width - 30;
+    }
+    return std::max(labelRight - item.rect.left - labelLeft, 0.0f);
+}
+
 // Shared builders. Sizes follow the approved mockups (CSS px = DIP).
 
 // Section header (mockup .shead): BodyStrong text at y; returns where the next card starts.
@@ -26728,7 +26741,6 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                                  {r.left + labelLeft, centerY - label.lineHeight / 2}, ink);
                     break;
                 }
-                float labelRight = r.right - 14;
                 if (!item.runs.empty()) {
                     const UiRun& run = item.runs.front();
                     UiTextStyle value = UiTextStyleFor(UiFont::Caption);
@@ -26740,10 +26752,9 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                                          run.ink != UiInk::Inherit ? UiInkColor(p, run.ink) : ink;
                     UiDrawLayout(target, cache, text, {valueLeft, centerY - value.lineHeight / 2},
                                  item.enabled ? color : UiFade(color, 0.45f));
-                    labelRight = valueLeft - 30;
                 }
                 UiDrawLayout(target, cache,
-                             UiLayout(g, item.text, label, std::max(labelRight - r.left - labelLeft, 0.0f), false,
+                             UiLayout(g, item.text, label, UiNavLabelWidth(g, item), false,
                                       DWRITE_TEXT_ALIGNMENT_LEADING, true),
                              {r.left + labelLeft, centerY - label.lineHeight / 2}, ink);
                 break;
@@ -38212,8 +38223,7 @@ static std::wstring HistoryUiNumber(const I18nLocale& locale, double value, int 
 }
 
 // An export's progress line: `Exporting 12,345 rows…`, the count in the regional digit groups.
-// Digits are tabular: a count's width bounds every smaller one's in a language whose plural forms
-// are as wide.
+// Digits are tabular: within a plural form, a count's width bounds every smaller one's.
 static std::wstring HistoryUiProgressText(const I18nLocale& locale, size_t rows) {
     return I18nText(locale, TrCtx(L"history-export", L"{rows, plural, one{Exporting # rows\u2026} "
                                                      L"other{Exporting # rows\u2026}}"),
@@ -38571,11 +38581,12 @@ static void HistoryChartLayout(UiGraphics& g, HistoryChart& c, D2D1_RECT_F rect,
 // `Sat 31`); at most 14 days: every 1 or 2 days (`Sat 24`); at most 120 days: every 1 or 2 days,
 // or Mondays every 1, 2 or 4 weeks (`Oct 5`); beyond: every 1, 2, 3, 6, 12, 24 or 60 months from
 // January (`Oct 2026`). The step is the smallest keeping labels 52, 56 and 64 DIP apart over
-// `width`. A boundary is where the local clock (`localTime`) first reaches a new hour, day or
-// month: daylight saving moves it, a repeated hour counts once, a skipped one never. A scan in
+// `width` and each label 12 DIP from the next, as wide as `g` measures it (the axis style, the
+// frame's locale). A boundary is where the local clock (`localTime`) first reaches a new hour, day
+// or month: daylight saving moves it, a repeated hour counts once, a skipped one never. A scan in
 // steps shorter than the unit finds each, a bisection its millisecond.
-static std::vector<HistoryChartTick> HistoryChartTicks(const I18nLocale& locale, ULONGLONG from, ULONGLONG to,
-                                                       float width, const HistoryUiLocalTime& localTime) {
+static std::vector<HistoryChartTick> HistoryChartTicks(UiGraphics& g, const I18nLocale& locale, ULONGLONG from,
+                                                       ULONGLONG to, float width, const HistoryUiLocalTime& localTime) {
     std::vector<HistoryChartTick> ticks;
     if (to <= from + 1 || width <= 0) return ticks;
     enum class Unit { Hour, Day, Month };
@@ -38601,15 +38612,8 @@ static std::vector<HistoryChartTick> HistoryChartTicks(const I18nLocale& locale,
                              days <= 14          ? std::vector<int>{1, 2} : std::vector<int>{1, 2, 7, 14, 28};
     double unitMs = unit == Unit::Hour ? 3600000.0 : unit == Unit::Day ? double(kHistoryDayMs) : 30.44 * kHistoryDayMs;
     float spacing = unit == Unit::Hour ? 52.0f : unit == Unit::Day ? 56.0f : 64.0f;
-    int step = steps.back();
-    for (int s : steps) {
-        if (width * float(double(s) * unitMs / span) >= spacing) {
-            step = s;
-            break;
-        }
-    }
     // Mondays are days 4 + 7k; every second or fourth one by k.
-    auto chosen = [&](int64_t b) {
+    auto chosen = [&](int64_t b, int step) {
         if (unit != Unit::Day || step < 7) return mod(b, step) == 0;
         return mod(b, 7) == 4 && mod((b - 4) / 7, step / 7) == 0;
     };
@@ -38627,6 +38631,15 @@ static std::vector<HistoryChartTick> HistoryChartTicks(const I18nLocale& locale,
                         {{L"weekday", I18nText(locale, kHistoryUiDays[mod(day(t) + 4, 7)])}, {L"day", t.wDay}});
     };
 
+    // Every boundary in the period, its label made and measured once a step needs it.
+    struct Boundary {
+        ULONGLONG time;
+        int64_t bucket;
+        SYSTEMTIME at;
+        std::wstring label{};
+        float width = -1;
+    };
+    std::vector<Boundary> boundaries;
     SYSTEMTIME start = localTime(from);
     if (!valid(start)) return ticks;
     int64_t seen = bucket(start);
@@ -38647,8 +38660,38 @@ static std::vector<HistoryChartTick> HistoryChartTicks(const I18nLocale& locale,
         }
         SYSTEMTIME at = localTime(hi);
         seen = bucket(at);
-        if (chosen(seen)) ticks.push_back({hi, label(at)});
+        boundaries.push_back({hi, seen, at});
         lo = hi;
+    }
+    auto labeled = [&](Boundary& b) -> Boundary& {
+        if (b.width < 0) {
+            b.label = label(b.at);
+            b.width = UiLayoutSize(UiLayout(g, b.label, kHistoryChartAxisStyle, 10000, false)).width;
+        }
+        return b;
+    };
+    int step = steps.back();
+    for (int s : steps) {
+        if (width * float(double(s) * unitMs / span) < spacing) continue;
+        bool apart = true;
+        float previous = 0, previousWidth = -1;
+        for (Boundary& b : boundaries) {
+            if (!chosen(b.bucket, s)) continue;
+            float x = width * float(double(b.time - from) / span), labelWidth = labeled(b).width;
+            if (previousWidth >= 0 && x - previous < (previousWidth + labelWidth) / 2 + 12) {
+                apart = false;
+                break;
+            }
+            previous = x;
+            previousWidth = labelWidth;
+        }
+        if (apart) {
+            step = s;
+            break;
+        }
+    }
+    for (Boundary& b : boundaries) {
+        if (chosen(b.bucket, step)) ticks.push_back({b.time, labeled(b).label});
     }
     return ticks;
 }
@@ -38784,9 +38827,10 @@ static std::vector<size_t> HistoryChartEmphasis(const std::vector<HistoryUiLine>
 // Scene ------------------------------------------------------------------------------------------
 
 // Fill and Hatch: a rectangle (the band; high contrast hatches it). Rule: a horizontal line
-// (gridlines, the threshold). Label: text in its box (a message over a backdrop of `fill`). Run:
-// a polyline of one continuous stretch, round-capped and joined. Dot: a lone reading, `fill`
-// inside (the background: hollow). Square: a flat run compressed into one point, stroke-wide.
+// (gridlines, the threshold). Label: text in its box (a message over a backdrop of `fill`, wrapped
+// in its width and centered on it). Run: a polyline of one continuous stretch, round-capped and
+// joined. Dot: a lone reading, `fill` inside (the background: hollow). Square: a flat run
+// compressed into one point, stroke-wide.
 enum class HistoryChartMark : uint8_t { Fill, Hatch, Rule, Label, Run, Dot, Square };
 
 struct HistoryChartPrim {
@@ -39958,7 +40002,7 @@ struct HistoryController {
             if (cancelled()) c.key = {};
         }
         if (reduce || plotWidth != c.plot.right - c.plot.left || c.tickLocale != view.locale) {
-            c.ticks = HistoryChartTicks(view.locale, from, to, c.plot.right - c.plot.left,
+            c.ticks = HistoryChartTicks(g, view.locale, from, to, c.plot.right - c.plot.left,
                                         [this](ULONGLONG ms) { return ops->LocalTime(ms); });
             c.tickLocale = view.locale;
         }
@@ -40068,18 +40112,26 @@ static void HistoryUiPaintCustom(ID2D1RenderTarget* target, UiGraphics& g, UiTar
                     target->DrawEllipse(&dot, UiBrush(target, cache, prim.color), prim.width);
                     break;
                 }
-                // Text on one line in its box; a backdrop 6 DIP around a message's ink.
+                // Text on one line in its box; a message (its backdrop 6 DIP around its ink) wraps
+                // in its box's width, centered on it.
                 case HistoryChartMark::Label: {
-                    IDWriteTextLayout* layout =
-                        UiLayout(g, prim.text, prim.style, std::max(prim.rect.right - prim.rect.left, 0.0f), false, prim.align);
-                    if (prim.fill.a > 0) {
+                    bool message = prim.fill.a > 0;
+                    IDWriteTextLayout* layout = UiLayout(g, prim.text, prim.style,
+                                                         std::max(prim.rect.right - prim.rect.left, 0.0f), message, prim.align);
+                    float top = prim.rect.top;
+                    if (message) {
                         DWRITE_TEXT_METRICS metrics{};
                         winrt::check_hresult(layout->GetMetrics(&metrics));
-                        target->FillRectangle(D2D1::RectF(prim.rect.left + metrics.left - 6, prim.rect.top,
-                                                          prim.rect.left + metrics.left + metrics.width + 6, prim.rect.bottom),
+                        float bottom = prim.rect.bottom;
+                        if (metrics.height > bottom - top) {
+                            top = (prim.rect.top + prim.rect.bottom - metrics.height) / 2;
+                            bottom = top + metrics.height;
+                        }
+                        target->FillRectangle(D2D1::RectF(prim.rect.left + metrics.left - 6, top,
+                                                          prim.rect.left + metrics.left + metrics.width + 6, bottom),
                                               UiBrush(target, cache, prim.fill));
                     }
-                    UiDrawLayout(target, cache, layout, {prim.rect.left, prim.rect.top}, prim.color);
+                    UiDrawLayout(target, cache, layout, {prim.rect.left, top}, prim.color);
                     break;
                 }
             }
@@ -40313,89 +40365,120 @@ static float HistoryUiBuildContent(UiGraphics& g, const HistoryUiView& view, std
     // comparing, whose cards hold both periods), 8 DIP apart, each row as tall as its tallest card;
     // the No readings card last. A card: 11 DIP (border and padding) around a 16 DIP head, the
     // headline row (4 DIP above it, 30, 2 below) and 16 DIP lines; No readings: 24 DIP rows 4 DIP
-    // under its head.
-    std::vector<float> heights;
-    for (const HistoryUiCard& card : view.cards) {
-        heights.push_back(11 + 16 + (card.value.empty() ? 4 : 36) + 16 * float(card.lines.size()) + 11);
-    }
-    if (!view.noReadings.empty()) heights.push_back(11 + 16 + 4 + 24 * float(view.noReadings.size()) + 11);
-    if (heights.empty()) return y - 10;
+    // under its head. Text longer than its line wraps and the card grows with it; the headline's
+    // time that doesn't fit beside its value takes a line under it, and an account's detail that
+    // doesn't fit beside its label the lines under that.
+    if (view.cards.empty() && view.noReadings.empty()) return y - 10;
     size_t columns = size_t(std::clamp(int((width + 8) / 248), 1, view.compare ? 2 : 3));
     float cardWidth = (width - 8 * float(columns - 1)) / float(columns);
-    // A card's line (mockup .sthead svg: 16 x 8 DIP, 3 DIP wide whatever the series' width) in its
-    // chart line's color (history/chart.h; high contrast: text and link alternating as inks).
+    UiTextStyle number = UiTextStyleFor(UiFont::Subtitle), caption = UiTextStyleFor(UiFont::Caption);
+    auto measure = [&](const std::wstring& text, const UiTextStyle& style) {
+        return UiLayoutSize(UiLayout(g, text, style, 10000, false)).width;
+    };
+    // How tall text is wrapped at `textWidth`: at least one line.
+    auto wrapped = [&](const std::vector<UiRun>& runs, UiFont font, float textWidth) {
+        return std::max(UiTextStyleFor(font).lineHeight,
+                        UiLayoutSize(UiRichLayout(g, runs, font, std::max(textWidth, 1.0f))).height);
+    };
+    // Card `i` at (cx, top), its items added only when `place`; returns its height. A card's line
+    // (mockup .sthead svg: 16 x 8 DIP, 3 DIP wide whatever the series' width) in its chart line's
+    // color (history/chart.h; high contrast: text and link alternating as inks).
+    auto lay = [&](size_t i, float cx, float top, bool place) {
+        float left = cx + 13, right = cx + cardWidth - 13;
+        // One line stays ellipsized at its width (it fits); more wrap.
+        auto add = [&](D2D1_RECT_F rect, std::vector<UiRun> runs, UiFont font, UiInk ink) {
+            if (place) text(rect, std::move(runs), font, ink, rect.bottom - rect.top <= UiTextStyleFor(font).lineHeight);
+        };
+        if (i == view.cards.size()) {
+            std::vector<UiRun> head{{I18nText(locale, TrCtx(L"history-card", L"No readings in range"))}};
+            float extra = wrapped(head, UiFont::Caption, right - left) - 16;
+            add({left, top + 11, right, top + 27 + extra}, std::move(head), UiFont::Caption, UiInk::Primary);
+            float row = top + 31 + extra;
+            for (const HistoryUiNoReadings& entry : view.noReadings) {
+                if (std::vector<UiShapePart> logo = HistoryUiLogo(view, entry.provider, true); place && !logo.empty()) {
+                    shape({left, row + 4, left + 16, row + 20}, 24, std::move(logo));
+                }
+                float labelLeft = left + 24;
+                float labelWidth = std::min(std::ceil(measure(entry.label, UiTextStyleFor(UiFont::Note))),
+                                            std::max(right - labelLeft, 0.0f));
+                if (place) {
+                    text({labelLeft, row + 2.5f, labelLeft + labelWidth, row + 21.5f}, {{entry.label}}, UiFont::Note,
+                         UiInk::Primary, true);
+                }
+                if (measure(entry.detail, caption) <= right - (labelLeft + labelWidth + 8)) {
+                    add({labelLeft + labelWidth + 8, row + 4, right, row + 20}, {{entry.detail}}, UiFont::Caption,
+                        UiInk::Muted);
+                    row += 24;
+                } else {
+                    float detail = wrapped({{entry.detail}}, UiFont::Caption, right - labelLeft);
+                    add({labelLeft, row + 22, right, row + 22 + detail}, {{entry.detail}}, UiFont::Caption, UiInk::Muted);
+                    row += 24 + detail;
+                }
+            }
+            return row + 11 - top;
+        }
+        const HistoryUiCard& card = view.cards[i];
+        float titleLeft = left;
+        if (!card.detailsOnly) {
+            UiShapePart line{L"M1 4H15", {}, UiInk::Inherit, 1, 3};
+            if (hc) line.ink = i % 2 ? UiInk::Link : UiInk::Primary;
+            else line.color = HistoryUiHue(card.color, light);
+            if (place) shape({left, top + 15, left + 16, top + 23}, 16, {line});
+            titleLeft = left + 24;
+        }
+        // The account's recording status muted after the title: the template's `status` link
+        // marks it.
+        std::vector<UiRun> title{{card.title}};
+        if (!card.status.empty()) {
+            title.clear();
+            for (const I18nRun& run : I18nRuns(locale, TrCtx(L"history-card", L"{title}<link id=\"status\"> \u00B7 "
+                                                                              L"{status}</link>"),
+                                               {{L"title", card.title}, {L"status", card.status}})) {
+                title.push_back(run.link.empty() ? UiRun{run.text} : UiRun{run.text, UiRunStyle::Normal, UiInk::Muted});
+            }
+        }
+        float extra = wrapped(title, UiFont::Caption, right - titleLeft) - 16;
+        add({titleLeft, top + 11, right, top + 27 + extra}, std::move(title), UiFont::Caption, UiInk::Primary);
+        float lineTop = top + 31 + extra;
+        if (!card.value.empty()) {
+            // Headline (mockup .stnum, .stunit): the value in display type, then its time in
+            // caption type 5 DIP after it, on the value's baseline.
+            UiFontMetrics a = UiFontMetricsFor(g, number), b = UiFontMetricsFor(g, caption);
+            float numberTop = top + 33 + extra;
+            float whenTop = numberTop + (number.lineHeight - a.ascent - a.descent) / 2 + a.ascent -
+                            (caption.lineHeight - b.ascent - b.descent) / 2 - b.ascent;
+            float numberRight = std::min(left + std::ceil(measure(card.value, number)) + 1, right);
+            float valueExtra = wrapped({{card.value}}, UiFont::Subtitle, right - left) - number.lineHeight;
+            add({left, numberTop, valueExtra > 0 ? right : numberRight, numberTop + number.lineHeight + valueExtra},
+                {{card.value}}, UiFont::Subtitle, UiInk::Primary);
+            lineTop = top + 63 + extra + valueExtra;
+            if (valueExtra == 0 && measure(card.when, caption) <= right - (numberRight + 5)) {
+                add({numberRight + 5, whenTop, right, whenTop + caption.lineHeight}, {{card.when}}, UiFont::Caption,
+                    UiInk::Muted);
+            } else {
+                float when = wrapped({{card.when}}, UiFont::Caption, right - left);
+                add({left, lineTop, right, lineTop + when}, {{card.when}}, UiFont::Caption, UiInk::Muted);
+                lineTop += when;
+            }
+        }
+        for (const std::wstring& line : card.lines) {
+            float height = wrapped({{line}}, UiFont::Caption, right - left);
+            add({left, lineTop, right, lineTop + height}, {{line}}, UiFont::Caption, UiInk::Muted);
+            lineTop += height;
+        }
+        return lineTop + 11 - top;
+    };
+    std::vector<float> heights;
+    for (size_t i = 0; i < view.cards.size() + !view.noReadings.empty(); i++) {
+        heights.push_back(lay(i, x + (cardWidth + 8) * float(i % columns), 0, false));
+    }
     for (size_t first = 0; first < heights.size(); first += columns) {
         size_t last = std::min(first + columns, heights.size());
         float rowHeight = *std::max_element(heights.begin() + ptrdiff_t(first), heights.begin() + ptrdiff_t(last));
         for (size_t i = first; i < last; i++) {
-            float cx = x + (cardWidth + 8) * float(i - first), left = cx + 13, right = cx + cardWidth - 13;
+            float cx = x + (cardWidth + 8) * float(i - first);
             panel({cx, y, cx + cardWidth, y + rowHeight});
-            if (i == view.cards.size()) {
-                text({left, y + 11, right, y + 27}, {{I18nText(locale, TrCtx(L"history-card", L"No readings in range"))}},
-                     UiFont::Caption, UiInk::Primary, true);
-                float row = y + 31;
-                for (const HistoryUiNoReadings& entry : view.noReadings) {
-                    if (std::vector<UiShapePart> logo = HistoryUiLogo(view, entry.provider, true); !logo.empty()) {
-                        shape({left, row + 4, left + 16, row + 20}, 24, std::move(logo));
-                    }
-                    float labelLeft = left + 24;
-                    float labelWidth = std::min(
-                        std::ceil(UiLayoutSize(UiLayout(g, entry.label, UiTextStyleFor(UiFont::Note), 10000, false)).width),
-                        std::max(right - labelLeft, 0.0f));
-                    text({labelLeft, row + 2.5f, labelLeft + labelWidth, row + 21.5f}, {{entry.label}}, UiFont::Note,
-                         UiInk::Primary, true);
-                    if (right - (labelLeft + labelWidth + 8) >= 16) {
-                        text({labelLeft + labelWidth + 8, row + 4, right, row + 20}, {{entry.detail}}, UiFont::Caption,
-                             UiInk::Muted, true);
-                    }
-                    row += 24;
-                }
-                continue;
-            }
-            const HistoryUiCard& card = view.cards[i];
-            float titleLeft = left;
-            if (!card.detailsOnly) {
-                UiShapePart line{L"M1 4H15", {}, UiInk::Inherit, 1, 3};
-                if (hc) line.ink = i % 2 ? UiInk::Link : UiInk::Primary;
-                else line.color = HistoryUiHue(card.color, light);
-                shape({left, y + 15, left + 16, y + 23}, 16, {line});
-                titleLeft = left + 24;
-            }
-            // The account's recording status muted after the title: the template's `status` link
-            // marks it.
-            std::vector<UiRun> title{{card.title}};
-            if (!card.status.empty()) {
-                title.clear();
-                for (const I18nRun& run : I18nRuns(locale, TrCtx(L"history-card", L"{title}<link id=\"status\"> \u00B7 "
-                                                                                  L"{status}</link>"),
-                                                   {{L"title", card.title}, {L"status", card.status}})) {
-                    title.push_back(run.link.empty() ? UiRun{run.text} : UiRun{run.text, UiRunStyle::Normal, UiInk::Muted});
-                }
-            }
-            text({titleLeft, y + 11, right, y + 27}, std::move(title), UiFont::Caption, UiInk::Primary, true);
-            float lineTop = y + 31;
-            if (!card.value.empty()) {
-                // Headline (mockup .stnum, .stunit): the value in display type, then its time in
-                // caption type 5 DIP after it, on the value's baseline.
-                UiTextStyle number = UiTextStyleFor(UiFont::Subtitle), caption = UiTextStyleFor(UiFont::Caption);
-                UiFontMetrics a = UiFontMetricsFor(g, number), b = UiFontMetricsFor(g, caption);
-                float numberTop = y + 33;
-                float whenTop = numberTop + (number.lineHeight - a.ascent - a.descent) / 2 + a.ascent -
-                                (caption.lineHeight - b.ascent - b.descent) / 2 - b.ascent;
-                float numberRight = std::min(
-                    left + std::ceil(UiLayoutSize(UiLayout(g, card.value, number, 10000, false)).width) + 1, right);
-                text({left, numberTop, numberRight, numberTop + number.lineHeight}, {{card.value}}, UiFont::Subtitle,
-                     UiInk::Primary, true);
-                if (right - (numberRight + 5) >= 16) {
-                    text({numberRight + 5, whenTop, right, whenTop + caption.lineHeight}, {{card.when}}, UiFont::Caption,
-                         UiInk::Muted, true);
-                }
-                lineTop = y + 63;
-            }
-            for (const std::wstring& line : card.lines) {
-                text({left, lineTop, right, lineTop + 16}, {{line}}, UiFont::Caption, UiInk::Muted, true);
-                lineTop += 16;
-            }
+            lay(i, cx, y, true);
         }
         y += rowHeight + 8;
     }
@@ -40425,7 +40508,15 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     // own. All accounts; configured accounts with their logo, label and weekly value (as their
     // flyout's weekly row: used or remaining, in the usage color, muted while stale, a dash while
     // unknown); then the Removed group (mockup .ngroup: a 36 DIP header), muted and without values.
+    // A label an entry cuts shows whole in its tooltip.
     frame.navPane = {0, 0, kHistoryUiNavWidth, std::max(client.height, 0.0f)};
+    auto addEntry = [&](UiItem entry) {
+        if (UiLayoutSize(UiLayout(g, entry.text, UiTextStyleFor(UiFont::Body), 10000, false)).width >
+            UiNavLabelWidth(g, entry)) {
+            entry.tooltip = {{entry.text}};
+        }
+        frame.nav.push_back(std::move(entry));
+    };
     float y = 6;
     UiItem all;
     all.id = kHistoryUiNavAll;
@@ -40436,7 +40527,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     all.selected = !selected;
     all.enabled = active;
     all.action = HistoryUiAction(HistoryUiCommand::Select);
-    frame.nav.push_back(std::move(all));
+    addEntry(std::move(all));
     y += 41;
     bool removedHeader = false;
     for (size_t i = 0; i < view.accounts.size(); i++) {
@@ -40495,7 +40586,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
             }
             entry.runs.push_back(std::move(value));
         }
-        frame.nav.push_back(std::move(entry));
+        addEntry(std::move(entry));
         y += 41;
     }
     frame.navHeight = y - 3 + 6;
@@ -40556,9 +40647,10 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
 
     // Status and pill (mockup .hstat, .pill) 12 DIP before the buttons. The status (or a running
     // export's progress in its place, s-states .upd: a 16 DIP ring and 6 DIP gap before its row
-    // count, drawn by the client so the count changes without a rebuild; as wide as the journal's
-    // largest export, 250,000 samples of 8 rows) stays on the title row while it holds the whole
-    // title too; otherwise it joins the line under the title.
+    // count, drawn by the client so the count changes without a rebuild; as wide as the widest line
+    // the journal's largest export, 250,000 samples of 8 rows, can show in any plural form) stays on
+    // the title row while it holds the whole title too; otherwise it joins the line under the
+    // title. So does the pill, and the status with it, when the title doesn't fit beside the pill.
     auto measure = [&](const std::wstring& text, UiFont font) {
         return std::ceil(UiLayoutSize(UiLayout(g, text, UiTextStyleFor(font), 10000, false)).width);
     };
@@ -40571,7 +40663,22 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
         item.align = align;
         frame.main.push_back(std::move(item));
     };
-    const std::wstring widest = HistoryUiProgressText(locale, 2000000);
+    // Each plural form at its largest count (digits are tabular): counts below 2,000,000 down to
+    // the first of each form, and the small ones only some forms take.
+    std::vector<std::wstring> progressLines;
+    unsigned forms = 0;
+    auto form = [&](size_t rows) {
+        unsigned bit = 1u << unsigned(I18nPluralCategory(locale.Language().plural, rows));
+        if (!(std::exchange(forms, forms | bit) & bit)) progressLines.push_back(HistoryUiProgressText(locale, rows));
+    };
+    for (size_t rows = 2000000; rows > 1999900; rows--) form(rows);
+    form(1);
+    form(0);
+    auto progressWidth = [&](UiFont font) {
+        float widest = 0;
+        for (const std::wstring& line : progressLines) widest = std::max(widest, measure(line, font));
+        return 22 + widest;
+    };
     struct Pill {
         std::wstring text;
         UiInk ink;
@@ -40591,11 +40698,15 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     const std::wstring& title = selected ? selected->label : allAccounts;
     D2D1_SIZE_F pillSize = UiPillSize(g, pill.text);
     float titleWidth = std::ceil(UiLayoutSize(UiLayout(g, title, UiTextStyleFor(UiFont::Title), 100000, false)).width);
-    float statusWidth = view.exporting     ? 22 + measure(widest, UiFont::Caption) :
+    float statusWidth = view.exporting     ? progressWidth(UiFont::Caption) :
                         view.status.empty() ? 0 : measure(view.status, UiFont::Caption);
-    bool narrow = statusWidth > 0 && titleWidth + 12 + statusWidth + 12 + pillSize.width + 12 + 104 > width;
-    float pillRight = right - 104 - 12, titleRight = pillRight - pillSize.width - 12;
-    UiAddPill(frame.main, id++, {titleRight + 12, 14, pillRight, 34}, pill.text, pill.ink, pill.on);
+    bool pillUnder = titleWidth + 12 + pillSize.width + 12 + 104 > width;
+    bool narrow = statusWidth > 0 && (pillUnder || titleWidth + 12 + statusWidth + 12 + pillSize.width + 12 + 104 > width);
+    float pillRight = right - 104 - 12, titleRight = pillRight;
+    if (!pillUnder) {
+        titleRight = pillRight - pillSize.width - 12;
+        UiAddPill(frame.main, id++, {titleRight + 12, 14, pillRight, 34}, pill.text, pill.ink, pill.on);
+    }
     if (statusWidth > 0 && !narrow) {
         if (view.exporting) {
             progress({titleRight - statusWidth, 14, titleRight, 34}, UiFont::Caption, DWRITE_TEXT_ALIGNMENT_TRAILING);
@@ -40621,7 +40732,9 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
     frame.main.push_back(std::move(heading));
 
     // Under the title (mockup .psub): one account's provider and recording, then a status that
-    // didn't fit the title row; an export's progress 12 DIP after that line, or starting it.
+    // didn't fit the title row; after that line (or starting it), 12 DIP apart, an export's
+    // progress and the pill that didn't fit beside the title, each starting a line of its own 22
+    // DIP lower where it doesn't fit after what precedes it.
     std::wstring subtitle;
     if (selected) {
         I18nKey recording = selected->removed ? TrCtx(L"history-account-state", L"Removed") :
@@ -40639,14 +40752,26 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
                                                {{L"account", subtitle}, {L"updated", view.status}});
     }
     float top = 56;
-    if (!subtitle.empty() || narrow) {
-        float lineRight = right;
+    if (!subtitle.empty() || narrow || pillUnder) {
+        float lineRight = right, x = subtitle.empty() ? left : left + measure(subtitle, UiFont::Note) + 12, lineTop = 42;
+        auto flow = [&](float itemWidth) {
+            if (x > left && x + itemWidth > right) {
+                x = left;
+                lineTop += 22;
+            }
+            if (lineTop == 42) lineRight = std::min(lineRight, x - 12);
+            float at = x;
+            x += itemWidth + 12;
+            return at;
+        };
         if (narrow && view.exporting) {
-            float progressWidth = 22 + measure(widest, UiFont::Note);
-            float x = subtitle.empty() ? left :
-                      std::max(std::min(left + measure(subtitle, UiFont::Note) + 12, right - progressWidth), left);
-            progress({x, 42, x + progressWidth, 61}, UiFont::Note, DWRITE_TEXT_ALIGNMENT_LEADING);
-            lineRight = x - 12;
+            float progressLine = progressWidth(UiFont::Note), at = flow(progressLine);
+            progress({at, lineTop, at + progressLine, lineTop + 19}, UiFont::Note, DWRITE_TEXT_ALIGNMENT_LEADING);
+        }
+        if (pillUnder) {
+            float at = flow(pillSize.width);
+            UiAddPill(frame.main, id++, {at, lineTop - 0.5f, at + pillSize.width, lineTop + 19.5f}, pill.text, pill.ink,
+                      pill.on);
         }
         if (!subtitle.empty()) {
             UiItem line;
@@ -40659,7 +40784,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
             line.trim = true;
             frame.main.push_back(std::move(line));
         }
-        top = 70;
+        top = 70 + (lineTop - 42);
     }
 
     // Command bar (mockup .cmdbar): View and Range segments and the Compare switch (4 DIP more

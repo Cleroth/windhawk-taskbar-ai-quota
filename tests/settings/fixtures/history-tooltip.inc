@@ -52,10 +52,11 @@ struct TestLocaleScope {
 
 // The single-account readout guarantee in a language (`name`: none for English), measured with
 // its locale's text formats: its widest mandatory part, then ten such rows placed everywhere. The
-// width bound, the time forms and the ten rows are English's promises; other languages report
-// their widths and the fewest rows placed, and are checked to never cover the pointer.
+// width bound and the time forms are English's promises; every language keeps the ten rows. The
+// pseudo-locale (padded about 35% on purpose) only reports the fewest rows placed; nothing covers
+// the pointer in any.
 static void RunReadoutGuarantee(const I18nLocale& locale, const std::string& name) {
-    const bool english = locale == I18nLocale();
+    const bool english = locale == I18nLocale(), pseudo = locale.Language().pseudo;
     std::string suffix = english ? "" : " (" + name + ")";
     std::vector<UiRun> widest;
     Run("readout guarantee" + suffix + ": the widest mandatory parts the production rows print (both periods, each "
@@ -185,14 +186,15 @@ static void RunReadoutGuarantee(const I18nLocale& locale, const std::string& nam
                           << capacityAt << "\n";
             }
         }
-        CHECK((!english || failures == 0) && covering == 0);
+        CHECK((pseudo || failures == 0) && covering == 0);
     });
 }
 
 static void RunHistoryTooltipTests() {
     RunReadoutGuarantee({}, "");
-    RunReadoutGuarantee(I18nLocale(*I18nLanguageByTag(L"zh-Hans")), "zh-Hans");
-    RunReadoutGuarantee(I18nLocale(*I18nLanguageByTag(L"qps-ploc")), "qps-ploc");
+    for (std::string tag : {"de", "es", "fr", "ja", "pt-BR", "ru", "zh-Hans", "qps-ploc"}) {
+        RunReadoutGuarantee(I18nLocale(*I18nLanguageByTag(std::wstring(tag.begin(), tag.end()))), tag);
+    }
 
     Run("complete-text tooltips: the Export description and a long chip title with its explanation, "
         "measured at their full height, placed whole and clear at every pointer position at the floor "
@@ -461,7 +463,7 @@ static void RunHistoryTooltipRenders(const std::wstring& directory) {
         }
     }
     // The localization review's languages, light at 96 and 144 DPI.
-    for (std::string_view tag : {"zh-Hans", "qps-ploc"}) {
+    for (std::string_view tag : {"qps-ploc", "de", "ru", "ja", "zh-Hans"}) {
         std::wstring wide(tag.begin(), tag.end());
         for (UINT dpi : {96u, 144u}) {
             std::string name =
