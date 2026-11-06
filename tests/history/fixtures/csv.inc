@@ -171,8 +171,8 @@
                                  false, I18nLocale(*I18nLanguageByTag(L"de"))};
         HistorySeriesSet german = HistoryBuildSeries(samples, accounts, query, Never);
         CHECK(Meters(german, 0) == (std::set<int>{0, 1, 3, 6}) && Meters(german, 1) == (std::set<int>{0, 1, 3}));
-        CHECK(Series(german, 0, 0).legendTitle == L"CC \u00B7 5 Std." &&
-              Series(german, 0, 0).hoverTitle == L"CC \u00B7 5 Std. verbraucht (%)");
+        CHECK(Series(german, 0, 0).legendTitle == L"CC \u00B7 5\u00A0Std." &&
+              Series(german, 0, 0).hoverTitle == L"CC \u00B7 5\u00A0Std. verbraucht (%)");
         CHECK(Series(german, 0, 1).hoverTitle == L"CC \u00B7 W\u00F6chentlich verbraucht (%)");
         CHECK(Series(german, 0, 3).hoverTitle == L"CC \u00B7 Zusatzbudget verbraucht (%)");
         CHECK(Series(german, 0, 6).hoverTitle == L"CC \u00B7 Zusatzausgaben (USD)");
@@ -204,7 +204,7 @@
         HistorySeriesQuery query{-1, HistoryView::AllMeters, baseTime, baseTime + kHistoryWeekMs, baseTime, false, 90,
                                  false, I18nLocale(*I18nLanguageByTag(L"de"), I18nNumberFormatFrom(L",", L".", L"3;0"))};
         HistorySeriesSet regional = HistoryBuildSeries(samples, accounts, query, Never);
-        CHECK(Series(regional, 0, 0).legendTitle == L"CC \u00B7 5 Std.");
+        CHECK(Series(regional, 0, 0).legendTitle == L"CC \u00B7 5\u00A0Std.");
         for (uint64_t account : {0xA1ULL, 0xF6ULL}) {
             Pieces pieces;
             size_t rows = 0;

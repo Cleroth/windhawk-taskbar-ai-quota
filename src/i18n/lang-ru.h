@@ -11,12 +11,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Не удалось сохранить изменение; оно показано вместе с ошибкой.\n\nОтменить несохранённые изменения и закрыть "
      L"окно?"},
     {L"", L"A diagonal marks even use of the quota across its window, to compare with its usage.",
-     L"Диагональ показывает равномерный расход квоты за её окно — для сравнения с её использованием."},
+     L"Диагональ показывает равномерный расход квоты за её окно — для сравнения с фактическим использованием."},
     {L"", L"A faint border around each chart.", L"Едва заметная рамка вокруг каждого графика."},
     {L"", L"A full track behind each fill, or a thin rail under it.",
      L"Полная дорожка за каждым заполнением или тонкая линия под ним."},
     {L"", L"A ring around the current reading, cut out of the lines under it. Off: a plain dot.",
-     L"Кольцо вокруг текущего значения, вырезанное из линий под ним. Если выключено: простая точка."},
+     L"Кольцо вокруг текущего значения, вырезанное из линий под ним. Если выключено — простая точка."},
     {L"", L"A small triangle on the chart’s bottom edge at the current time.",
      L"Маленький треугольник у нижнего края графика в точке текущего времени."},
     {L"", L"A thin line across the chart at the current time.",
@@ -24,13 +24,13 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"A warning triangle on an account while its provider's status page reports a problem with a service it "
           L"uses: in the orange usage color for degraded service, a partial outage or maintenance, the red one for a "
           L"major outage. Off: no status pages are read.",
-     L"Предупреждающий треугольник на аккаунте, пока страница статуса его поставщика сообщает о проблеме с "
-     L"используемой им службой: оранжевого цвета использования при снижении производительности, частичном сбое или "
-     L"техобслуживании, красного — при серьёзном сбое. Если выключено, страницы статуса не читаются."},
+     L"Предупреждающий треугольник на аккаунте, пока страница состояния его поставщика сообщает о проблеме с "
+     L"используемой им службой: оранжевый цвет использования — при снижении производительности, частичном сбое или "
+     L"техобслуживании, красный — при серьёзном сбое. Если выключено, страницы состояния не загружаются."},
     {L"", L"AI subscription quotas for Anthropic, OpenAI, Google Antigravity, GitHub Copilot and OpenCode Go on the "
           L"Windows 11 taskbar.",
-     L"Квоты подписок на ИИ Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач "
-     L"Windows 11."},
+     L"Квоты ИИ-подписок Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач "
+     L"Windows 11."},
     {L"", L"Account identity is set per account in Accounts",
      L"Идентификация задаётся для каждого аккаунта в разделе «Аккаунты»"},
     {L"", L"Account margin", L"Отступ аккаунта"},
@@ -63,21 +63,22 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"mode), when selected for the account and reported: spent in Used mode, left in Remaining mode. Percent "
           L"shows the amount without a limit. OpenAI credits never get a chart of their own.",
      L"Доп. использование Anthropic или кредиты OpenAI в левом верхнем углу графика {key7d} (в режиме «Осталось» — в "
-     L"левом нижнем), если они выбраны для аккаунта и сообщаются: потраченное в режиме «Использовано», оставшееся в "
-     L"режиме «Осталось». «Процент» показывает сумму, если лимита нет. Своего графика у кредитов OpenAI нет."},
+     L"левом нижнем), если они выбраны для аккаунта и поставщик их сообщает: потраченное в режиме «Использовано», "
+     L"оставшееся в режиме «Осталось». «Процент» показывает сумму, если лимита нет. Своего графика у кредитов OpenAI "
+     L"нет."},
     {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
           L"Antigravity uses its signed-in app or CLI, which must keep running.",
-     L"Anthropic, OpenAI и GitHub Copilot входят через браузер, OpenCode Go — с ключом API. Google Antigravity "
-     L"использует своё приложение или CLI с выполненным входом; они должны оставаться запущенными."},
+     L"Вход в Anthropic, OpenAI и GitHub Copilot выполняется через браузер, в OpenCode Go — по ключу API. Google "
+     L"Antigravity использует своё приложение или CLI с выполненным входом — они должны оставаться запущенными."},
     {L"", L"Antigravity logo", L"Логотип Antigravity"},
     {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
      L"Действует только для этого пользователя Windows. При выключении сохранённая история остаётся."},
     {L"", L"Background of the details flyout and the settings and usage history windows.",
-     L"Фон всплывающих сведений, а также окон настроек и истории использования."},
-    {L"", L"Badge color", L"Цвет значка"},
-    {L"", L"Badge horizontal offset", L"Смещение значка по горизонтали"},
-    {L"", L"Badge size", L"Размер значка"},
-    {L"", L"Badge vertical offset", L"Смещение значка по вертикали"},
+     L"Фон панели сведений, а также окон параметров и истории использования."},
+    {L"", L"Badge color", L"Цвет номера"},
+    {L"", L"Badge horizontal offset", L"Смещение номера по горизонтали"},
+    {L"", L"Badge size", L"Размер номера"},
+    {L"", L"Badge vertical offset", L"Смещение номера по вертикали"},
     {L"", L"Bar gap", L"Зазор между полосами"},
     {L"", L"Bar length", L"Длина полосы"},
     {L"", L"Bar mode", L"Режим полос"},
@@ -113,7 +114,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Could not save recording consent. Recording is still off.",
      L"Не удалось сохранить согласие на запись. Запись по-прежнему выключена."},
     {L"", L"Could not save settings. The change is kept here with its error; change it again to retry.",
-     L"Не удалось сохранить настройки. Изменение остаётся здесь вместе с ошибкой; измените его ещё раз, чтобы "
+     L"Не удалось сохранить параметры. Изменение остаётся здесь вместе с ошибкой; измените его ещё раз, чтобы "
      L"повторить попытку."},
     {L"", L"Could not save the account.", L"Не удалось сохранить аккаунт."},
     {L"", L"Could not save the account. The change is kept here with its error; change it again to retry.",
@@ -122,7 +123,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Could not save the account. The copied sign-in remains under the attempted new identity. To delete it, "
           L"add an account with the attempted provider and label, then remove it.",
      L"Не удалось сохранить аккаунт. Скопированный вход остался под новым идентификатором, который пытались задать. "
-     L"Чтобы удалить его, добавьте аккаунт с этим поставщиком и меткой, а затем удалите его."},
+     L"Чтобы удалить его, добавьте аккаунт с этим поставщиком и меткой, а затем удалите этот аккаунт."},
     {L"", L"Could not update account visibility.", L"Не удалось изменить видимость аккаунта."},
     {L"", L"Credits max", L"Максимум кредитов"},
     {L"", L"Custom interval", L"Свой интервал"},
@@ -135,8 +136,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Deleted the history of removed account {label}.", L"История удалённого аккаунта {label} удалена."},
     {L"", L"Diameter in pixels.", L"Диаметр в пикселях."},
     {L"", L"Display {number} - unavailable", L"Дисплей {number} — недоступен"},
-    {L"", L"Display {number} - {width}x{height}", L"Дисплей {number} — {width}x{height}"},
-    {L"", L"Display {number} - {width}x{height} (primary)", L"Дисплей {number} — {width}x{height} (основной)"},
+    {L"", L"Display {number} - {width}x{height}", L"Дисплей {number} — {width}×{height}"},
+    {L"", L"Display {number} - {width}x{height} (primary)", L"Дисплей {number} — {width}×{height} (основной)"},
     {L"", L"Display {number} shows the bars in the tray: another mod controls the space they need. Restart Explorer "
           L"to retry.",
      L"Дисплей {number} показывает полосы в области уведомлений: нужным им местом управляет другой мод. "
@@ -163,9 +164,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"опрашиваются."},
     {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
           L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
-     L"Каждый аккаунт сам решает, записывать ли историю: <link id=\"accounts\">Аккаунты</link> > Записывать историю. "
-     L"Скрытые аккаунты не записываются, пока в разделе «Поведение» включено <link id=\"hidden\">Не опрашивать скрытые "
-     L"аккаунты</link>."},
+     L"Каждый аккаунт сам определяет, записывать ли историю: <link id=\"accounts\">Аккаунты</link> > Записывать "
+     L"историю. История скрытых аккаунтов не записывается, пока в разделе «Поведение» включено <link id=\"hidden\">Не "
+     L"опрашивать скрытые аккаунты</link>."},
     {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
           L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
           L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
@@ -180,7 +181,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Elapsed time", L"Прошедшее время"},
     {L"", L"Enter a label.", L"Введите метку."},
     {L"", L"Enter a whole number from {minimum} to {maximum}.", L"Введите целое число от {minimum} до {maximum}."},
-    {L"", L"Example accounts, updates as you change settings", L"Примеры аккаунтов, обновляются вместе с настройками"},
+    {L"", L"Example accounts, updates as you change settings", L"Примеры аккаунтов, обновляются вместе с параметрами"},
     {L"", L"Example accounts, wider than shown: drag to scroll",
      L"Примеры аккаунтов шире видимого: перетащите для прокрутки"},
     {L"", L"Export all raw meters for the selected account, or every account under All accounts. Uses the selected "
@@ -219,15 +220,16 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Скрытые аккаунты не опрашиваются и не записываются, даже если включено «Записывать историю». Выключите, чтобы "
      L"продолжить их запись. Общий параметр для всех пользователей Windows."},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
-     L"История привязана к этой записи, даже после повторного входа. Для другого входа создайте новую запись."},
+     L"История привязана к этому аккаунту и сохраняется при повторном входе. Для входа под другим логином добавьте "
+     L"новый аккаунт."},
     {L"", L"History recording is off. Saved history stays; nothing new is recorded.",
      L"Запись истории выключена. Сохранённая история остаётся; ничего нового не записывается."},
     {L"", L"History storage failed; Open usage history shows why.",
-     L"Сбой хранилища истории; причину покажет «Открыть историю использования»."},
+     L"Сбой хранилища истории; причину покажет окно истории использования."},
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
-     L"Как часто опрашиваются Anthropic, OpenAI, GitHub Copilot и OpenCode Go. Antigravity опрашивает свой локальный "
-     L"сеанс каждую минуту."},
+     L"Как часто опрашиваются Anthropic, OpenAI, GitHub Copilot и OpenCode Go. Локальный сеанс Antigravity "
+     L"опрашивается каждую минуту."},
     {L"", L"Identity", L"Идентификация"},
     {L"", L"Identity gap", L"Отступ идентификации"},
     {L"", L"Identity position", L"Положение идентификации"},
@@ -254,11 +256,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Marker style", L"Стиль меток"},
     {L"", L"Marks this account beside its bars and on tiles. Label shows the label on bars and its short text on "
           L"tiles. The number badge appears when several accounts share a provider, hidden ones included.",
-     L"Обозначает этот аккаунт рядом с его полосами и на плитках. «Метка» показывает метку у полос и её короткий "
-     L"текст на плитках. Значок с номером появляется, когда у нескольких аккаунтов один поставщик, включая скрытые."},
+     L"Обозначает этот аккаунт рядом с его полосами и на плитках. «Метка» показывает метку у полос и её короткий текст "
+     L"на плитках. Номер появляется, когда у нескольких аккаунтов один поставщик, включая скрытые."},
     {L"", L"Material", L"Материал"},
     {L"", L"Material, values, usage colors, status marks and flyout details.",
-     L"Материал, значения, цвета использования, отметки состояния и всплывающие сведения."},
+     L"Материал, значения, цвета использования, отметки состояния и панель сведений."},
     {L"", L"New samples arrive with each poll.", L"Новые замеры поступают при каждом опросе."},
     {L"", L"No accounts support this view.", L"Ни один аккаунт не поддерживает этот вид."},
     {L"", L"No accounts to display.", L"Нет аккаунтов для отображения."},
@@ -275,9 +277,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Now line", L"Линия «сейчас»"},
     {L"", L"Number size", L"Размер числа"},
     {L"", L"On hover", L"При наведении"},
-    {L"", L"Open AI quota settings", L"Открыть настройки квот ИИ"},
+    {L"", L"Open AI quota settings", L"Открыть параметры квот ИИ"},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
-     L"Открыть настройки квот ИИ. Не удалось прочитать сохранённые настройки; резервная копия сохранена."},
+     L"Открыть параметры квот ИИ. Не удалось прочитать сохранённые параметры; резервная копия сохранена."},
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Открывает сведения об аккаунте, когда указатель задерживается на нём."},
     {L"", L"Orange from", L"Оранжевый от"},
@@ -288,7 +290,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Percent of the standard size; rings keep it inside the hole.",
      L"Процент от стандартного размера; у колец логотип остаётся внутри отверстия."},
     {L"", L"Percent of the tile’s height, from 0% to 100% used, or left in Remaining mode.",
-     L"Процент высоты плитки, охватывающий от 0 до 100 % использованного (в режиме «Осталось» — оставшегося)."},
+     L"Процент высоты плитки: от 0% до 100% использованного (в режиме «Осталось» — оставшегося)."},
     {L"", L"Percentage alignment", L"Выравнивание процентов"},
     {L"", L"Percentage on each bar: never, on hover, or always.",
      L"Процент на каждой полосе: никогда, при наведении или всегда."},
@@ -302,31 +304,30 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
           L"it on its own axis. Accounts without readings in the range are listed under No readings.",
      L"Проценты откладываются по левой оси; затенённая зона отмечает ваш красный порог. В режиме полос «Осталось» "
-     L"(Настройки > Отображение) они показывают остаток, поэтому линии опускаются по мере роста использования, уходя "
-     L"ниже 0% после превышения лимита, а зона располагается внизу. Вид «Доп. использование» показывает "
-     L"использованный бюджет Anthropic, использованные ИИ-кредиты GitHub Copilot и использованный месячный лимит "
-     L"OpenCode Go (%) (в режиме «Осталось» — их остаток), а также, на отдельной оси, оставшиеся кредиты OpenAI, "
-     L"которые уменьшаются по мере использования. Расходы в долларах показываются на карточках; вид «Все показатели» "
-     L"также строит их на отдельной оси. Аккаунты без замеров за выбранный период перечислены в карточке «Нет "
-     L"замеров за период»."},
+     L"(Параметры > Отображение) они показывают остаток, поэтому линии опускаются по мере роста использования, уходя "
+     L"ниже 0% после превышения лимита, а зона располагается внизу. Вид «Доп. использование» показывает использованный "
+     L"бюджет Anthropic, использованные ИИ-кредиты GitHub Copilot и использованный месячный лимит OpenCode Go (%) (в "
+     L"режиме «Осталось» — их остаток), а также, на отдельной оси, оставшиеся кредиты OpenAI, которые уменьшаются по "
+     L"мере использования. Расходы в долларах показываются на карточках; вид «Все показатели» также строит их на "
+     L"отдельной оси. Аккаунты без замеров за выбранный период перечислены в карточке «Нет замеров за период»."},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
      L"Безвозвратно очистить ВСЮ локальную историю использования для этого пользователя Windows, включая удалённые "
-     L"аккаунты?\r\n\r\nЭто действие нельзя отменить. Настройки и сохранённые входы не изменятся. Если запись "
+     L"аккаунты?\r\n\r\nЭто действие нельзя отменить. Параметры и сохранённые входы не изменятся. Если запись "
      L"останется включённой, последующие опросы будут записывать новую историю."},
     {L"", L"Permanently delete all usage history of the removed {provider} account {label}?\r\n\r\nEvery recorded "
           L"sample of it is deleted, not only the selected range. This cannot be undone.",
      L"Безвозвратно удалить всю историю использования удалённого аккаунта {provider} {label}?\r\n\r\nБудут удалены "
      L"все записанные замеры этого аккаунта, а не только за выбранный период. Это действие нельзя отменить."},
     {L"", L"Pie area", L"Область диаграмм"},
-    {L"", L"Pixels across each bar.", L"Пикселей поперёк каждой полосы."},
-    {L"", L"Pixels across each quota’s chart.", L"Пикселей по ширине графика каждой квоты."},
-    {L"", L"Pixels along each bar.", L"Пикселей вдоль каждой полосы."},
-    {L"", L"Pixels along each quota’s bar under the number.", L"Пикселей вдоль полосы каждой квоты под числом."},
-    {L"", L"Pixels down, or up when negative.", L"Пиксели вниз (вверх при отрицательном значении)."},
+    {L"", L"Pixels across each bar.", L"Толщина каждой полосы в пикселях."},
+    {L"", L"Pixels across each quota’s chart.", L"Ширина графика каждой квоты в пикселях."},
+    {L"", L"Pixels along each bar.", L"Длина каждой полосы в пикселях."},
+    {L"", L"Pixels along each quota’s bar under the number.", L"Длина полосы каждой квоты под числом, в пикселях."},
+    {L"", L"Pixels down, or up when negative.", L"Сдвиг вниз в пикселях (вверх при отрицательном значении)."},
     {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
-     L"Пиксели вправо (влево при отрицательном значении) от правого нижнего угла логотипа (у колец — внутри "
+     L"Сдвиг вправо в пикселях (влево при отрицательном значении) от правого нижнего угла логотипа (у колец — внутри "
      L"отверстия)."},
     {L"", L"Position", L"Положение"},
     {L"", L"Primary display only", L"Только основной дисплей"},
@@ -335,7 +336,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Provider logos", L"Логотипы поставщиков"},
     {L"", L"Quota keys", L"Обозначения квот"},
     {L"", L"Quota keys ({key5h}, {key7d}, ...) and extra usage on the charts, in pixels.",
-     L"Обозначения квот ({key5h}, {key7d} и т. д.) и доп. использование на графиках, в пикселях."},
+     L"Размер обозначений квот ({key5h}, {key7d} и т. д.) и доп. использования на графиках, в пикселях."},
     {L"", L"Quotas on taskbar", L"Квоты на панели задач"},
     {L"", L"Reading size", L"Размер отметки"},
     {L"", L"Record history", L"Записывать историю"},
@@ -343,7 +344,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Recording is off for this account. Its saved history stays; turn on Record history in Settings > Accounts "
           L"to record new polls.",
      L"Запись для этого аккаунта выключена. Сохранённая история остаётся; чтобы записывать новые опросы, включите "
-     L"«Записывать историю» в разделе Настройки > Аккаунты."},
+     L"«Записывать историю» в разделе Параметры > Аккаунты."},
     {L"", L"Recording is on by default. When it is off, turn it on with the banner or in Settings; the choice applies "
           L"to the current Windows user only, and per-account recording and hidden-account rules still apply. "
           L"Recording starts with the next poll, once account history IDs are saved. No data can also mean an "
@@ -353,18 +354,18 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"range (both weeks when comparing), with UTC times and IDs instead of labels. Credits are not dollars or a "
           L"spending ledger.",
      L"Запись включена по умолчанию. Если она выключена, включите её кнопкой «Включить запись» на баннере или в "
-     L"настройках; выбор действует только для текущего пользователя Windows, а запись отдельных аккаунтов и правила "
+     L"параметрах; выбор действует только для текущего пользователя Windows, а запись отдельных аккаунтов и правила "
      L"для скрытых аккаунтов по-прежнему учитываются. Запись начинается со следующего опроса, когда идентификаторы "
      L"истории аккаунтов сохранены. Отсутствие данных также может означать неподдерживаемый показатель, неудачные "
-     L"опросы или истёкшую историю. Задним числом ничего не восполняется. Окно следит за новыми опросами (график "
-     L"ждёт, пока на нём находится указатель); «Обновить» или F5 заново считывает локальную историю. Экспорт "
-     L"записывает все поддерживаемые показатели выбранного аккаунта или, при выборе «Все аккаунты», всех аккаунтов "
-     L"за выбранный период (при сравнении — за обе недели), со временем в UTC и идентификаторами вместо меток. "
-     L"Кредиты — это не доллары и не журнал расходов."},
+     L"опросы или историю, удалённую по сроку хранения. Задним числом ничего не восполняется. Окно следит за новыми "
+     L"опросами (график ждёт, пока на нём находится указатель); «Обновить» или F5 заново считывает локальную историю. "
+     L"Экспорт записывает все поддерживаемые показатели выбранного аккаунта или, при выборе «Все аккаунты», всех "
+     L"аккаунтов за выбранный период (при сравнении — за обе недели), со временем в UTC и идентификаторами вместо "
+     L"меток. Кредиты — это не доллары и не журнал расходов."},
     {L"", L"Recording is paused for this account: it is hidden from the taskbar, and hidden accounts are not polled.",
      L"Запись для этого аккаунта приостановлена: он скрыт с панели задач, а скрытые аккаунты не опрашиваются."},
     {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
-     L"Запись включена для этого пользователя Windows, история хранится бессрочно, открывается на 7 днях. "
+     L"Запись включена для этого пользователя Windows, история хранится бессрочно, окно открывается с периодом 7 дней. "
      L"Сохранённая история остаётся."},
     {L"", L"Recording rules, storage, export and verification", L"Правила записи, хранение, экспорт и проверка"},
     {L"", L"Recording starts once the taskbar saves its account IDs.",
@@ -384,20 +385,20 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
      L"Сбросить «Отображение» к значениям по умолчанию?\n\nМатериал «Акрил», режим полос «Использовано», текст "
      L"процентов при наведении с адаптивным выравниванием, без сумм, палитра по умолчанию (свои цвета тоже "
-     L"сбрасываются) с жёлтым от 50 %, оранжевым от 75 % и красным от 90 %, устаревшие данные помечаются, "
-     L"дополнительные лимиты запросов OpenAI скрыты."},
+     L"сбрасываются) с жёлтым от 50%, оранжевым от 75% и красным от 90%, устаревшие данные помечаются, дополнительные "
+     L"лимиты запросов OpenAI скрыты."},
     {L"", L"Reset History to defaults", L"Сбросить «История» к значениям по умолчанию"},
     {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
           L"the usage history window opens on 7 days. Saved history stays.",
      L"Сбросить «История» к значениям по умолчанию?\n\nЗапись включается для этого пользователя Windows, история "
-     L"хранится бессрочно, а окно истории использования открывается на 7 днях. Сохранённая история остаётся."},
+     L"хранится бессрочно, а окно истории использования открывается с периодом 7 дней. Сохранённая история остаётся."},
     {L"", L"Reset Layout to defaults", L"Сбросить «Макет» к значениям по умолчанию"},
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
           L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
           L"Accounts are not changed.",
-     L"Сбросить «Макет» к значениям по умолчанию?\n\nПолосы стопкой 100 x 8 пикс. с подписями слева, кольца 32 "
-     L"пикс., логотипы и значки с номером цветом текста панели задач, светло-серые метки темпа в виде галочки и "
-     L"интервалы по умолчанию. Аккаунты не изменяются."},
+     L"Сбросить «Макет» к значениям по умолчанию?\n\nПолосы стопкой 100 × 8 пикс. с подписями слева, кольца 32 пикс., "
+     L"логотипы и номера цветом текста панели задач, светло-серые метки темпа в виде курсора и интервалы по умолчанию. "
+     L"Аккаунты не изменяются."},
     {L"", L"Reset countdown", L"Отсчёт до сброса"},
     {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "
           L"remain under their IDs until expiry or Clear, unless their history was deleted with them; select one to "
@@ -409,8 +410,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Retention: {days, plural, one{# days} other{# days}}, also limited to 250,000 records / about 60 MB. "
           L"Turning recording off keeps saved history. Removed accounts remain under their IDs until expiry or Clear, "
           L"unless their history was deleted with them; select one to delete its history.",
-     L"Хранение: {days, plural, one{# день} few{# дня} many{# дней} other{# дня}}, а также не более 250 000 записей "
-     L"(около 60 МБ). При выключении записи сохранённая история остаётся. Удалённые аккаунты остаются под своими "
+     L"Хранение: {days, plural, one{# день} few{# дня} many{# дней} other{# дня}}, а также не более 250 000 записей "
+     L"(около 60 МБ). При выключении записи сохранённая история остаётся. Удалённые аккаунты остаются под своими "
      L"идентификаторами, пока не истечёт срок хранения или пока история не будет очищена командой «Очистить всю "
      L"историю…», если только их история не была удалена вместе с ними; выберите такой аккаунт, чтобы удалить его "
      L"историю."},
@@ -425,22 +426,22 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Set Credits max to show the Credits bar.", L"Задайте «Максимум кредитов», чтобы показать полосу кредитов."},
     {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
           L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
-     L"Общий параметр для всех пользователей Windows. «Бессрочно» ничего не удаляет и не ограничивает размер, "
-     L"поэтому история продолжает расти в памяти Проводника и на диске. Ограничения в днях очищают историю каждый "
-     L"час, с пределом около 60 МБ."},
+     L"Общий параметр для всех пользователей Windows. «Бессрочно» ничего не удаляет и не ограничивает размер, поэтому "
+     L"история продолжает расти в памяти Проводника и на диске. Ограничения в днях очищают историю каждый час, с "
+     L"пределом около 60 МБ."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"Короткое обозначение рядом с каждой полосой: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Короткий текст"},
     {L"", L"Show details on hover", L"Показывать сведения при наведении"},
     {L"", L"Show on", L"Показывать на"},
     {L"", L"Show percentage text on hover or always to change this.",
-     L"Чтобы изменить, показывайте текст процентов при наведении или всегда."},
+     L"Чтобы изменить, выберите показ текста процентов при наведении или всегда."},
     {L"", L"Show provider outages", L"Показывать сбои поставщиков"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
-     L"Показывается в сведениях и рядом с полосами, если для «Идентификация» выбрано «Метка». Уникальна для "
+     L"Показывается в сведениях и рядом с полосами, если в поле «Идентификация» выбрано «Метка». Уникальна для "
      L"поставщика; при переименовании вход и история сохраняются."},
-    {L"", L"Side in pixels.", L"Сторона в пикселях."},
+    {L"", L"Side in pixels.", L"Длина стороны в пикселях."},
     {L"", L"Solid / filled: current range. Click to hide or show this line.",
      L"Сплошная линия, закрашенные точки: текущий период. Щёлкните, чтобы скрыть или показать эту линию."},
     {L"", L"Solid / filled: current week. Dashed / hollow: previous week. Click to hide or show this line.",
@@ -458,9 +459,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
-     L"Прекратить бессрочное хранение истории?\n\nИстория снова будет храниться {days, plural, one{# день} few{# "
-     L"дня} many{# дней} other{# дня}} и ограничиваться 250 000 замеров (около 60 МБ). Более старые замеры и самые "
-     L"старые сверх этого предела будут удалены безвозвратно для всех пользователей Windows."},
+     L"Прекратить бессрочное хранение истории?\n\nИстория снова будет храниться {days, plural, one{# день} few{# дня} "
+     L"many{# дней} other{# дня}} и содержать не более 250 000 замеров (около 60 МБ). Более старые замеры, а также "
+     L"самые старые сверх этого предела будут удалены безвозвратно для всех пользователей Windows."},
     {L"", L"Storage cap reached; oldest samples were pruned.",
      L"Достигнут предел хранилища; самые старые замеры удалены."},
     {L"", L"Storage location", L"Расположение хранилища"},
@@ -470,7 +471,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Толщина линии в пикселях. Автоматически уменьшается, если индикаторы не помещаются вокруг логотипа или текста."},
     {L"", L"Suggestions and bug reports on GitHub", L"Предложения и отчёты об ошибках на GitHub"},
     {L"", L"Text of accounts whose identity is Label, in pixels.",
-     L"Текст аккаунтов с идентификацией «Метка», в пикселях."},
+     L"Размер текста аккаунтов с идентификацией «Метка», в пикселях."},
     {L"", L"Text size", L"Размер текста"},
     {L"", L"Text size of each quota’s percentage, in pixels; its key scales with it. Two rows shrink to fit the "
           L"taskbar.",
@@ -481,7 +482,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Text size of the number on a logo when several accounts share a provider, in pixels.",
      L"Размер текста номера на логотипе, когда у нескольких аккаунтов один поставщик, в пикселях."},
     {L"", L"Thanks to {names}.", L"Благодарим {names}."},
-    {L"", L"That provider and label are already configured.", L"Такой поставщик с такой меткой уже настроен."},
+    {L"", L"That provider and label are already configured.", L"Аккаунт с таким поставщиком и меткой уже настроен."},
     {L"", L"The Gemini sparkle in the taskbar’s text color, or its purple-to-blue gradient.",
      L"Звёздочка Gemini цветом текста панели задач или с её градиентом от фиолетового к синему."},
     {L"", L"The Label identity on tiles, up to 4 characters. Empty uses the label without spaces.",
@@ -493,9 +494,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"The account was renamed, but a duplicate stored sign-in remains under the old identity. To delete it, "
           L"re-add an account with the old provider and label, then remove it.",
      L"Аккаунт переименован, но под старым идентификатором остался дубликат сохранённого входа. Чтобы удалить его, "
-     L"снова добавьте аккаунт со старым поставщиком и меткой, а затем удалите его."},
+     L"снова добавьте аккаунт со старым поставщиком и меткой, а затем удалите этот аккаунт."},
     {L"", L"The balance the Credits bar treats as 100%. OpenAI reports only the balance.",
-     L"Баланс, который полоса кредитов считает за 100 %. OpenAI сообщает только баланс."},
+     L"Баланс, который полоса кредитов считает за 100%. OpenAI сообщает только баланс."},
     {L"", L"The large value is the latest reading in the range; \"now\" means it is the account's latest fresh poll. "
           L"Peak is the highest recorded value; in the Remaining mode, Lowest is the least left. Coverage counts "
           L"connected intervals. Time at or above the red threshold (at or below what it leaves, in the Remaining "
@@ -512,17 +513,17 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"The mod’s name and version and the Windows build, for bug reports.",
      L"Название и версия мода и сборка Windows для отчётов об ошибках."},
     {L"", L"The range the usage history window opens on. Its range buttons still switch it.",
-     L"Период, с которым открывается окно истории использования. Его кнопки периода по-прежнему переключают его."},
+     L"Период, с которым открывается окно истории использования. Кнопки периода в окне по-прежнему переключают его."},
     {L"", L"The renamed account identity already has a retained sign-in. To replace it, add an account with that "
           L"provider and label, then remove it. The account was not changed.",
-     L"У идентификатора переименованного аккаунта уже есть сохранённый вход. Чтобы заменить его, добавьте аккаунт с "
-     L"этим поставщиком и меткой, а затем удалите его. Аккаунт не изменён."},
+     L"У нового идентификатора переименованного аккаунта уже есть сохранённый вход. Чтобы заменить его, добавьте "
+     L"аккаунт с этим поставщиком и меткой, а затем удалите этот аккаунт. Аккаунт не изменён."},
     {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
           L"Applies to this Windows user only.",
-     L"Окна настроек и истории использования, а также панель задач. «Автоматически» следует языку интерфейса Windows. "
-     L"Действует только для этого пользователя Windows."},
+     L"Окна параметров и истории использования, а также панель задач. «Автоматически» следует языку интерфейса "
+     L"Windows. Действует только для этого пользователя Windows."},
     {L"", L"The settings and usage history windows use Mica for it.",
-     L"Для окон настроек и истории использования вместо него применяется «Мика»."},
+     L"Для окон параметров и истории использования вместо него применяется Mica."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"Не удалось скопировать сохранённый вход. Аккаунт не изменён."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -531,10 +532,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Не удалось удалить сохранённый вход, поэтому аккаунт не удалён."},
     {L"", L"The stored sign-in was deleted, but settings could not be saved. The account remains configured but "
           L"signed out.",
-     L"Сохранённый вход удалён, но сохранить настройки не удалось. Аккаунт остаётся настроенным, но вход не выполнен."},
+     L"Сохранённый вход удалён, но сохранить параметры не удалось. Аккаунт остаётся настроенным, но вход не выполнен."},
     {L"", L"The taskbar’s text color, or Claude’s orange. Details, Accounts and usage history match.",
-     L"Цвет текста панели задач или оранжевый Claude. Сведения, «Аккаунты» и история использования следуют этому "
-     L"выбору."},
+     L"Цвет текста панели задач или оранжевый цвет Claude. Панель сведений, раздел «Аккаунты» и история использования "
+     L"следуют этому выбору."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
           L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
           L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
@@ -543,19 +544,19 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
           L"own line and resets; overlapping limits are never added or merged. Short-window labels use recorded "
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
-     L"Здесь показаны уровни квот по замерам, а не токены или суточный расход. Выберите на боковой панели аккаунт "
-     L"или «Все аккаунты», а также вид: «Краткосрочные», «Неделя», «Доп. использование» или «Все показатели». «Все "
-     L"аккаунты» открываются на виде «Неделя», отдельный аккаунт — на виде «Все показатели»; каждый сохраняет свой "
-     L"вид до закрытия окна. Окно открывается на периоде, заданном параметром «Период по умолчанию» в разделе "
-     L"Настройки > История. Вид «Неделя» следует выбору недельных квот каждого аккаунта Anthropic на панели задач; у "
-     L"удалённых аккаунтов остаются обе недельные квоты, а вид «Все показатели» включает и недельные квоты, скрытые "
-     L"на панели задач. Квоты Gemini, Argon и Claude/GPT в Antigravity попадают в соответствующие виды "
-     L"«Краткосрочные» и «Неделя». У каждой квоты своя линия и свои сбросы; перекрывающиеся лимиты никогда не "
-     L"складываются и не объединяются. Названия коротких окон используют записанную длительность (или «Текущий "
-     L"лимит», если она неизвестна). Antigravity показывает ограничивающие пулы, которые могут меняться."},
+     L"Здесь показаны уровни квот по замерам, а не токены или суточный расход. Выберите на боковой панели аккаунт или "
+     L"«Все аккаунты», а также вид: «Краткосрочные», «Неделя», «Доп. использование» или «Все показатели». «Все "
+     L"аккаунты» открываются на виде «Неделя», отдельный аккаунт — на виде «Все показатели»; каждый сохраняет свой вид "
+     L"до закрытия окна. Окно открывается с периодом, заданным параметром «Период по умолчанию» в разделе Параметры > "
+     L"История. Вид «Неделя» следует выбору недельных квот каждого аккаунта Anthropic на панели задач; у удалённых "
+     L"аккаунтов остаются обе недельные квоты, а вид «Все показатели» включает и недельные квоты, скрытые на панели "
+     L"задач. Квоты Gemini, Argon и Claude/GPT в Antigravity попадают в соответствующие виды «Краткосрочные» и "
+     L"«Неделя». У каждой квоты своя линия и свои сбросы; перекрывающиеся лимиты никогда не складываются и не "
+     L"объединяются. Названия коротких окон используют записанную длительность (или «Текущий лимит», если она "
+     L"неизвестна). Antigravity показывает ограничивающие пулы, которые могут меняться."},
     {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
           L"fills with the elapsed time.",
-     L"Тонкая галочка, линия на всю ширину, засечка у края, точка по центру или шкала времени: небольшая полоса под "
+     L"Тонкий курсор, линия на всю ширину, засечка у края, точка по центру или шкала времени: небольшая полоса под "
      L"каждой полосой, заполняемая прошедшим временем."},
     {L"", L"This account has no meters in this view.", L"У этого аккаунта нет показателей в этом виде."},
     {L"", L"This account is no longer configured; its unsaved changes were dropped.",
@@ -582,6 +583,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"изменяются."},
     {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
      L"Время до сброса этой квоты под числом вместо полос каждой квоты."},
+    {L"", L"Translations are machine-made. Corrections are welcome as <link id=\"issues\">GitHub issues</link> or "
+     L"pull requests.",
+     L"Переводы выполнены автоматически. Исправления можно прислать через <link id=\"issues\">issues на "
+     L"GitHub</link> или pull requests."},
     {L"", L"Turn off Reset countdown to change this.", L"Чтобы изменить, выключите «Отсчёт до сброса»."},
     {L"", L"Turn on Pace markers to change this.", L"Чтобы изменить, включите «Метки темпа»."},
     {L"", L"Turn on Quota keys, or percentage text in Display, to change this.",
@@ -610,7 +615,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"«Использовано» заполняется по мере расхода квоты, «Осталось» показывает остаток. Цвета всегда следуют "
      L"использованию."},
     {L"", L"Used on tiles when Identity is Label.",
-     L"Используется на плитках, если для «Идентификация» выбрано «Метка»."},
+     L"Используется на плитках, если в поле «Идентификация» выбрано «Метка»."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Версия {version}  ·  автор Cleroth  ·  мод Windhawk"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
      L"Дождитесь завершения текущего входа, прежде чем менять идентификацию."},
@@ -646,7 +651,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"account-error", L"fetch thread failed", L"сбой потока опроса"},
     {L"account-error", L"groups is not an array", L"«groups» не является массивом"},
     {L"account-error", L"internal error", L"внутренняя ошибка"},
-    {L"account-error", L"invalid token response", L"недопустимый ответ с токеном"},
+    {L"account-error", L"invalid token response", L"недопустимый ответ на запрос токена"},
     {L"account-error", L"network error", L"ошибка сети"},
     {L"account-error", L"network error (language server)", L"ошибка сети (языковой сервер)"},
     {L"account-error", L"no Copilot access on this GitHub account", L"нет доступа к Copilot в этом аккаунте GitHub"},
@@ -654,11 +659,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"account-error", L"no access token in response", L"в ответе нет токена доступа"},
     {L"account-error", L"no quota groups in response", L"в ответе нет групп квот"},
     {L"account-error", L"no usable Antigravity quota buckets in response",
-     L"в ответе нет пригодных бакетов квот Antigravity"},
+     L"в ответе нет пригодных пулов квот Antigravity"},
     {L"account-error", L"no usable Antigravity quota in response", L"в ответе нет пригодной квоты Antigravity"},
     {L"account-error", L"no userStatus object", L"нет объекта userStatus"},
     {L"account-error", L"not signed in - click to sign in", L"вход не выполнен — нажмите, чтобы войти"},
-    {L"account-error", L"rate limited by API", L"ограничение частоты запросов API"},
+    {L"account-error", L"rate limited by API", L"превышен лимит запросов API"},
     {L"account-error", L"session expired - click to sign in", L"сеанс истёк — нажмите, чтобы войти"},
     {L"account-error", L"token refresh failed", L"не удалось обновить токен"},
     {L"account-error", L"token refresh failed: {reason}", L"не удалось обновить токен: {reason}"},
@@ -666,13 +671,13 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"account-error", L"unexpected response", L"неожиданный ответ"},
     {L"account-error", L"unexpected response format", L"неожиданный формат ответа"},
     {L"account-error", L"unexpected response format ({shape})", L"неожиданный формат ответа ({shape})"},
-    {L"account-error", L"unexpected token response", L"неожиданный ответ с токеном"},
+    {L"account-error", L"unexpected token response", L"неожиданный ответ на запрос токена"},
     {L"account-error-alone", L"Could not save refreshed token", L"Не удалось сохранить обновлённый токен"},
     {L"account-error-alone", L"Failed to parse quota summary JSON", L"Не удалось разобрать JSON сводки квот"},
     {L"account-error-alone", L"Failed to parse user status JSON", L"Не удалось разобрать JSON статуса пользователя"},
     {L"account-error-alone", L"Fetch thread failed", L"Сбой потока опроса"},
     {L"account-error-alone", L"Groups is not an array", L"«groups» не является массивом"},
-    {L"account-error-alone", L"Invalid token response", L"Недопустимый ответ с токеном"},
+    {L"account-error-alone", L"Invalid token response", L"Недопустимый ответ на запрос токена"},
     {L"account-error-alone", L"Network error", L"Ошибка сети"},
     {L"account-error-alone", L"Network error (language server)", L"Ошибка сети (языковой сервер)"},
     {L"account-error-alone", L"No Copilot access on this GitHub account",
@@ -680,11 +685,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"account-error-alone", L"No OpenCode Go subscription on this key", L"Нет подписки OpenCode Go для этого ключа"},
     {L"account-error-alone", L"No quota groups in response", L"В ответе нет групп квот"},
     {L"account-error-alone", L"No usable Antigravity quota buckets in response",
-     L"В ответе нет пригодных бакетов квот Antigravity"},
+     L"В ответе нет пригодных пулов квот Antigravity"},
     {L"account-error-alone", L"No usable Antigravity quota in response", L"В ответе нет пригодной квоты Antigravity"},
     {L"account-error-alone", L"No userStatus object", L"Нет объекта userStatus"},
     {L"account-error-alone", L"Not signed in - click to sign in", L"Вход не выполнен — нажмите, чтобы войти"},
-    {L"account-error-alone", L"Rate limited by API", L"Ограничение частоты запросов API"},
+    {L"account-error-alone", L"Rate limited by API", L"Превышен лимит запросов API"},
     {L"account-error-alone", L"Session expired - click to sign in", L"Сеанс истёк — нажмите, чтобы войти"},
     {L"account-error-alone", L"Token refresh failed", L"Не удалось обновить токен"},
     {L"account-error-alone", L"Token refresh failed: {reason}", L"Не удалось обновить токен: {reason}"},
@@ -692,14 +697,14 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"account-error-alone", L"Unexpected response", L"Неожиданный ответ"},
     {L"account-error-alone", L"Unexpected response format", L"Неожиданный формат ответа"},
     {L"account-error-alone", L"Unexpected response format ({shape})", L"Неожиданный формат ответа ({shape})"},
-    {L"account-error-alone", L"Unexpected token response", L"Неожиданный ответ с токеном"},
+    {L"account-error-alone", L"Unexpected token response", L"Неожиданный ответ на запрос токена"},
     {L"account-state", L"Hidden, not polled", L"Скрыт, не опрашивается"},
-    {L"account-state", L"Local app not running", L"Локальное приложение не запущено"},
-    {L"account-state", L"Local app running", L"Локальное приложение запущено"},
+    {L"account-state", L"Local app not running", L"Приложение не запущено"},
+    {L"account-state", L"Local app running", L"Приложение запущено"},
     {L"account-state", L"Sign-in needed", L"Требуется вход"},
     {L"account-state", L"Signed in", L"Вход выполнен"},
     {L"account-state", L"Signing in…", L"Выполняется вход…"},
-    {L"account-state", L"Waiting for the local app", L"Ожидание локального приложения"},
+    {L"account-state", L"Waiting for the local app", L"Ожидание приложения"},
     {L"add-account", L"Sign in with a code on github.com", L"Вход с кодом на github.com"},
     {L"add-account", L"Sign in with an API key from the OpenCode console", L"Вход с ключом API из консоли OpenCode"},
     {L"add-account", L"Sign in with your browser", L"Вход через браузер"},
@@ -716,7 +721,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"button", L"Custom...", L"Другой…"},
     {L"button", L"Delete history…", L"Удалить историю…"},
     {L"button", L"Enable recording", L"Включить запись"},
-    {L"button", L"Open dashboard", L"Открыть панель"},
+    {L"button", L"Open dashboard", L"Личный кабинет"},
     {L"button", L"Open folder", L"Открыть папку"},
     {L"button", L"Open usage history", L"Открыть историю использования"},
     {L"button", L"Remove account", L"Удалить аккаунт"},
@@ -724,10 +729,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"button", L"Sign in", L"Войти"},
     {L"button", L"Sign in again", L"Войти снова"},
     {L"button", L"Sign out", L"Выйти"},
-    {L"chart-axis", L"{value} cr", L"{value} кр"},
+    {L"chart-axis", L"{value} cr", L"{value} кр"},
     {L"chart-key", L"Solid: current", L"Сплошные линии: текущий период"},
-    {L"chart-key", L"Solid: current · Dashed: previous",
-     L"Сплошные линии: текущая неделя · Пунктирные: прошлая неделя"},
+    {L"chart-key", L"Solid: current · Dashed: previous", L"Сплошные: текущая неделя · Пунктирные: прошлая неделя"},
     {L"chart-message", L"All lines are hidden", L"Все линии скрыты"},
     {L"chart-message", L"No percentage readings to plot. Dollar spending is shown below.",
      L"Нет процентных замеров для графика. Расходы в долларах показаны ниже."},
@@ -743,7 +747,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"copilot-unit", L"AI credits", L"ИИ-кредиты"},
     {L"copilot-unit", L"chat requests", L"запросы в чате"},
     {L"copilot-unit", L"premium requests", L"премиум-запросы"},
-    {L"credits-amount", L"{amount} credits", L"{amount} кредита"},
+    {L"credits-amount", L"{amount} credits", L"{amount} кредита"},
+    {L"credits-amount-abbreviated", L"{amount} credits", L"{amount} кредитов"},
     {L"credits-unit", L"{credits, plural, one{credits} other{credits}}",
      L"{credits, plural, one{кредит} few{кредита} many{кредитов} other{кредита}}"},
     {L"date-month", L"Apr", L"апр"},
@@ -791,15 +796,15 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"dialog-caption", L"Keep history", L"Хранить историю"},
     {L"dialog-caption", L"Large history export", L"Большой экспорт истории"},
     {L"dialog-caption", L"Remove account", L"Удаление аккаунта"},
-    {L"dialog-caption", L"Reset settings", L"Сброс настроек"},
+    {L"dialog-caption", L"Reset settings", L"Сброс параметров"},
     {L"dialog-caption", L"Usage history", L"История использования"},
-    {L"duration", L"{days}d", L"{days} д"},
-    {L"duration", L"{days}d {hours}h", L"{days} д {hours} ч"},
-    {L"duration", L"{hours}h", L"{hours} ч"},
-    {L"duration", L"{hours}h {minutes}m", L"{hours} ч {minutes} мин"},
-    {L"duration", L"{minutes}m", L"{minutes} мин"},
-    {L"duration", L"{minutes}m {seconds}s", L"{minutes} мин {seconds} с"},
-    {L"duration", L"{seconds}s", L"{seconds} с"},
+    {L"duration", L"{days}d", L"{days} д"},
+    {L"duration", L"{days}d {hours}h", L"{days} д {hours} ч"},
+    {L"duration", L"{hours}h", L"{hours} ч"},
+    {L"duration", L"{hours}h {minutes}m", L"{hours} ч {minutes} мин"},
+    {L"duration", L"{minutes}m", L"{minutes} мин"},
+    {L"duration", L"{minutes}m {seconds}s", L"{minutes} мин {seconds} с"},
+    {L"duration", L"{seconds}s", L"{seconds} с"},
     {L"file-type", L"All files (*.*)", L"Все файлы (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"Файлы CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Данных пока нет"},
@@ -814,10 +819,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"flyout-note", L"Error: {error} - retry in {duration}", L"Ошибка: {error} — повтор через {duration}"},
     {L"flyout-note", L"No AI-credit allowance on this plan.", L"В этом тарифе нет ИИ-кредитов."},
     {L"flyout-note", L"No premium request allowance on this plan.", L"В этом тарифе нет премиум-запросов."},
-    {L"flyout-note", L"No quotas reported.", L"Квоты не сообщены."},
+    {L"flyout-note", L"No quotas reported.", L"Нет данных о квотах."},
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"Требуется вход. Щёлкните полосы, чтобы войти."},
     {L"flyout-note", L"extra usage: unlimited", L"доп. использование: без ограничений"},
-    {L"flyout-note", L"rate limits: none reported", L"лимиты частоты: не сообщены"},
+    {L"flyout-note", L"rate limits: none reported", L"лимиты запросов: нет данных"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{Доступен # бесплатный сброс} few{Доступно # бесплатных сброса} many{Доступно # бесплатных "
      L"сбросов} other{Доступно # бесплатного сброса}}"},
@@ -827,7 +832,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"сбросов} other{Доступно # бесплатного сброса}} · ближайший истекает {when}"},
     {L"history-about", L"Axes and units", L"Оси и единицы измерения"},
     {L"history-about", L"Cards", L"Карточки"},
-    {L"history-about", L"Legend and readout", L"Легенда и считывание значений"},
+    {L"history-about", L"Legend and readout", L"Легенда и подсказка"},
     {L"history-about", L"Lines and markers", L"Линии и маркеры"},
     {L"history-about", L"Oldest loaded sample: {time}", L"Самый старый загруженный замер: {time}"},
     {L"history-about", L"Reading the charts", L"Как читать графики"},
@@ -863,7 +868,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"history-menu", L"About these charts", L"Об этих графиках"},
     {L"history-menu", L"Clear all history…", L"Очистить всю историю…"},
     {L"history-menu", L"Open history folder", L"Открыть папку истории"},
-    {L"history-menu", L"Settings", L"Настройки"},
+    {L"history-menu", L"Settings", L"Параметры"},
     {L"history-meter", L"Credits remaining", L"Остаток кредитов"},
     {L"history-meter", L"Extra budget", L"Доп. бюджет"},
     {L"history-meter", L"Extra spending (USD)", L"Доп. расходы (USD)"},
@@ -876,10 +881,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Запись · {days, plural, one{# день} few{# дня} many{# дней} other{# дня}}"},
     {L"history-pill", L"Waiting", L"Ожидание"},
     {L"history-provider", L"Unknown provider", L"Неизвестный поставщик"},
-    {L"history-range", L"24h", L"24 ч"},
-    {L"history-range", L"30d", L"30 д"},
-    {L"history-range", L"7d", L"7 д"},
-    {L"history-range", L"90d", L"90 д"},
+    {L"history-range", L"24h", L"24 ч"},
+    {L"history-range", L"30d", L"30 д"},
+    {L"history-range", L"7d", L"7 д"},
+    {L"history-range", L"90d", L"90 д"},
     {L"history-range", L"All", L"Всё"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
@@ -894,7 +899,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"{years, plural, one{# год} few{# года} many{# лет} other{# года}}"},
     {L"history-status", L"Updated {time}", L"Обновлено {time}"},
     {L"history-storage", L"An account in Settings uses this history again.",
-     L"Аккаунт в настройках снова использует эту историю."},
+     L"Аккаунт в параметрах снова использует эту историю."},
     {L"history-storage", L"Cannot create the local history directory.", L"Не удаётся создать локальную папку истории."},
     {L"history-storage", L"Cannot read history. Check storage permissions, then reopen the mod.",
      L"Не удаётся прочитать историю. Проверьте разрешения хранилища и снова откройте мод."},
@@ -910,7 +915,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"history-storage", L"History read failed. Loaded samples remain available for export.",
      L"Не удалось прочитать историю. Загруженные замеры по-прежнему можно экспортировать."},
     {L"history-storage", L"History storage is in use by another Explorer session, or is inaccessible.",
-     L"Хранилище истории используется другим сеансом проводника или недоступно."},
+     L"Хранилище истории используется другим сеансом Проводника или недоступно."},
     {L"history-storage", L"History storage is unavailable.", L"Хранилище истории недоступно."},
     {L"history-storage", L"History write failed; the previous journal was kept.",
      L"Не удалось записать историю; предыдущий журнал сохранён."},
@@ -922,7 +927,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"history-view", L"Extra usage", L"Доп. использование"},
     {L"history-view", L"Short-term", L"Краткосрочные"},
     {L"history-view", L"Weekly", L"Неделя"},
-    {L"hours-value", L"{hours} h", L"{hours} ч"},
+    {L"hours-value", L"{hours} h", L"{hours} ч"},
     {L"identity-position", L"Bottom", L"Снизу"},
     {L"identity-position", L"Hidden", L"Скрыта"},
     {L"identity-position", L"Left", L"Слева"},
@@ -937,8 +942,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"logo-color", L"Orange", L"Оранжевый"},
     {L"logo-color", L"Taskbar text color", L"Как текст панели задач"},
     {L"material", L"Acrylic", L"Акрил"},
-    {L"material", L"Mica", L"Мика"},
-    {L"material", L"Mica Alt", L"Мика Alt"},
+    {L"material", L"Mica", L"Mica"},
+    {L"material", L"Mica Alt", L"Mica Alt"},
     {L"material", L"Solid", L"Сплошной"},
     {L"material", L"Tinted wallpaper", L"Тонированные обои"},
     {L"notification-body", L"{provider} - resets {when}", L"{provider} — сброс {when}"},
@@ -946,7 +951,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"Оранжевый ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Красный ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Жёлтый ({threshold}%)"},
-    {L"notification-title", L"5h usage at {percent}%", L"5 ч: использовано {percent}%"},
+    {L"notification-title", L"5h usage at {percent}%", L"5 ч: использовано {percent}%"},
     {L"notification-title", L"AI credits usage at {percent}%", L"ИИ-кредиты: использовано {percent}%"},
     {L"notification-title", L"chat requests usage at {percent}%", L"Запросы в чате: использовано {percent}%"},
     {L"notification-title", L"credits usage at {percent}%", L"Кредиты: использовано {percent}%"},
@@ -957,8 +962,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"notification-title", L"{name} current limit usage at {percent}%",
      L"{name}, текущий лимит: использовано {percent}%"},
     {L"notification-title", L"{name} weekly usage at {percent}%", L"{name}, неделя: использовано {percent}%"},
-    {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name}, {hours} ч: использовано {percent}%"},
-    {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\nОткрыть страницу статуса {provider}"},
+    {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name}, {hours} ч: использовано {percent}%"},
+    {L"outage-action", L"{status}\nOpen the {provider} status page",
+     L"{status}\nОткрыть страницу состояния {provider}"},
     {L"outage-level", L"degraded performance", L"снижение производительности"},
     {L"outage-level", L"major outage", L"серьёзный сбой"},
     {L"outage-level", L"partial outage", L"частичный сбой"},
@@ -971,9 +977,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"outage-reason", L"Availability issues", L"Проблемы с доступностью"},
     {L"outage-reason", L"Elevated errors", L"Повышенное число ошибок"},
     {L"outage-reason", L"Slow responses", L"Медленные ответы"},
-    {L"outage-reason", L"Upstream provider issues", L"Проблемы у вышестоящего провайдера"},
+    {L"outage-reason", L"Upstream provider issues", L"Проблемы у вышестоящего поставщика"},
     {L"outage-reason", L"{reason}: {models}", L"{reason}: {models}"},
-    {L"pace-marker", L"Caret", L"Галочка"},
+    {L"pace-marker", L"Caret", L"Курсор"},
     {L"pace-marker", L"Dot", L"Точка"},
     {L"pace-marker", L"Edge notch", L"Засечка у края"},
     {L"pace-marker", L"Full line", L"Полная линия"},
@@ -989,7 +995,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"percent-text", L"Never show", L"Не показывать"},
     {L"percent-text", L"Show on hover", L"При наведении"},
     {L"pixel-unit", L"px", L"пикс."},
-    {L"placement", L"After Show desktop", L"После «Свернуть все окна»"},
+    {L"placement", L"After Show desktop", L"После «Показать рабочий стол»"},
     {L"placement", L"After the clock", L"После часов"},
     {L"placement", L"Before network and volume", L"Перед сетью и громкостью"},
     {L"placement", L"Before notification icons", L"Перед значками уведомлений"},
@@ -1029,19 +1035,19 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"quota-name", L"Monthly", L"Месяц"},
     {L"quota-name", L"Premium requests", L"Премиум-запросы"},
     {L"quota-name", L"Short window", L"Короткое окно"},
-    {L"quota-name", L"Short-term (varying windows)", L"Краткосрочный (разные окна)"},
+    {L"quota-name", L"Short-term (varying windows)", L"Краткосрочная (разные окна)"},
     {L"quota-name", L"Weekly", L"Неделя"},
-    {L"quota-name", L"{hours}h", L"{hours} ч"},
+    {L"quota-name", L"{hours}h", L"{hours} ч"},
     {L"quota-name", L"{name} current limit", L"{name}: текущий лимит"},
-    {L"quota-name", L"{name} short-term (varying windows)", L"{name}: краткосрочный (разные окна)"},
+    {L"quota-name", L"{name} short-term (varying windows)", L"{name}: краткосрочная (разные окна)"},
     {L"quota-name", L"{name} weekly", L"{name}: неделя"},
     {L"quota-name", L"{name} {days, plural, one{#-day} other{#-day}}",
      L"{name}: {days, plural, one{# день} few{# дня} many{# дней} other{# дня}}"},
     {L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}",
      L"{name}: {hours, plural, one{# час} few{# часа} many{# часов} other{# часа}}"},
-    {L"quota-name", L"{name} {hours} h", L"{name}: {hours} ч"},
-    {L"quota-name", L"{name} {hours}h", L"{name}: {hours} ч"},
-    {L"quota-reset", L"Not yet started", L"Ещё не начато"},
+    {L"quota-name", L"{name} {hours} h", L"{name}: {hours} ч"},
+    {L"quota-name", L"{name} {hours}h", L"{name}: {hours} ч"},
+    {L"quota-reset", L"Not yet started", L"Ещё не началось"},
     {L"quota-reset", L"Resets {when}", L"Сброс {when}"},
     {L"quota-unit", L"left", L"осталось"},
     {L"quota-unit", L"used", L"использовано"},
@@ -1080,8 +1086,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"settings-section", L"Bars", L"Полосы"},
     {L"settings-section", L"Credits and license", L"Благодарности и лицензия"},
     {L"settings-section", L"Current position", L"Текущий момент"},
-    {L"settings-section", L"Details", L"Подробности"},
-    {L"settings-section", L"Details flyout", L"Всплывающие сведения"},
+    {L"settings-section", L"Details", L"Сведения"},
+    {L"settings-section", L"Details flyout", L"Панель сведений"},
     {L"settings-section", L"Gauge", L"Шкала"},
     {L"settings-section", L"Headline", L"Главный процент"},
     {L"settings-section", L"Identity", L"Идентификация"},
@@ -1109,7 +1115,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"sign-in-button", L"Close", L"Закрыть"},
     {L"sign-in-button", L"Code copied", L"Код скопирован"},
     {L"sign-in-button", L"Copied", L"Скопировано"},
-    {L"sign-in-button", L"Copy code and open GitHub", L"Скопировать код и открыть GitHub"},
+    {L"sign-in-button", L"Copy code and open GitHub", L"Копировать код и открыть GitHub"},
     {L"sign-in-button", L"Copy failed", L"Не удалось скопировать"},
     {L"sign-in-button", L"Copy link", L"Копировать ссылку"},
     {L"sign-in-button", L"Open in browser", L"Открыть в браузере"},
@@ -1134,7 +1140,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"войдя в аккаунт GitHub с Copilot. Окно закроется, когда вход будет выполнен."},
     {L"sign-in-window", L"Open the OpenCode console in a browser, copy an API key of the workspace with your Go "
           L"subscription, and paste it below.",
-     L"Откройте консоль OpenCode в браузере, скопируйте API-ключ рабочей области с вашей подпиской Go и вставьте его "
+     L"Откройте консоль OpenCode в браузере, скопируйте ключ API рабочей области с вашей подпиской Go и вставьте его "
      L"ниже."},
     {L"sign-in-window", L"Open the sign-in link in a browser and approve access on claude.ai, then paste the code "
           L"shown on the page below.",
@@ -1162,14 +1168,14 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"обе стороны}}"},
     {L"taskbar-action", L"Exit visual test", L"Выйти из визуального теста"},
     {L"taskbar-action", L"Hide", L"Скрыть"},
-    {L"taskbar-action", L"Open dashboard", L"Открыть панель управления"},
+    {L"taskbar-action", L"Open dashboard", L"Открыть личный кабинет"},
     {L"taskbar-action", L"Refresh", L"Обновить"},
     {L"taskbar-action", L"Refresh all", L"Обновить все"},
-    {L"taskbar-action", L"Settings", L"Настройки"},
+    {L"taskbar-action", L"Settings", L"Параметры"},
     {L"taskbar-action", L"Show on taskbar", L"Показывать на панели задач"},
     {L"taskbar-action", L"Sign in", L"Войти"},
     {L"taskbar-action", L"Usage history", L"История использования"},
-    {L"taskbar-countdown", L"no reset", L"без сброса"},
+    {L"taskbar-countdown", L"no reset", L"нет"},
     {L"taskbar-countdown", L"now", L"сейчас"},
     {L"taskbar-countdown", L"{days}d", L"{days}д"},
     {L"taskbar-countdown", L"{days}d {hours}h", L"{days}д {hours}ч"},
@@ -1197,12 +1203,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"usage-band", L"From red", L"От красного"},
     {L"usage-band", L"From yellow", L"От жёлтого"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
-     L"При темпе за последние 24 ч: лимит через ~{duration}"},
+     L"При темпе за последние 24 ч: лимит через ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
      L"При темпе с {time}: лимит через ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"При среднем темпе этого окна: лимит через ~{duration}"},
-    {L"window-title", L"{app} — Settings", L"{app} — Настройки"},
+    {L"window-title", L"{app} — Settings", L"{app} — Параметры"},
     {L"window-title", L"{app} — Usage history", L"{app} — История использования"},
 };
 static_assert(I18nCatalogSorted(kI18nCatalogRu), "sort by (context, English), no duplicates");

@@ -295,7 +295,7 @@ static void RunI18nLayoutTests() {
         std::vector<D2D1_RECT_F> english = chips(I18nLayoutFrame(AccountsView({2}), "en"));
         CHECK(english.size() == 4);
         for (const D2D1_RECT_F& chip : english) CHECK_NEAR(chip.top, english[0].top);
-        // 5 Stunden, Wöchentlich, Fable wöchentlich and Zusätzliche Nutzung: more than one line.
+        // 5 Stunden, Wöchentlich, Fable wöchentlich and Zusatznutzung: more than one line.
         std::vector<D2D1_RECT_F> german = chips(I18nLayoutFrame(AccountsView({2}), "de"));
         CHECK(german.size() == 4 && german[3].top > german[0].top);
         for (const D2D1_RECT_F& chip : german) {
@@ -313,15 +313,15 @@ static void RunI18nLayoutTests() {
         };
         CHECK_NEAR(labelBox(I18nLayoutFrame(AccountsView({0}), "en")), 200);
         CHECK_NEAR(labelBox(I18nLayoutFrame(AccountsView({0}), "en", I18nLayoutMinClient())), 173);
-        // Logo + number badge (220 DIP); es: Logotipo + insignia numérica, wider than 220 less 41.
+        // Logo + number badge (220 DIP); es: Logotipo + distintivo numérico, wider than 220 less 41.
         UiFrame frame = I18nLayoutFrame(AccountsView({2}), "en");
         const UiItem* identity = UiFindItem(frame, AccountId(3, SettingsField::AccountTileIdentity));
         CHECK_NEAR(identity->rect.right - identity->rect.left, 220);
         frame = I18nLayoutFrame(AccountsView({2}), "es");
         identity = UiFindItem(frame, AccountId(3, SettingsField::AccountTileIdentity));
-        CHECK(identity->text == L"Logotipo + insignia num\u00E9rica" && identity->tooltip.empty());
+        CHECK(identity->text == L"Logotipo + distintivo num\u00E9rico" && identity->tooltip.empty());
         CHECK_NEAR(identity->rect.right - identity->rect.left,
-                   I18nLayoutTagWidth(L"Logotipo + insignia num\u00E9rica", UiFont::Body, "es") + 41);
+                   I18nLayoutTagWidth(L"Logotipo + distintivo num\u00E9rico", UiFont::Body, "es") + 41);
     });
 
     Run("accounts header note: as tall as it wraps, the viewport under it", [] {

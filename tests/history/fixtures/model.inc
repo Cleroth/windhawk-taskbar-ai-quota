@@ -311,8 +311,8 @@
         CHECK(Series(built, 1, 4).legendTitle == state.accounts[1].label + L" · Claude/GPT 1,50 h");
         state.locale = I18nLocale(*I18nLanguageByTag(L"de"), deDE);
         built = Build(state);
-        CHECK(Series(built, 0, 0).legendTitle == state.accounts[0].label + L" · 1,50 Std.");
-        CHECK(Series(built, 1, 4).legendTitle == state.accounts[1].label + L" · Claude/GPT 1,50 Std.");
+        CHECK(Series(built, 0, 0).legendTitle == state.accounts[0].label + L" · 1,50\u00A0Std.");
+        CHECK(Series(built, 1, 4).legendTitle == state.accounts[1].label + L" · Claude/GPT 1,50\u00A0Std.");
     });
     Run("remaining mode: titles name percentages left; legends, dollars, credits and statistics unchanged", [] {
         auto state = Model(); AllLanes(state);

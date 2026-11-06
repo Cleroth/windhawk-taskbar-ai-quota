@@ -26,7 +26,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Account identity is set per account in Accounts", L"账户标识需在“账户”中逐个设置"},
     {L"", L"Account margin", L"账户边距"},
     {L"", L"Adaptive: right side, moving left once the bar reaches the yellow threshold.", L"自适应：位于右侧，条形达到黄色阈值后移到左侧。"},
-    {L"", L"Additional OpenAI rate limits", L"OpenAI 的其他速率限制"},
+    {L"", L"Additional OpenAI rate limits", L"其他 OpenAI 速率限制"},
     {L"", L"Adds ! when a refresh failed or is overdue.", L"刷新失败或逾期未刷新时添加 ! 标记。"},
     {L"", L"All accounts gives each account a color: primary quotas are thicker, scoped quotas thinner and tinted. "
           L"One account gives each meter its own color. Solid lines: current. Dashed lines: previous week. Dots mark "
@@ -45,7 +45,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Anthropic extra usage or OpenAI credits in the {key7d} chart’s top-left corner (bottom-left in Remaining "
           L"mode), when selected for the account and reported: spent in Used mode, left in Remaining mode. Percent "
           L"shows the amount without a limit. OpenAI credits never get a chart of their own.",
-     L"在 {key7d} 图表左上角（“剩余量”模式下为左下角）显示 Anthropic 额外用量或 OpenAI "
+     L"在“{key7d}”图表左上角（“剩余量”模式下为左下角）显示 Anthropic 额外用量或 OpenAI "
      L"积分，前提是已为该账户选择且有报告数据：“已用量”模式下为已花费，“剩余量”模式下为剩余。无上限时，“百分比”显示金额。OpenAI 积分从不单独显示图表。"},
     {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
           L"Antigravity uses its signed-in app or CLI, which must keep running.",
@@ -111,19 +111,19 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Display {number} - {width}x{height} (primary)", L"显示器 {number} - {width}x{height}（主显示器）"},
     {L"", L"Display {number} shows the bars in the tray: another mod controls the space they need. Restart Explorer "
           L"to retry.",
-     L"显示器 {number} 在托盘区显示条形：另一个模组控制着条形所需的空间。重启资源管理器即可重试。"},
+     L"显示器 {number} 改为在系统托盘处显示条形：另一个模组控制着条形所需的空间。重启资源管理器即可重试。"},
     {L"", L"Display {number} shows the bars in the tray: its Start button is hidden or wasn’t found.",
-     L"显示器 {number} 在托盘区显示条形：其“开始”按钮已隐藏或未找到。"},
+     L"显示器 {number} 改为在系统托盘处显示条形：其“开始”按钮已隐藏或未找到。"},
     {L"", L"Display {number} shows the bars in the tray: its taskbar buttons weren’t found.",
-     L"显示器 {number} 在托盘区显示条形：未找到其任务栏按钮。"},
+     L"显示器 {number} 改为在系统托盘处显示条形：未找到其任务栏按钮。"},
     {L"", L"Display {number} shows the bars in the tray: its taskbar is on a side of the screen.",
-     L"显示器 {number} 在托盘区显示条形：其任务栏位于屏幕侧边。"},
+     L"显示器 {number} 改为在系统托盘处显示条形：其任务栏位于屏幕侧边。"},
     {L"", L"Display {number}’s taskbar is on a side of the screen: accounts stack down it, each style rearranged to "
           L"fit its width. The preview shows them across a bottom taskbar.",
      L"显示器 {number} 的任务栏位于屏幕侧边：账户沿任务栏纵向排列，每种样式都会重新排布以适应其宽度。预览按底部任务栏横向显示它们。"},
     {L"", L"Display {number}’s taskbar is on a side of the screen: its tray takes no bars on this Windows build. "
           L"Update Windows to show them.",
-     L"显示器 {number} 的任务栏位于屏幕侧边：在此 Windows 版本上，其托盘区无法放置条形。请更新 Windows 以显示条形。"},
+     L"显示器 {number} 的任务栏位于屏幕侧边：在此 Windows 内部版本上，其系统托盘无法放置条形。请更新 Windows 以显示条形。"},
     {L"", L"Do not poll hidden accounts", L"不轮询隐藏的账户"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.", L"拖动可重新排序。开关可在任务栏上隐藏账户。"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
@@ -160,7 +160,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"GitHub Copilot and OpenCode are trademarks of their respective owners. Logos only identify which account "
           L"a tile shows.",
      L"来自 <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0)；GitHub Copilot 标志来自 <link id=\"octicons\">Primer "
-     L"Octicons</link> (MIT 许可证，Copyright (c) 2026 GitHub Inc.)。Google Antigravity 使用 Gemini "
+     L"Octicons</link>（MIT 许可证，Copyright (c) 2026 GitHub Inc.）。Google Antigravity 使用 Gemini "
      L"标志。\nClaude、Anthropic、OpenAI、ChatGPT、Codex、Google、Gemini、Antigravity、GitHub、GitHub Copilot 和 OpenCode "
      L"是其各自所有者的商标。徽标仅用于标识磁贴显示的是哪个账户。"},
     {L"", L"Gap after accounts", L"账户后间距"},
@@ -266,7 +266,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Provider logos", L"提供商徽标"},
     {L"", L"Quota keys", L"配额简称"},
     {L"", L"Quota keys ({key5h}, {key7d}, ...) and extra usage on the charts, in pixels.",
-     L"图表上配额简称（{key5h}、{key7d} 等）和额外用量的大小（像素）。"},
+     L"图表上配额简称（{key5h}、{key7d}等）和额外用量的文字大小（像素）。"},
     {L"", L"Quotas on taskbar", L"任务栏上的配额"},
     {L"", L"Reading size", L"读数大小"},
     {L"", L"Record history", L"记录历史"},
@@ -288,32 +288,32 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Recording is paused for this account: it is hidden from the taskbar, and hidden accounts are not polled.",
      L"此账户的记录已暂停：它已在任务栏上隐藏，而隐藏的账户不会被轮询。"},
     {L"", L"Recording on for this Windows user, keep history forever, open on 7 days. Saved history stays.",
-     L"为此 Windows 用户开启记录、永久保留历史、以 7 天打开。已保存的历史会保留。"},
+     L"为此 Windows 用户开启记录，永久保留历史，打开时显示 7 天。已保存的历史会保留。"},
     {L"", L"Recording rules, storage, export and verification", L"记录规则、存储、导出和验证"},
     {L"", L"Recording starts once the taskbar saves its account IDs.", L"任务栏保存其账户 ID 后即开始记录。"},
     {L"", L"Red from", L"红色起点"},
-    {L"", L"Remove \"{label}\" ({provider})?", L"移除“{label}”（{provider}）？"},
+    {L"", L"Remove \"{label}\" ({provider})?", L"要移除“{label}”（{provider}）吗？"},
     {L"", L"Report an issue", L"报告问题"},
     {L"", L"Reset Behavior to defaults", L"将“行为”重置为默认值"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
           L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
-     L"将“行为”重置为默认值？\n\n自动选择语言、仅在主显示器上显示、悬停时显示详情、每 10 "
+     L"要将“行为”重置为默认值吗？\n\n自动选择语言、仅在主显示器上显示、悬停时显示详情、每 10 "
      L"分钟轮询一次、不轮询隐藏的账户、在红色阈值时通知。"},
     {L"", L"Reset Display to defaults", L"将“显示”重置为默认值"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
           L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
           L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
-     L"将“显示”重置为默认值？\n\n亚克力材质、已用量条形模式、悬停时显示百分比文本并自适应对齐、不显示金额、默认调色板（自定义颜色也会重置），50% 起为黄色、75% 起为橙色、90% 起为红色，标记过时数据，隐藏 "
-     L"OpenAI 的其他速率限制。"},
+     L"要将“显示”重置为默认值吗？\n\n亚克力材质、已用量条形模式、悬停时显示百分比文本并自适应对齐、不显示金额、默认调色板（自定义颜色也会重置），50% 起为黄色、75% 起为橙色、90% 起为红色，标记过时数据，隐藏其他 "
+     L"OpenAI 速率限制。"},
     {L"", L"Reset History to defaults", L"将“历史”重置为默认值"},
     {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
           L"the usage history window opens on 7 days. Saved history stays.",
-     L"将“历史”重置为默认值？\n\n将为此 Windows 用户开启记录，永久保留历史，使用历史窗口以 7 天打开。已保存的历史会保留。"},
+     L"要将“历史”重置为默认值吗？\n\n将为此 Windows 用户开启记录，永久保留历史，使用历史窗口打开时显示 7 天。已保存的历史会保留。"},
     {L"", L"Reset Layout to defaults", L"将“布局”重置为默认值"},
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
           L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
           L"Accounts are not changed.",
-     L"将“布局”重置为默认值？\n\n100 x 8 px 堆叠条形且标签在左侧、32 px 圆环、采用任务栏文字颜色的徽标和编号徽章、浅灰色插入符号式节奏标记以及默认间距。账户不会更改。"},
+     L"要将“布局”重置为默认值吗？\n\n100 x 8 px 堆叠条形且标签在左侧、32 px 圆环、采用任务栏文字颜色的徽标和编号徽章、浅灰色插入符号式节奏标记以及默认间距。账户不会更改。"},
     {L"", L"Reset countdown", L"重置倒计时"},
     {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "
           L"remain under their IDs until expiry or Clear, unless their history was deleted with them; select one to "
@@ -327,7 +327,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Ring size", L"圆环大小"},
     {L"", L"Ring thickness", L"圆环粗细"},
     {L"", L"Ringed reading", L"带环读数"},
-    {L"", L"Save dialog failed (code {code}).", L"保存对话框失败（代码 {code}）。"},
+    {L"", L"Save dialog failed (code {code}).", L"“保存”对话框出错（代码 {code}）。"},
     {L"", L"Select <b>{button}</b> to show an Anthropic, OpenAI, Google Antigravity, GitHub Copilot or OpenCode Go "
           L"account on the taskbar.",
      L"选择<b>{button}</b>，即可在任务栏上显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 或 OpenCode Go 账户。"},
@@ -339,7 +339,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"每个条形旁的简称：{key5h}、{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyCr}、{keyMo}。"},
     {L"", L"Short text", L"短文本"},
     {L"", L"Show details on hover", L"悬停时显示详情"},
-    {L"", L"Show on", L"显示位置"},
+    {L"", L"Show on", L"显示于"},
     {L"", L"Show percentage text on hover or always to change this.", L"将“百分比文本”设为“悬停时显示”或“始终显示”后即可更改。"},
     {L"", L"Show provider outages", L"显示提供商故障"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
@@ -359,14 +359,14 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
-     L"停止永久保留历史？\n\n历史将重新保留 {days, plural, other{# 天}}，并限制为 250,000 个样本（约 60 MB）。更早的样本以及超出该上限的最旧样本将被永久删除，对所有 Windows "
+     L"要停止永久保留历史吗？\n\n历史将重新保留 {days, plural, other{# 天}}，并限制为 250,000 个样本（约 60 MB）。更早的样本以及超出该上限的最旧样本将被永久删除，对所有 Windows "
      L"用户生效。"},
     {L"", L"Storage cap reached; oldest samples were pruned.", L"已达到存储上限；已清理最旧的样本。"},
     {L"", L"Storage location", L"存储位置"},
     {L"", L"Stroke width in pixels. Narrows automatically when the arc doesn’t fit around the number.",
      L"描边宽度（像素）。圆弧无法围住数字时会自动变细。"},
     {L"", L"Stroke width in pixels. Narrows automatically when the meters don’t fit around the logo or text.",
-     L"描边宽度（像素）。计量条无法围住徽标或文字时会自动变细。"},
+     L"描边宽度（像素）。无法围住徽标或文字时会自动变细。"},
     {L"", L"Suggestions and bug reports on GitHub", L"在 GitHub 上提交建议和错误报告"},
     {L"", L"Text of accounts whose identity is Label, in pixels.", L"标识为“标签”的账户的文字大小（像素）。"},
     {L"", L"Text size", L"文字大小"},
@@ -398,7 +398,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"report sampled last and peak spending, not total spending in the range. Times are local. Week comparison "
           L"uses two elapsed seven-day periods; daylight saving can shift local clock times.",
      L"大号数值是范围内的最新读数；“现在”表示它来自该账户最近一次未过时的轮询。“峰值”是记录到的最高值；在“剩余量”模式下，“最低”是剩余最少的值。“覆盖时长”统计相连的区间。达到或超过红色阈值的时间（“剩余量”模式下为达到或低于该阈值对应剩余量的时间）仅在这些区间内估算，绝不跨越间隙或超出最后一个样本。美元详情报告的是采样到的最新花费和峰值花费，而非范围内的总花费。时间为本地时间。周对比使用两个已过去的七天时段；夏令时可能使本地时钟时间发生偏移。"},
-    {L"", L"The mod’s name and version and the Windows build, for bug reports.", L"模组的名称和版本以及 Windows 版本号，用于错误报告。"},
+    {L"", L"The mod’s name and version and the Windows build, for bug reports.", L"模组的名称、版本和 Windows 内部版本号，用于错误报告。"},
     {L"", L"The range the usage history window opens on. Its range buttons still switch it.",
      L"使用历史窗口打开时显示的范围。仍可用窗口中的范围按钮切换。"},
     {L"", L"The renamed account identity already has a retained sign-in. To replace it, add an account with that "
@@ -453,6 +453,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"磁贴样式、条形样式、尺寸、标识和文字、节奏标记、位置和间距。账户不会更改。"},
     {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
      L"在数字下方显示该配额距重置的剩余时间，取代各配额的条形。"},
+    {L"", L"Translations are machine-made. Corrections are welcome as <link id=\"issues\">GitHub issues</link> or "
+     L"pull requests.",
+     L"翻译由机器生成。欢迎通过 <link id=\"issues\">GitHub 议题</link>或拉取请求提交更正。"},
     {L"", L"Turn off Reset countdown to change this.", L"关闭“重置倒计时”后即可更改。"},
     {L"", L"Turn on Pace markers to change this.", L"开启“节奏标记”后即可更改。"},
     {L"", L"Turn on Quota keys, or percentage text in Display, to change this.", L"开启“配额简称”或“显示”中的百分比文本后即可更改。"},
@@ -460,7 +463,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.", L"不可用的配额会自动隐藏。至少保留一个选中。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
           L"on the {key7d} chart.",
-     L"不可用的配额会自动隐藏。至少保留一个选中。用量图表会在 {key7d} 图表上以数字显示积分。"},
+     L"不可用的配额会自动隐藏。至少保留一个选中。用量图表会在“{key7d}”图表上以数字显示积分。"},
     {L"", L"Usage below this is blue.", L"低于此值的用量显示为蓝色。"},
     {L"", L"Usage below this is blue. Also the level for threshold notifications.", L"低于此值的用量显示为蓝色。也是阈值通知的触发级别。"},
     {L"", L"Usage below this is green.", L"低于此值的用量显示为绿色。"},
@@ -498,7 +501,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"account-error", L"could not save refreshed token", L"无法保存刷新后的令牌"},
     {L"account-error", L"failed to parse quota summary JSON", L"无法解析配额摘要 JSON"},
     {L"account-error", L"failed to parse user status JSON", L"无法解析用户状态 JSON"},
-    {L"account-error", L"fetch thread failed", L"获取线程失败"},
+    {L"account-error", L"fetch thread failed", L"数据获取线程失败"},
     {L"account-error", L"groups is not an array", L"groups 不是数组"},
     {L"account-error", L"internal error", L"内部错误"},
     {L"account-error", L"invalid token response", L"令牌响应无效"},
@@ -524,7 +527,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"account-error-alone", L"Could not save refreshed token", L"无法保存刷新后的令牌"},
     {L"account-error-alone", L"Failed to parse quota summary JSON", L"无法解析配额摘要 JSON"},
     {L"account-error-alone", L"Failed to parse user status JSON", L"无法解析用户状态 JSON"},
-    {L"account-error-alone", L"Fetch thread failed", L"获取线程失败"},
+    {L"account-error-alone", L"Fetch thread failed", L"数据获取线程失败"},
     {L"account-error-alone", L"Groups is not an array", L"groups 不是数组"},
     {L"account-error-alone", L"Invalid token response", L"令牌响应无效"},
     {L"account-error-alone", L"Network error", L"网络错误"},
@@ -593,6 +596,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"copilot-unit", L"chat requests", L"聊天请求"},
     {L"copilot-unit", L"premium requests", L"高级请求"},
     {L"credits-amount", L"{amount} credits", L"{amount} 积分"},
+    {L"credits-amount-abbreviated", L"{amount} credits", L"{amount} 积分"},
     {L"credits-unit", L"{credits, plural, one{credits} other{credits}}", L"{credits, plural, other{积分}}"},
     {L"date-month", L"Apr", L"4月"},
     {L"date-month", L"Aug", L"8月"},
@@ -641,20 +645,20 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"dialog-caption", L"Remove account", L"移除账户"},
     {L"dialog-caption", L"Reset settings", L"重置设置"},
     {L"dialog-caption", L"Usage history", L"使用历史"},
-    {L"duration", L"{days}d", L"{days}天"},
-    {L"duration", L"{days}d {hours}h", L"{days}天{hours}小时"},
-    {L"duration", L"{hours}h", L"{hours}小时"},
-    {L"duration", L"{hours}h {minutes}m", L"{hours}小时{minutes}分钟"},
-    {L"duration", L"{minutes}m", L"{minutes}分钟"},
-    {L"duration", L"{minutes}m {seconds}s", L"{minutes}分{seconds}秒"},
-    {L"duration", L"{seconds}s", L"{seconds}秒"},
+    {L"duration", L"{days}d", L"{days} 天"},
+    {L"duration", L"{days}d {hours}h", L"{days} 天 {hours} 小时"},
+    {L"duration", L"{hours}h", L"{hours} 小时"},
+    {L"duration", L"{hours}h {minutes}m", L"{hours} 小时 {minutes} 分钟"},
+    {L"duration", L"{minutes}m", L"{minutes} 分钟"},
+    {L"duration", L"{minutes}m {seconds}s", L"{minutes} 分钟 {seconds} 秒"},
+    {L"duration", L"{seconds}s", L"{seconds} 秒"},
     {L"file-type", L"All files (*.*)", L"所有文件 (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"CSV 文件 (*.csv)"},
     {L"flyout-footer", L"No data yet", L"暂无数据"},
     {L"flyout-footer", L"Updated {time}", L"更新于 {time}"},
-    {L"flyout-footer", L"Updated {time} (stale)", L"更新于 {time} (已过时)"},
+    {L"flyout-footer", L"Updated {time} (stale)", L"更新于 {time}（已过时）"},
     {L"flyout-footer", L"Visual test data", L"视觉测试数据"},
-    {L"flyout-footer", L"{status} - refreshing...", L"{status} - 正在刷新..."},
+    {L"flyout-footer", L"{status} - refreshing...", L"{status} - 正在刷新…"},
     {L"flyout-legend", L"even pace", L"匀速"},
     {L"flyout-legend", L"from local history", L"来自本地历史"},
     {L"flyout-legend", L"projection", L"预测"},
@@ -663,14 +667,14 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"flyout-note", L"No AI-credit allowance on this plan.", L"此计划不包含 AI 积分额度。"},
     {L"flyout-note", L"No premium request allowance on this plan.", L"此计划不包含高级请求额度。"},
     {L"flyout-note", L"No quotas reported.", L"未报告任何配额。"},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"需要登录。单击进度条以登录。"},
+    {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"需要登录。单击条形以登录。"},
     {L"flyout-note", L"extra usage: unlimited", L"额外用量：无限制"},
     {L"flyout-note", L"rate limits: none reported", L"速率限制：未报告"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, other{可用免费重置 # 次}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
                      L"{when}",
-     L"{count, plural, other{可用免费重置 # 次}} · 下一次{when}过期"},
+     L"{count, plural, other{可用免费重置 # 次}} · 下一次过期：{when}"},
     {L"history-about", L"Axes and units", L"坐标轴和单位"},
     {L"history-about", L"Cards", L"卡片"},
     {L"history-about", L"Legend and readout", L"图例和读数"},
@@ -765,9 +769,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"identity-position", L"Right", L"右侧"},
     {L"identity-position", L"Top", L"上方"},
     {L"language-choice", L"Automatic ({language})", L"自动（{language}）"},
-    {L"list-end", L"{a} and {b}", L"{a}和{b}"},
+    {L"list-end", L"{a} and {b}", L"{a} 和 {b}"},
     {L"list-middle", L"{a}, {b}", L"{a}、{b}"},
-    {L"list-pair", L"{a} and {b}", L"{a}和{b}"},
+    {L"list-pair", L"{a} and {b}", L"{a} 和 {b}"},
     {L"list-start", L"{a}, {b}", L"{a}、{b}"},
     {L"logo-color", L"Gemini gradient", L"Gemini 渐变"},
     {L"logo-color", L"Orange", L"橙色"},
@@ -786,7 +790,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"notification-title", L"AI credits usage at {percent}%", L"AI 积分：已用 {percent}%"},
     {L"notification-title", L"chat requests usage at {percent}%", L"聊天请求：已用 {percent}%"},
     {L"notification-title", L"credits usage at {percent}%", L"积分：已用 {percent}%"},
-    {L"notification-title", L"monthly extra usage at {percent}%", L"每月额外：已用 {percent}%"},
+    {L"notification-title", L"monthly extra usage at {percent}%", L"每月额外用量：已用 {percent}%"},
     {L"notification-title", L"monthly usage at {percent}%", L"每月：已用 {percent}%"},
     {L"notification-title", L"premium requests usage at {percent}%", L"高级请求：已用 {percent}%"},
     {L"notification-title", L"weekly usage at {percent}%", L"每周：已用 {percent}%"},
@@ -827,7 +831,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"placement", L"After Show desktop", L"“显示桌面”后"},
     {L"placement", L"After the clock", L"时钟后"},
     {L"placement", L"Before network and volume", L"网络和音量前"},
-    {L"placement", L"Before notification icons", L"通知图标前"},
+    {L"placement", L"Before notification icons", L"系统托盘图标前"},
     {L"placement", L"Before the clock", L"时钟前"},
     {L"placement", L"Left side", L"左侧"},
     {L"placement", L"Right of Start", L"“开始”右侧"},
@@ -838,16 +842,16 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"preview", L"Preview", L"预览"},
     {L"preview", L"Show on taskbar", L"在任务栏上显示"},
     {L"quota-amount", L"Limit reached", L"已达上限"},
-    {L"quota-amount", L"Pooled {unit}, no per-user limit", L"共享{unit}，无单个用户限额"},
+    {L"quota-amount", L"Pooled {unit}, no per-user limit", L"{unit}为共享额度，无单用户限额"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
-     L"共享{unit}，无单个用户限额\n额外用量：{overage} {unit}"},
+     L"{unit}为共享额度，无单用户限额\n额外用量：{overage} {unit}"},
     {L"quota-amount", L"{left} left of {limit} credits", L"剩余 {left} / {limit} 积分"},
     {L"quota-amount", L"{used} of {limit} spent", L"已花费 {used} / {limit}"},
     {L"quota-amount", L"{used} of {limit} {unit} used", L"已使用 {used} / {limit} {unit}"},
     {L"quota-amount", L"{used} of {limit} {unit} used\nAdditional usage: {overage} {unit}",
      L"已使用 {used} / {limit} {unit}\n额外用量：{overage} {unit}"},
     {L"quota-key-2-chars", L"5h", L"5h"},
-    {L"quota-key-2-chars", L"7d", L"7天"},
+    {L"quota-key-2-chars", L"7d", L"周"},
     {L"quota-key-2-chars", L"Ar", L"Ar"},
     {L"quota-key-2-chars", L"Cr", L"积分"},
     {L"quota-key-2-chars", L"Ex", L"额外"},
@@ -889,7 +893,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"recording-status", L"Unavailable", L"不可用"},
     {L"recording-status", L"Waiting", L"等待中"},
     {L"reset-when", L"in {duration}", L"{duration}后"},
-    {L"reset-when", L"in {duration} ({time})", L"{duration}后 ({time})"},
+    {L"reset-when", L"in {duration} ({time})", L"{duration}后（{time}）"},
     {L"reset-when", L"now", L"现在"},
     {L"response-shape", L"JSON object with no keys", L"没有键的 JSON 对象"},
     {L"response-shape", L"empty body", L"正文为空"},

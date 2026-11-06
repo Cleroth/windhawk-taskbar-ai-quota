@@ -57,7 +57,8 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   target) on test-only catalogs: grammar and escapes, shapes and limits, plural categories and
   formatting per language, each fallback case with English plural results, reordered links,
   literal, numeric and rich arguments, list patterns per production catalog, the registry,
-  explicit choices and the context, Automatic matching over tag lists, the pseudo-locale, lookup
+  explicit choices and the context, Automatic matching over tag lists (a test registry's languages
+  in progress skipped), the pseudo-locale, lookup
   with and without context. `fixtures/i18n-settings.inc`: localization in the settings window on
   the production catalogs (`i18n/ui-runs.h` is extracted after the toolkit): localized runs bound
   to actions, the History page's two-link sentence with its links reordered by a test catalog
@@ -266,8 +267,8 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   dialog title, notice and progress
   in Russian with their plurals, its notice re-labeled by a switch; Delete history's dialog and
   notices in Russian with the journal's reason; a dialog keeping the language it opened in; the
-  readout's rows in Chinese; regional formats: values, hours, axis labels and cards in de-DE,
-  export counts in each region's groups, the large-export estimate ungrouped, a regional change
+  readout's rows in Chinese; abbreviated credits' own template (Russian); regional formats:
+  values, hours, axis labels and cards in de-DE, export counts in each region's groups, the large-export estimate ungrouped, a regional change
   recomposing the window), `fixtures/i18n-journal.inc` (the journal's coded errors per
   language, the storage bar and a failed Clear's notice with its reason in the window's
   language) and

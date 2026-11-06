@@ -268,12 +268,17 @@ static double HistoryUiShown(int meter, double value, bool remaining) {
 
 // A meter's value with its unit: percentages with `percentDecimals` places (cards whole, the
 // readout and shares one), dollars and credits with two. Dollars keep their currency code and
-// percentages their sign in every language and format.
+// percentages their sign in every language and format. An abbreviated amount of credits (12.3K)
+// takes its own template: it reads as thousands or more, which some languages word differently
+// from a decimal amount (Russian: кредитов, not кредита).
 static std::wstring HistoryUiValue(const I18nLocale& locale, int meter, double value, int percentDecimals) {
     if (meter == 6) return L"USD " + HistoryUiNumber(locale, value, 2);
     if (meter == 7) {
-        return I18nText(locale, TrCtx(L"credits-amount", L"{amount} credits"),
-                        {{L"amount", HistoryUiNumber(locale, value, 2)}});
+        std::wstring amount = HistoryUiNumber(locale, value, 2);
+        bool abbreviated = !amount.empty() && std::wstring_view(L"KMGT").find(amount.back()) != std::wstring_view::npos;
+        return I18nText(locale, abbreviated ? TrCtx(L"credits-amount-abbreviated", L"{amount} credits") :
+                                              TrCtx(L"credits-amount", L"{amount} credits"),
+                        {{L"amount", amount}});
     }
     return HistoryUiNumber(locale, value, percentDecimals) + L"%";
 }

@@ -129,6 +129,21 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
         spec.minHeight = 62;
         y = UiAddCard(g, items, id, x, y, width, spec).card.bottom + 3;
     }
+    // Under the links, a line inviting translation corrections, linking to the repository's issues.
+    {
+        UiItem line;
+        line.id = id++;
+        line.kind = UiItemKind::Text;
+        line.font = UiFont::Caption;
+        line.ink = UiInk::Secondary;
+        line.runs = I18nUiRuns(I18nRuns(locale, Tr(L"Translations are machine-made. Corrections are welcome as <link "
+                                                    L"id=\"issues\">GitHub issues</link> or pull requests.")),
+                               {{L"issues", {UiActionKind::OpenUrl, 0, std::wstring(kSettingsProjectUrl) + L"/issues"}}});
+        float height = UiLayoutSize(UiRichLayout(g, line.runs, UiFont::Caption, width)).height;
+        line.rect = {x, y + 5, x + width, y + 5 + height};
+        items.push_back(std::move(line));
+        y += 5 + height + 3;
+    }
 
     // Credits and license.
     y = UiAddSection(items, id, x, y - 3 + 20, width,

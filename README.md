@@ -89,7 +89,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
   - show provider outages (on by default): marks an account while its provider's status page reports a problem, as described under [Provider outages](#provider-outages); off reads no status pages
   - additional OpenAI rate limits as rows in the details flyout, one per window (Codex Spark, hidden model lanes such as `gpt-reserve`), hidden by default
 - **Behavior**:
-  - interface language of the settings and usage history windows and the taskbar: **Automatic** (the default; the first of your Windows display languages the mod speaks, else English), English, or a language by its own name; per Windows user, it switches the taskbar and the open windows at once, except that an open sign-in window keeps its language and the usage history window waits for its open dialog or export to finish. Translations other than English are machine-made and in progress, and Automatic doesn't pick them yet. Regional formats: whatever the language, numbers follow your Windows regional format: its decimal separator (`12,5`) and, for counts and the settings' number boxes, its digit grouping (`1.234.567`, `12,34,567`); a change shows at the next update. `%`, `$`, `USD` and the `k`/`M` suffixes stay; amounts are never grouped. Taskbar and flyout times use the regional time format, the usage history window its language's compact 24-hour form; CSV exports never change
+  - interface language: **Automatic** (the default), English, or another language by its own name, per Windows user, as described under [Languages](#languages)
   - show on: the primary display, all displays, or a detected display with its resolution
   - show details on hover: resting the pointer on a column opens its details flyout (on by default)
   - cloud poll interval presets plus a custom interval for Anthropic, OpenAI, GitHub Copilot and OpenCode Go (Antigravity polls its local server every minute); only the Explorer process that runs the taskbar polls, refreshes sign-ins and notifies, so another one (such as folder windows launched in a separate process) adds no requests or notifications
@@ -99,6 +99,15 @@ Right-click any quota column and choose **Settings**. The window follows the Win
 - **About**: version, **Copy version info** (the mod's name and version and the Windows build, with its update revision, to the clipboard for bug reports), project links, contributors, credits, and license
 
 Sizes and thresholds combine a slider with a number box; spacing, polling, retention, and credits use number boxes with step buttons. Changes save as you make them; a number or text box saves on Enter or when you leave it, and Esc reverts it. A value that can't be saved stays in its box with the error, and closing the window then asks before discarding it. Layout, Display, Behavior, and History each have a reset that restores that page's defaults without touching accounts or sign-ins.
+
+## Languages
+
+The taskbar, the details flyout, notifications, and the settings, usage history and sign-in windows are available in English, Deutsch, Español, Français, 日本語, Português (Brasil), Русский and 简体中文. **Automatic** (the default) uses the first of your Windows display languages the mod supports, else English. To choose another, use **Settings > Behavior > Interface language**: the choice applies to your Windows user only and switches the taskbar and the open windows at once, except that an open sign-in window keeps its language and the usage history window waits for its open dialog or export to finish.
+
+- Translations other than English are machine-made. Corrections are welcome: [open an issue](https://github.com/Cleroth/windhawk-taskbar-ai-quota/issues/new) or a pull request (each language is one file, `src/i18n/lang-<tag>.h`).
+- Numbers follow your Windows regional format whatever the language: its decimal separator (`12,5`) and, for counts and the settings' number boxes, its digit grouping (`1.234.567`, `12,34,567`); a change shows at the next update. `%`, `$`, `USD` and the `k`/`M` suffixes stay, and amounts are never grouped. Taskbar and flyout times use the regional time format; the usage history window uses its language's compact 24-hour form.
+- Buttons in Windows' own dialogs (confirmations, the save dialog, the color picker) follow your Windows display language.
+- These stay in English: brand, provider and model names; text the providers supply (plan and quota names, status page incidents, sign-in error details); the Windhawk log; and CSV exports.
 
 ## Usage history
 

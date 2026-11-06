@@ -3,7 +3,7 @@
 static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub Copilot AI credits: spent "
           L"in Used mode, left in Remaining mode.",
-     L"$ oder Guthaben statt % bei zusätzlicher Nutzung von Anthropic, Guthaben von OpenAI und KI-Guthaben von "
+     L"$ oder Credits statt % bei der Zusatznutzung von Anthropic, den Credits von OpenAI und den AI Credits von "
      L"GitHub Copilot: ausgegeben im Modus „Verbraucht“, übrig im Modus „Verbleibend“."},
     {L"", L"1 to 3650 days.", L"1 bis 3650 Tage."},
     {L"", L"2 to 1440 minutes.", L"2 bis 1440 Minuten."},
@@ -11,8 +11,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Eine Änderung konnte nicht gespeichert werden; sie wird mit ihrem Fehler angezeigt.\n\nNicht gespeicherte "
      L"Änderungen verwerfen und das Fenster schließen?"},
     {L"", L"A diagonal marks even use of the quota across its window, to compare with its usage.",
-     L"Eine Diagonale markiert gleichmäßigen Verbrauch des Kontingents über sein Zeitfenster, zum Vergleich mit "
-     L"seiner Nutzung."},
+     L"Eine Diagonale markiert gleichmäßigen Verbrauch des Kontingents über sein Zeitfenster, zum Vergleich mit der "
+     L"tatsächlichen Nutzung."},
     {L"", L"A faint border around each chart.", L"Ein dezenter Rahmen um jedes Diagramm."},
     {L"", L"A full track behind each fill, or a thin rail under it.",
      L"Eine volle Spur hinter jeder Füllung oder eine schmale Schiene darunter."},
@@ -55,7 +55,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Der gesamte lokale Verlauf wurde gelöscht. Künftige Abfragen können wieder mit der Aufzeichnung beginnen."},
     {L"", L"Also delete its usage history", L"Auch den Nutzungsverlauf löschen"},
     {L"", L"Also the level for threshold notifications.", L"Zugleich die Stufe für Schwellenwert-Benachrichtigungen."},
-    {L"", L"Amounts on extra usage and credits", L"Beträge für zusätzliche Nutzung und Guthaben"},
+    {L"", L"Amounts on extra usage and credits", L"Beträge für Zusatznutzung und Credits"},
     {L"", L"An account is no longer configured; its unsaved changes were dropped.",
      L"Ein Konto ist nicht mehr konfiguriert; seine nicht gespeicherten Änderungen wurden verworfen."},
     {L"", L"Another account of this provider uses this label.",
@@ -63,10 +63,10 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Anthropic extra usage or OpenAI credits in the {key7d} chart’s top-left corner (bottom-left in Remaining "
           L"mode), when selected for the account and reported: spent in Used mode, left in Remaining mode. Percent "
           L"shows the amount without a limit. OpenAI credits never get a chart of their own.",
-     L"Zusätzliche Nutzung von Anthropic oder Guthaben von OpenAI in der oberen linken Ecke des {key7d}-Diagramms "
-     L"(unten links im Modus „Verbleibend“), wenn für das Konto ausgewählt und gemeldet: ausgegeben im Modus "
-     L"„Verbraucht“, übrig im Modus „Verbleibend“. „Prozent“ zeigt ohne Limit den Betrag. Guthaben von OpenAI "
-     L"erhalten nie ein eigenes Diagramm."},
+     L"Zusatznutzung von Anthropic oder Credits von OpenAI in der oberen linken Ecke des {key7d}-Diagramms (unten "
+     L"links im Modus „Verbleibend“), sofern für das Konto ausgewählt und gemeldet: ausgegeben im Modus „Verbraucht“, "
+     L"übrig im Modus „Verbleibend“. „Prozent“ zeigt ohne Limit den Betrag. Credits von OpenAI erhalten nie ein "
+     L"eigenes Diagramm."},
     {L"", L"Anthropic, OpenAI and GitHub Copilot sign in through your browser, OpenCode Go with an API key. Google "
           L"Antigravity uses its signed-in app or CLI, which must keep running.",
      L"Anthropic, OpenAI und GitHub Copilot melden sich über Ihren Browser an, OpenCode Go mit einem API-Schlüssel. "
@@ -75,7 +75,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Applies to this Windows user only. Turning it off keeps saved history.",
      L"Gilt nur für diesen Windows-Benutzer. Beim Ausschalten bleibt der gespeicherte Verlauf erhalten."},
     {L"", L"Background of the details flyout and the settings and usage history windows.",
-     L"Hintergrund der Detailansicht sowie der Fenster Einstellungen und Nutzungsverlauf."},
+     L"Hintergrund der Detailansicht sowie der Fenster „Einstellungen“ und „Nutzungsverlauf“."},
     {L"", L"Badge color", L"Badge-Farbe"},
     {L"", L"Badge horizontal offset", L"Horizontaler Badge-Versatz"},
     {L"", L"Badge size", L"Badge-Größe"},
@@ -108,7 +108,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Claude logo", L"Claude-Logo"},
     {L"", L"Cloud poll interval", L"Cloud-Abfrageintervall"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
-     L"Codex Spark, versteckte Modell-Limits wie gpt-reserve und den Namen des Spark-Plans in den OpenAI-Details."},
+     L"Codex Spark, versteckte Modell-Limits wie gpt-reserve und der Name des Spark-Plans in den OpenAI-Details."},
     {L"", L"Contributors", L"Mitwirkende"},
     {L"", L"Copy version info", L"Versionsinfo kopieren"},
     {L"", L"Could not clear all history. {reason}", L"Der gesamte Verlauf konnte nicht gelöscht werden. {reason}"},
@@ -131,7 +131,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Identität. Um sie zu löschen, fügen Sie ein Konto mit dem versuchten Anbieter und der versuchten Bezeichnung "
      L"hinzu und entfernen Sie es dann."},
     {L"", L"Could not update account visibility.", L"Die Sichtbarkeit des Kontos konnte nicht aktualisiert werden."},
-    {L"", L"Credits max", L"Guthaben-Maximum"},
+    {L"", L"Credits max", L"Credits-Maximum"},
     {L"", L"Custom interval", L"Benutzerdefiniertes Intervall"},
     {L"", L"Custom retention", L"Benutzerdefinierte Aufbewahrung"},
     {L"", L"Default time span", L"Standardzeitraum"},
@@ -215,11 +215,11 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"uses the Gemini mark.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
           L"GitHub Copilot and OpenCode are trademarks of their respective owners. Logos only identify which account "
           L"a tile shows.",
-     L"Aus <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); das Zeichen von GitHub Copilot aus <link "
+     L"Aus <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); das Logo von GitHub Copilot aus <link "
      L"id=\"octicons\">Primer Octicons</link> (MIT-Lizenz, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
-     L"verwendet das Gemini-Zeichen.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, "
-     L"GitHub, GitHub Copilot und OpenCode sind Marken ihrer jeweiligen Inhaber. Logos zeigen nur, zu welchem Konto "
-     L"eine Kachel gehört."},
+     L"verwendet das Gemini-Logo.\nClaude, Anthropic, OpenAI, ChatGPT, Codex, Google, Gemini, Antigravity, GitHub, "
+     L"GitHub Copilot und OpenCode sind Marken ihrer jeweiligen Inhaber. Logos zeigen nur, zu welchem Konto eine "
+     L"Kachel gehört."},
     {L"", L"Gap after accounts", L"Abstand nach den Konten"},
     {L"", L"Gauge size", L"Größe der Bogenanzeige"},
     {L"", L"Gauge thickness", L"Stärke der Bogenanzeige"},
@@ -228,15 +228,15 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
           L"them. Shared across Windows users.",
      L"Ausgeblendete Konten werden weder abgefragt noch aufgezeichnet, auch wenn „Verlauf aufzeichnen“ aktiviert ist. "
-     L"Deaktivieren, um sie weiter aufzuzeichnen. Gilt für alle Windows-Benutzer."},
+     L"Schalten Sie dies aus, um sie weiter aufzuzeichnen. Gilt für alle Windows-Benutzer."},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
-     L"Der Verlauf folgt diesem Eintrag, auch nach einer erneuten Anmeldung. Verwenden Sie für ein anderes Login "
-     L"einen neuen Eintrag."},
+     L"Der Verlauf folgt diesem Eintrag, auch nach einer erneuten Anmeldung. Verwenden Sie für ein anderes "
+     L"Anbieterkonto einen neuen Eintrag."},
     {L"", L"History recording is off. Saved history stays; nothing new is recorded.",
      L"Die Verlaufsaufzeichnung ist aus. Der gespeicherte Verlauf bleibt erhalten; es wird nichts Neues "
      L"aufgezeichnet."},
     {L"", L"History storage failed; Open usage history shows why.",
-     L"Der Verlaufsspeicher ist fehlgeschlagen; „Nutzungsverlauf öffnen“ zeigt den Grund."},
+     L"Fehler beim Speichern des Verlaufs; „Nutzungsverlauf öffnen“ zeigt den Grund."},
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"Wie oft Anthropic, OpenAI, GitHub Copilot und OpenCode Go abgefragt werden. Antigravity fragt seine lokale "
@@ -286,7 +286,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
      L"Benachrichtigt, wenn ein Taskleisten-Kontingent den gewählten Schwellenwert erstmals erreicht. Wird wieder "
      L"aktiv, sobald es darunter fällt."},
-    {L"", L"Now caret", L"Jetzt-Caret"},
+    {L"", L"Now caret", L"Jetzt-Dreieck"},
     {L"", L"Now line", L"Jetzt-Linie"},
     {L"", L"Number size", L"Zahlengröße"},
     {L"", L"On hover", L"Beim Daraufzeigen"},
@@ -304,7 +304,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Percent of the standard size; rings keep it inside the hole.",
      L"Prozent der Standardgröße; bei Ringen bleibt es innerhalb des Lochs."},
     {L"", L"Percent of the tile’s height, from 0% to 100% used, or left in Remaining mode.",
-     L"Prozent der Kachelhöhe, für 0 % bis 100 % verbraucht, im Modus „Verbleibend“ übrig."},
+     L"Prozent der Kachelhöhe, von 0% bis 100% verbraucht, im Modus „Verbleibend“ übrig."},
     {L"", L"Percentage alignment", L"Ausrichtung des Prozenttexts"},
     {L"", L"Percentage on each bar: never, on hover, or always.",
      L"Prozentwert auf jedem Balken: nie, beim Daraufzeigen oder immer."},
@@ -317,14 +317,14 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
           L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
           L"it on its own axis. Accounts without readings in the range are listed under No readings.",
-     L"Prozentwerte verwenden die linke Achse; das schattierte Band markiert Ihren roten Schwellenwert. Im "
-     L"Balkenmodus „Verbleibend“ (Einstellungen > Darstellung) zeigen sie, was übrig ist: Die Linien fallen also mit "
-     L"steigender Nutzung, gehen nach dem Limit unter 0% und das Band liegt unten. „Zusätzliche Nutzung“ zeigt das "
-     L"verbrauchte Budget von Anthropic, das verbrauchte KI-Guthaben von GitHub Copilot und das verbrauchte "
-     L"Monatskontingent von OpenCode Go (%) (im Modus „Verbleibend“ das Übrige) sowie das verbleibende Guthaben von "
-     L"OpenAI, das mit steigender Nutzung fällt, auf einer eigenen Achse. Dollar-Ausgaben erscheinen auf den Karten; "
-     L"„Alle Messgrößen“ zeichnet sie zusätzlich auf einer eigenen Achse. Konten ohne Messwerte im Zeitraum werden "
-     L"unter „Keine Messwerte im Zeitraum“ aufgeführt."},
+     L"Prozentwerte verwenden die linke Achse; das schattierte Band markiert Ihren roten Schwellenwert. Im Balkenmodus "
+     L"„Verbleibend“ (Einstellungen > Darstellung) zeigen sie, was übrig ist: Die Linien fallen also mit steigender "
+     L"Nutzung, gehen nach dem Limit unter 0% und das Band liegt unten. „Zusatznutzung“ zeigt das verbrauchte Budget "
+     L"von Anthropic, die verbrauchten AI Credits von GitHub Copilot und das verbrauchte Monatskontingent von OpenCode "
+     L"Go (%) (links, im Modus „Verbleibend“ den Rest) sowie die verbleibenden Credits von OpenAI, die mit steigender "
+     L"Nutzung fallen, auf einer eigenen Achse. Dollar-Ausgaben erscheinen auf den Karten; „Alle Messgrößen“ zeichnet "
+     L"sie zusätzlich auf einer eigenen Achse. Konten ohne Messwerte im Zeitraum werden unter „Keine Messwerte im "
+     L"Zeitraum“ aufgeführt."},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -336,7 +336,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Den gesamten Nutzungsverlauf des entfernten Kontos {label} ({provider}) dauerhaft löschen?\r\n\r\nJeder "
      L"aufgezeichnete Messwert des Kontos wird gelöscht, nicht nur der ausgewählte Zeitraum. Dies kann nicht "
      L"rückgängig gemacht werden."},
-    {L"", L"Pie area", L"Diagrammbereich"},
+    {L"", L"Pie area", L"Größe der Kreisdiagramme"},
     {L"", L"Pixels across each bar.", L"Dicke jedes Balkens in Pixeln."},
     {L"", L"Pixels across each quota’s chart.", L"Breite des Diagramms jedes Kontingents in Pixeln."},
     {L"", L"Pixels along each bar.", L"Länge jedes Balkens in Pixeln."},
@@ -354,7 +354,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Provider logos", L"Anbieterlogos"},
     {L"", L"Quota keys", L"Kontingentkürzel"},
     {L"", L"Quota keys ({key5h}, {key7d}, ...) and extra usage on the charts, in pixels.",
-     L"Kontingentkürzel ({key5h}, {key7d} usw.) und zusätzliche Nutzung auf den Diagrammen, in Pixeln."},
+     L"Kontingentkürzel ({key5h}, {key7d} usw.) und Zusatznutzung auf den Diagrammen, in Pixeln."},
     {L"", L"Quotas on taskbar", L"Kontingente in der Taskleiste"},
     {L"", L"Reading size", L"Größe des Messwerts"},
     {L"", L"Record history", L"Verlauf aufzeichnen"},
@@ -373,13 +373,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"spending ledger.",
      L"Die Aufzeichnung ist standardmäßig an. Ist sie aus, schalten Sie sie mit „Aufzeichnung aktivieren“ im "
      L"Hinweisbalken oder in den Einstellungen ein; die Wahl gilt nur für den aktuellen Windows-Benutzer, und die "
-     L"Aufzeichnung pro Konto sowie die Regeln für ausgeblendete Konten gelten weiterhin. Die Aufzeichnung beginnt "
-     L"mit der nächsten Abfrage, sobald die Verlaufs-IDs der Konten gespeichert sind. Fehlende Daten können auch "
-     L"eine nicht unterstützte Messgröße, fehlgeschlagene Abfragen oder abgelaufenen Verlauf bedeuten. Nichts wird "
+     L"Aufzeichnung pro Konto sowie die Regeln für ausgeblendete Konten gelten weiterhin. Die Aufzeichnung beginnt mit "
+     L"der nächsten Abfrage, sobald die Verlaufs-IDs der Konten gespeichert sind. Fehlende Daten können auch eine "
+     L"nicht unterstützte Messgröße, fehlgeschlagene Abfragen oder abgelaufenen Verlauf bedeuten. Nichts wird "
      L"nachträglich ergänzt. Das Fenster folgt neuen Abfragen (das Diagramm wartet, solange der Zeiger darauf ist); "
      L"„Aktualisieren“ oder F5 liest den lokalen Verlauf erneut. Der Export schreibt jede unterstützte Messgröße des "
      L"ausgewählten Kontos oder, unter „Alle Konten“, aller Konten über den ausgewählten Zeitraum (beim Vergleich "
-     L"beide Wochen), mit UTC-Zeiten und IDs statt Bezeichnungen. Guthaben sind weder Dollar noch ein "
+     L"beide Wochen), mit UTC-Zeiten und IDs statt Bezeichnungen. Credits sind weder Dollar noch ein "
      L"Ausgabenprotokoll."},
     {L"", L"Recording is paused for this account: it is hidden from the taskbar, and hidden accounts are not polled.",
      L"Die Aufzeichnung ist für dieses Konto pausiert: Es ist in der Taskleiste ausgeblendet, und ausgeblendete "
@@ -406,7 +406,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
      L"Darstellung auf die Standardwerte zurücksetzen?\n\nAcryl-Material, Balkenmodus „Verbraucht“, Prozenttext beim "
      L"Daraufzeigen mit adaptiver Ausrichtung, keine Beträge, die Standardpalette (eigene Farben werden ebenfalls "
-     L"zurückgesetzt) mit Gelb ab 50 %, Orange ab 75 % und Rot ab 90 %, veraltete Daten markiert, zusätzliche "
+     L"zurückgesetzt) mit Gelb ab 50%, Orange ab 75% und Rot ab 90%, veraltete Daten markiert, zusätzliche "
      L"OpenAI-Ratenlimits ausgeblendet."},
     {L"", L"Reset History to defaults", L"Verlauf auf Standard zurücksetzen"},
     {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
@@ -418,9 +418,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
           L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
           L"Accounts are not changed.",
-     L"Layout auf die Standardwerte zurücksetzen?\n\nGestapelte Balken 100 x 8 px mit Beschriftungen links, Ringe "
-     L"mit 32 px, Logos und Nummern-Badges in der Textfarbe der Taskleiste, hellgraue Tempomarkierungen als Caret "
-     L"und die Standardabstände. Konten werden nicht geändert."},
+     L"Layout auf die Standardwerte zurücksetzen?\n\nGestapelte Balken 100 x 8 px mit Bezeichnungen links, Ringe mit "
+     L"32 px, Logos und Nummern-Badges in der Textfarbe der Taskleiste, hellgraue Tempomarkierungen als Caret und die "
+     L"Standardabstände. Konten werden nicht geändert."},
     {L"", L"Reset countdown", L"Reset-Countdown"},
     {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "
           L"remain under their IDs until expiry or Clear, unless their history was deleted with them; select one to "
@@ -432,10 +432,10 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Retention: {days, plural, one{# days} other{# days}}, also limited to 250,000 records / about 60 MB. "
           L"Turning recording off keeps saved history. Removed accounts remain under their IDs until expiry or Clear, "
           L"unless their history was deleted with them; select one to delete its history.",
-     L"Aufbewahrung: {days, plural, one{# Tag} other{# Tage}}, zudem begrenzt auf 250.000 Einträge / etwa 60 MB. "
-     L"Beim Ausschalten der Aufzeichnung bleibt der gespeicherte Verlauf erhalten. Entfernte Konten bleiben unter "
-     L"ihren IDs bis zum Ablauf oder bis „Gesamten Verlauf löschen“ erhalten, sofern ihr Verlauf nicht mit ihnen "
-     L"gelöscht wurde; wählen Sie eines aus, um seinen Verlauf zu löschen."},
+     L"Aufbewahrung: {days, plural, one{# Tag} other{# Tage}}, zudem begrenzt auf 250.000 Einträge / etwa 60 MB. Beim "
+     L"Ausschalten der Aufzeichnung bleibt der gespeicherte Verlauf erhalten. Entfernte Konten bleiben unter ihren IDs "
+     L"bis zum Ablauf oder bis „Gesamten Verlauf löschen“ erhalten, sofern ihr Verlauf nicht mit ihnen gelöscht wurde; "
+     L"wählen Sie eines aus, um seinen Verlauf zu löschen."},
     {L"", L"Ring size", L"Ringgröße"},
     {L"", L"Ring thickness", L"Ringstärke"},
     {L"", L"Ringed reading", L"Messwert mit Ring"},
@@ -445,12 +445,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Wählen Sie <b>{button}</b>, um ein Konto von Anthropic, OpenAI, Google Antigravity, GitHub Copilot oder "
      L"OpenCode Go in der Taskleiste anzuzeigen."},
     {L"", L"Set Credits max to show the Credits bar.",
-     L"Legen Sie ein Guthaben-Maximum fest, um den Guthaben-Balken anzuzeigen."},
+     L"Legen Sie „Credits-Maximum“ fest, um den Credits-Balken anzuzeigen."},
     {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
           L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
      L"Gilt für alle Windows-Benutzer. „Unbegrenzt“ löscht nichts und hat keine Größenbeschränkung, daher wächst der "
      L"Verlauf im Speicher des Explorers und auf dem Datenträger weiter. Tageslimits bereinigen stündlich, mit einer "
-     L"Obergrenze von etwa 60 MB."},
+     L"Obergrenze von etwa 60 MB."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"Kürzel neben jedem Balken: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Kurztext"},
@@ -481,9 +481,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
-     L"Verlauf nicht mehr unbegrenzt aufbewahren?\n\nDer Verlauf wird wieder {days, plural, one{# Tag} other{# "
-     L"Tage}} lang aufbewahrt und auf 250.000 Messwerte (etwa 60 MB) begrenzt. Ältere Messwerte und die ältesten "
-     L"über diese Grenze hinaus werden dauerhaft gelöscht, für alle Windows-Benutzer."},
+     L"Verlauf nicht mehr unbegrenzt aufbewahren?\n\nDer Verlauf wird wieder {days, plural, one{# Tag} other{# Tage}} "
+     L"lang aufbewahrt und auf 250.000 Messwerte (etwa 60 MB) begrenzt. Ältere Messwerte und die ältesten über diese "
+     L"Grenze hinaus werden dauerhaft gelöscht, für alle Windows-Benutzer."},
     {L"", L"Storage cap reached; oldest samples were pruned.",
      L"Speicherobergrenze erreicht; die ältesten Messwerte wurden entfernt."},
     {L"", L"Storage location", L"Speicherort"},
@@ -522,7 +522,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"sie zu löschen, fügen Sie erneut ein Konto mit dem alten Anbieter und der alten Bezeichnung hinzu und "
      L"entfernen Sie es dann."},
     {L"", L"The balance the Credits bar treats as 100%. OpenAI reports only the balance.",
-     L"Das Guthaben, das der Guthaben-Balken als 100 % wertet. OpenAI meldet nur das Guthaben."},
+     L"Das Guthaben, das der Credits-Balken als 100% wertet. OpenAI meldet nur das Guthaben."},
     {L"", L"The large value is the latest reading in the range; \"now\" means it is the account's latest fresh poll. "
           L"Peak is the highest recorded value; in the Remaining mode, Lowest is the least left. Coverage counts "
           L"connected intervals. Time at or above the red threshold (at or below what it leaves, in the Remaining "
@@ -549,10 +549,10 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"geändert."},
     {L"", L"The settings and usage history windows and the taskbar. Automatic follows your Windows display language. "
           L"Applies to this Windows user only.",
-     L"Die Fenster Einstellungen und Nutzungsverlauf sowie die Taskleiste. „Automatisch“ folgt Ihrer "
+     L"Die Fenster „Einstellungen“ und „Nutzungsverlauf“ sowie die Taskleiste. „Automatisch“ folgt Ihrer "
      L"Windows-Anzeigesprache. Gilt nur für diesen Windows-Benutzer."},
     {L"", L"The settings and usage history windows use Mica for it.",
-     L"Die Fenster Einstellungen und Nutzungsverlauf verwenden dafür „Mica“."},
+     L"Die Fenster „Einstellungen“ und „Nutzungsverlauf“ verwenden dafür „Mica“."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"Die gespeicherte Anmeldung konnte nicht kopiert werden. Das Konto wurde nicht geändert."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -574,17 +574,17 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
           L"own line and resets; overlapping limits are never added or merged. Short-window labels use recorded "
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
-     L"Dies sind gemessene Kontingentstände, keine Token und kein täglicher Verbrauch. Wählen Sie in der "
-     L"Seitenleiste ein Konto oder „Alle Konten“ und eine Ansicht: „Kurzfristig“, „Wöchentlich“, „Zusätzliche "
-     L"Nutzung“ oder „Alle Messgrößen“. „Alle Konten“ beginnt mit „Wöchentlich“, ein einzelnes Konto mit „Alle "
-     L"Messgrößen“; jede Auswahl behält ihre Ansicht, bis das Fenster geschlossen wird. Das Fenster öffnet mit dem "
-     L"„Standardzeitraum“ aus Einstellungen > Verlauf. „Wöchentlich“ folgt der Auswahl wöchentlicher Kontingente, "
-     L"die jedes Anthropic-Konto in der Taskleiste zeigt; entfernte Konten behalten beide Wochenkontingente, und "
-     L"„Alle Messgrößen“ enthält auch in der Taskleiste ausgeblendete Wochenkontingente. Die Kontingente Gemini, "
-     L"Argon und Claude/GPT von Antigravity teilen sich die passenden kurzfristigen und wöchentlichen Ansichten. "
-     L"Jedes Kontingent behält seine eigene Linie und seine eigenen Resets; überlappende Limits werden nie addiert "
-     L"oder zusammengeführt. Bezeichnungen kurzer Zeitfenster verwenden die aufgezeichnete Dauer (oder, wenn "
-     L"unbekannt, das aktuelle Limit). Antigravity zeigt die begrenzenden Pools, die sich ändern können."},
+     L"Dies sind gemessene Kontingentstände, keine Token und kein täglicher Verbrauch. Wählen Sie in der Seitenleiste "
+     L"ein Konto oder „Alle Konten“ und eine Ansicht: „Kurzfristig“, „Wöchentlich“, „Zusatznutzung“ oder „Alle "
+     L"Messgrößen“. „Alle Konten“ beginnt mit „Wöchentlich“, ein einzelnes Konto mit „Alle Messgrößen“; jede Auswahl "
+     L"behält ihre Ansicht, bis das Fenster geschlossen wird. Das Fenster öffnet mit dem „Standardzeitraum“ aus "
+     L"Einstellungen > Verlauf. „Wöchentlich“ folgt der Auswahl wöchentlicher Kontingente, die jedes Anthropic-Konto "
+     L"in der Taskleiste zeigt; entfernte Konten behalten beide Wochenkontingente, und „Alle Messgrößen“ enthält auch "
+     L"in der Taskleiste ausgeblendete Wochenkontingente. Die Kontingente Gemini, Argon und Claude/GPT von Antigravity "
+     L"teilen sich die passenden kurzfristigen und wöchentlichen Ansichten. Jedes Kontingent behält seine eigene Linie "
+     L"und seine eigenen Resets; überlappende Limits werden nie addiert oder zusammengeführt. Bezeichnungen kurzer "
+     L"Zeitfenster verwenden die aufgezeichnete Dauer (oder, wenn unbekannt, das aktuelle Limit). Antigravity zeigt "
+     L"die begrenzenden Pools, die sich ändern können."},
     {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
           L"fills with the elapsed time.",
      L"Schmales Caret, Linie über die volle Breite, Randkerbe, zentrierter Punkt oder eine Zeitspur: ein kleiner "
@@ -608,14 +608,18 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Die Schwellenwerte bleiben in der Reihenfolge Gelb, Orange, Rot. Zugleich die Stufe für "
      L"Schwellenwert-Benachrichtigungen."},
     {L"", L"Ticks mark how much of each quota window has elapsed, to compare with its usage.",
-     L"Markierungen zeigen, wie viel vom Zeitfenster jedes Kontingents verstrichen ist, zum Vergleich mit seiner "
-     L"Nutzung."},
+     L"Markierungen zeigen, wie viel vom Zeitfenster jedes Kontingents verstrichen ist, zum Vergleich mit der "
+     L"tatsächlichen Nutzung."},
     {L"", L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. Accounts are not "
           L"changed.",
      L"Kachelstil, Balkenstil, Größen, Identität und Text, Tempomarkierungen, Position und Abstände. Konten werden "
      L"nicht geändert."},
     {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
      L"Zeit bis zum Reset dieses Kontingents unter der Zahl, statt der Balken der einzelnen Kontingente."},
+    {L"", L"Translations are machine-made. Corrections are welcome as <link id=\"issues\">GitHub issues</link> or "
+     L"pull requests.",
+     L"Die Übersetzungen sind maschinell erstellt. Korrekturen sind als <link id=\"issues\">GitHub-Issues</link> "
+     L"oder Pull Requests willkommen."},
     {L"", L"Turn off Reset countdown to change this.", L"Schalten Sie „Reset-Countdown“ aus, um dies zu ändern."},
     {L"", L"Turn on Pace markers to change this.", L"Schalten Sie „Tempomarkierungen“ ein, um dies zu ändern."},
     {L"", L"Turn on Quota keys, or percentage text in Display, to change this.",
@@ -627,7 +631,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
           L"on the {key7d} chart.",
      L"Nicht verfügbare Kontingente werden automatisch ausgeblendet. Mindestens eines bleibt ausgewählt. "
-     L"Nutzungsdiagramme zeigen Guthaben als Zahl im {key7d}-Diagramm."},
+     L"Nutzungsdiagramme zeigen Credits als Zahl im {key7d}-Diagramm."},
     {L"", L"Usage below this is blue.", L"Nutzung unter diesem Wert ist blau."},
     {L"", L"Usage below this is blue. Also the level for threshold notifications.",
      L"Nutzung unter diesem Wert ist blau. Zugleich die Stufe für Schwellenwert-Benachrichtigungen."},
@@ -740,7 +744,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"account-state", L"Hidden, not polled", L"Ausgeblendet, nicht abgefragt"},
     {L"account-state", L"Local app not running", L"Lokale App läuft nicht"},
     {L"account-state", L"Local app running", L"Lokale App läuft"},
-    {L"account-state", L"Sign-in needed", L"Anmeldung erforderlich"},
+    {L"account-state", L"Sign-in needed", L"Anmeldung nötig"},
     {L"account-state", L"Signed in", L"Angemeldet"},
     {L"account-state", L"Signing in…", L"Anmeldung läuft…"},
     {L"account-state", L"Waiting for the local app", L"Warten auf die lokale App"},
@@ -785,12 +789,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"chart-tick-day", L"{month} {day}", L"{day}. {month}"},
     {L"chart-tick-month", L"{month} {year}", L"{month} {year}"},
     {L"chart-tick-weekday", L"{weekday} {day}", L"{weekday} {day}."},
-    {L"copilot-unit", L"AI credits", L"KI-Guthaben"},
-    {L"copilot-unit", L"chat requests", L"Chat-Anfragen"},
-    {L"copilot-unit", L"premium requests", L"Premium-Anfragen"},
-    {L"credits-amount", L"{amount} credits", L"{amount} Guthaben"},
+    {L"copilot-unit", L"AI credits", L"AI Credits"},
+    {L"copilot-unit", L"chat requests", L"Chat-Anforderungen"},
+    {L"copilot-unit", L"premium requests", L"Premium-Anforderungen"},
+    {L"credits-amount", L"{amount} credits", L"{amount} Credits"},
+    {L"credits-amount-abbreviated", L"{amount} credits", L"{amount} Credits"},
     {L"credits-unit", L"{credits, plural, one{credits} other{credits}}",
-     L"{credits, plural, one{Guthaben} other{Guthaben}}"},
+     L"{credits, plural, one{Credit} other{Credits}}"},
     {L"date-month", L"Apr", L"Apr"},
     {L"date-month", L"Aug", L"Aug"},
     {L"date-month", L"Dec", L"Dez"},
@@ -815,8 +820,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"date-month-alone", L"Nov", L"Nov"},
     {L"date-month-alone", L"Oct", L"Okt"},
     {L"date-month-alone", L"Sep", L"Sep"},
-    {L"date-time", L"{weekday} {day} {month} {time}", L"{weekday} {day}. {month} {time}"},
-    {L"date-time-year", L"{day} {month} {year} {time}", L"{day}. {month} {year} {time}"},
+    {L"date-time", L"{weekday} {day} {month} {time}", L"{weekday} {day}. {month} {time}"},
+    {L"date-time-year", L"{day} {month} {year} {time}", L"{day}. {month} {year} {time}"},
     {L"date-weekday", L"Fri", L"Fr"},
     {L"date-weekday", L"Mon", L"Mo"},
     {L"date-weekday", L"Sat", L"Sa"},
@@ -838,13 +843,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"dialog-caption", L"Remove account", L"Konto entfernen"},
     {L"dialog-caption", L"Reset settings", L"Einstellungen zurücksetzen"},
     {L"dialog-caption", L"Usage history", L"Nutzungsverlauf"},
-    {L"duration", L"{days}d", L"{days} T."},
-    {L"duration", L"{days}d {hours}h", L"{days} T. {hours} Std."},
-    {L"duration", L"{hours}h", L"{hours} Std."},
-    {L"duration", L"{hours}h {minutes}m", L"{hours} Std. {minutes} Min."},
-    {L"duration", L"{minutes}m", L"{minutes} Min."},
-    {L"duration", L"{minutes}m {seconds}s", L"{minutes} Min. {seconds} Sek."},
-    {L"duration", L"{seconds}s", L"{seconds} Sek."},
+    {L"duration", L"{days}d", L"{days} T."},
+    {L"duration", L"{days}d {hours}h", L"{days} T. {hours} Std."},
+    {L"duration", L"{hours}h", L"{hours} Std."},
+    {L"duration", L"{hours}h {minutes}m", L"{hours} Std. {minutes} Min."},
+    {L"duration", L"{minutes}m", L"{minutes} Min."},
+    {L"duration", L"{minutes}m {seconds}s", L"{minutes} Min. {seconds} Sek."},
+    {L"duration", L"{seconds}s", L"{seconds} Sek."},
     {L"file-type", L"All files (*.*)", L"Alle Dateien (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"CSV-Dateien (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Noch keine Daten"},
@@ -857,12 +862,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"flyout-legend", L"projection", L"Prognose"},
     {L"flyout-note", L"Error: {error}", L"Fehler: {error}"},
     {L"flyout-note", L"Error: {error} - retry in {duration}", L"Fehler: {error} – neuer Versuch in {duration}"},
-    {L"flyout-note", L"No AI-credit allowance on this plan.", L"Dieser Plan enthält kein KI-Guthaben."},
-    {L"flyout-note", L"No premium request allowance on this plan.", L"Dieser Plan enthält keine Premium-Anfragen."},
+    {L"flyout-note", L"No AI-credit allowance on this plan.", L"Dieser Plan enthält keine AI Credits."},
+    {L"flyout-note", L"No premium request allowance on this plan.",
+     L"Dieser Plan enthält keine Premium-Anforderungen."},
     {L"flyout-note", L"No quotas reported.", L"Keine Kontingente gemeldet."},
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
      L"Anmeldung erforderlich. Klicken Sie auf die Balken, um sich anzumelden."},
-    {L"flyout-note", L"extra usage: unlimited", L"zusätzliche Nutzung: unbegrenzt"},
+    {L"flyout-note", L"extra usage: unlimited", L"Zusatznutzung: unbegrenzt"},
     {L"flyout-note", L"rate limits: none reported", L"Ratenlimits: keine gemeldet"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# kostenloser Reset verfügbar} other{# kostenlose Resets verfügbar}}"},
@@ -908,7 +914,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"history-menu", L"Clear all history…", L"Gesamten Verlauf löschen…"},
     {L"history-menu", L"Open history folder", L"Verlaufsordner öffnen"},
     {L"history-menu", L"Settings", L"Einstellungen"},
-    {L"history-meter", L"Credits remaining", L"Verbleibendes Guthaben"},
+    {L"history-meter", L"Credits remaining", L"Verbleibende Credits"},
     {L"history-meter", L"Extra budget", L"Zusatzbudget"},
     {L"history-meter", L"Extra spending (USD)", L"Zusatzausgaben (USD)"},
     {L"history-nav", L"All accounts", L"Alle Konten"},
@@ -929,7 +935,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter} übrig (%)"},
     {L"history-series", L"{meter} used (%)", L"{meter} verbraucht (%)"},
-    {L"history-span", L"All retained", L"Alles Aufbewahrte"},
+    {L"history-span", L"All retained", L"Gesamter Verlauf"},
     {L"history-span", L"{days, plural, one{# day} other{# days}}", L"{days, plural, one{# Tag} other{# Tage}}"},
     {L"history-span", L"{hours, plural, one{# hour} other{# hours}}",
      L"{hours, plural, one{# Stunde} other{# Stunden}}"},
@@ -963,10 +969,10 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"history-subtitle", L"{account} · {updated}", L"{account} · {updated}"},
     {L"history-toggle", L"Compare previous week", L"Mit Vorwoche vergleichen"},
     {L"history-view", L"All meters", L"Alle Messgrößen"},
-    {L"history-view", L"Extra usage", L"Zusätzliche Nutzung"},
+    {L"history-view", L"Extra usage", L"Zusatznutzung"},
     {L"history-view", L"Short-term", L"Kurzfristig"},
     {L"history-view", L"Weekly", L"Wöchentlich"},
-    {L"hours-value", L"{hours} h", L"{hours} Std."},
+    {L"hours-value", L"{hours} h", L"{hours} Std."},
     {L"identity-position", L"Bottom", L"Unten"},
     {L"identity-position", L"Hidden", L"Ausgeblendet"},
     {L"identity-position", L"Left", L"Links"},
@@ -990,17 +996,17 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"Orange ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Rot ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Gelb ({threshold}%)"},
-    {L"notification-title", L"5h usage at {percent}%", L"5 Std.: {percent}% genutzt"},
-    {L"notification-title", L"AI credits usage at {percent}%", L"KI-Guthaben: {percent}% genutzt"},
-    {L"notification-title", L"chat requests usage at {percent}%", L"Chat-Anfragen: {percent}% genutzt"},
-    {L"notification-title", L"credits usage at {percent}%", L"Guthaben: {percent}% genutzt"},
-    {L"notification-title", L"monthly extra usage at {percent}%", L"Monatliches Extra: {percent}% genutzt"},
+    {L"notification-title", L"5h usage at {percent}%", L"5 Std.: {percent}% genutzt"},
+    {L"notification-title", L"AI credits usage at {percent}%", L"AI Credits: {percent}% genutzt"},
+    {L"notification-title", L"chat requests usage at {percent}%", L"Chat-Anforderungen: {percent}% genutzt"},
+    {L"notification-title", L"credits usage at {percent}%", L"Credits: {percent}% genutzt"},
+    {L"notification-title", L"monthly extra usage at {percent}%", L"Monatliche Zusatznutzung: {percent}% genutzt"},
     {L"notification-title", L"monthly usage at {percent}%", L"Monat: {percent}% genutzt"},
-    {L"notification-title", L"premium requests usage at {percent}%", L"Premium-Anfragen: {percent}% genutzt"},
+    {L"notification-title", L"premium requests usage at {percent}%", L"Premium-Anforderungen: {percent}% genutzt"},
     {L"notification-title", L"weekly usage at {percent}%", L"Woche: {percent}% genutzt"},
     {L"notification-title", L"{name} current limit usage at {percent}%", L"{name} aktuelles Limit: {percent}% genutzt"},
     {L"notification-title", L"{name} weekly usage at {percent}%", L"{name} wöchentlich: {percent}% genutzt"},
-    {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name} {hours} Std.: {percent}% genutzt"},
+    {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name} {hours} Std.: {percent}% genutzt"},
     {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\nStatusseite von {provider} öffnen"},
     {L"outage-level", L"degraded performance", L"eingeschränkte Leistung"},
     {L"outage-level", L"major outage", L"schwerer Ausfall"},
@@ -1046,12 +1052,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
      L"{minutes, plural, one{Minute} other{Minuten}}"},
     {L"preview", L"Preview", L"Vorschau"},
-    {L"preview", L"Show on taskbar", L"In Taskleiste zeigen"},
+    {L"preview", L"Show on taskbar", L"In Taskleiste anzeigen"},
     {L"quota-amount", L"Limit reached", L"Limit erreicht"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit", L"Gemeinsamer Pool ({unit}), kein Limit pro Benutzer"},
     {L"quota-amount", L"Pooled {unit}, no per-user limit\nAdditional usage: {overage} {unit}",
      L"Gemeinsamer Pool ({unit}), kein Limit pro Benutzer\nZusätzliche Nutzung: {overage} {unit}"},
-    {L"quota-amount", L"{left} left of {limit} credits", L"{left} von {limit} Guthaben übrig"},
+    {L"quota-amount", L"{left} left of {limit} credits", L"{left} von {limit} Credits übrig"},
     {L"quota-amount", L"{used} of {limit} spent", L"{used} von {limit} ausgegeben"},
     {L"quota-amount", L"{used} of {limit} {unit} used", L"{used} von {limit} {unit} verbraucht"},
     {L"quota-amount", L"{used} of {limit} {unit} used\nAdditional usage: {overage} {unit}",
@@ -1064,17 +1070,17 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"quota-key-2-chars", L"Fa", L"Fa"},
     {L"quota-key-2-chars", L"Mo", L"Mo"},
     {L"quota-name", L"5-hour", L"5 Stunden"},
-    {L"quota-name", L"AI credits", L"KI-Guthaben"},
-    {L"quota-name", L"Chat requests", L"Chat-Anfragen"},
-    {L"quota-name", L"Credits", L"Guthaben"},
+    {L"quota-name", L"AI credits", L"AI Credits"},
+    {L"quota-name", L"Chat requests", L"Chat-Anforderungen"},
+    {L"quota-name", L"Credits", L"Credits"},
     {L"quota-name", L"Current limit", L"Aktuelles Limit"},
-    {L"quota-name", L"Extra usage", L"Zusätzliche Nutzung"},
+    {L"quota-name", L"Extra usage", L"Zusatznutzung"},
     {L"quota-name", L"Monthly", L"Monatlich"},
-    {L"quota-name", L"Premium requests", L"Premium-Anfragen"},
-    {L"quota-name", L"Short window", L"Kurzes Fenster"},
+    {L"quota-name", L"Premium requests", L"Premium-Anforderungen"},
+    {L"quota-name", L"Short window", L"Kurzes Zeitfenster"},
     {L"quota-name", L"Short-term (varying windows)", L"Kurzfristig (wechselnde Zeitfenster)"},
     {L"quota-name", L"Weekly", L"Wöchentlich"},
-    {L"quota-name", L"{hours}h", L"{hours} Std."},
+    {L"quota-name", L"{hours}h", L"{hours} Std."},
     {L"quota-name", L"{name} current limit", L"{name} aktuelles Limit"},
     {L"quota-name", L"{name} short-term (varying windows)", L"{name} kurzfristig (wechselnde Zeitfenster)"},
     {L"quota-name", L"{name} weekly", L"{name} wöchentlich"},
@@ -1082,8 +1088,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"{name} ({days, plural, one{# Tag} other{# Tage}})"},
     {L"quota-name", L"{name} {hours, plural, one{#-hour} other{#-hour}}",
      L"{name} ({hours, plural, one{# Stunde} other{# Stunden}})"},
-    {L"quota-name", L"{name} {hours} h", L"{name} {hours} Std."},
-    {L"quota-name", L"{name} {hours}h", L"{name} {hours} Std."},
+    {L"quota-name", L"{name} {hours} h", L"{name} {hours} Std."},
+    {L"quota-name", L"{name} {hours}h", L"{name} {hours} Std."},
     {L"quota-reset", L"Not yet started", L"Noch nicht begonnen"},
     {L"quota-reset", L"Resets {when}", L"Reset {when}"},
     {L"quota-unit", L"left", L"übrig"},
@@ -1172,20 +1178,21 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"sign-in-window", L"Copy the code and open GitHub below, or enter it at github.com/login/device on any device, "
           L"signed in to the GitHub account with Copilot. This window closes once sign-in completes.",
      L"Kopieren Sie den Code und öffnen Sie GitHub über die Schaltfläche unten, oder geben Sie ihn auf einem "
-     L"beliebigen Gerät unter github.com/login/device ein, angemeldet mit dem GitHub-Konto mit Copilot. Dieses Fenster "
-     L"schließt sich, sobald die Anmeldung abgeschlossen ist."},
+     L"beliebigen Gerät unter github.com/login/device ein. Verwenden Sie dabei das GitHub-Konto mit Copilot-Zugriff. "
+     L"Dieses Fenster schließt sich, sobald die Anmeldung abgeschlossen ist."},
     {L"sign-in-window", L"Open the OpenCode console in a browser, copy an API key of the workspace with your Go "
           L"subscription, and paste it below.",
      L"Öffnen Sie die OpenCode-Konsole im Browser, kopieren Sie einen API-Schlüssel des Arbeitsbereichs mit Ihrem "
      L"Go-Abonnement und fügen Sie ihn unten ein."},
     {L"sign-in-window", L"Open the sign-in link in a browser and approve access on claude.ai, then paste the code "
           L"shown on the page below.",
-     L"Öffnen Sie den Anmeldelink in einem Browser und erlauben Sie den Zugriff auf claude.ai. Fügen Sie dann den auf "
+     L"Öffnen Sie den Anmeldelink in einem Browser und erlauben Sie auf claude.ai den Zugriff. Fügen Sie dann den auf "
      L"der Seite angezeigten Code unten ein."},
     {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access on claude.ai. This window "
           L"closes once sign-in completes. On another device, choose {button}.",
-     L"Öffnen Sie den Anmeldelink in einem Browser auf diesem PC und erlauben Sie den Zugriff auf claude.ai. Dieses "
-     L"Fenster schließt sich, sobald die Anmeldung abgeschlossen ist. Auf einem anderen Gerät wählen Sie „{button}“."},
+     L"Öffnen Sie den Anmeldelink in einem Browser auf diesem PC und erlauben Sie auf claude.ai den Zugriff. Dieses "
+     L"Fenster schließt sich, sobald die Anmeldung abgeschlossen ist. Um sich auf einem anderen Gerät anzumelden, "
+     L"wählen Sie „{button}“."},
     {L"sign-in-window", L"Open the sign-in link in a browser on this PC and approve access. This window closes once "
           L"sign-in completes.",
      L"Öffnen Sie den Anmeldelink in einem Browser auf diesem PC und erlauben Sie den Zugriff. Dieses Fenster schließt "
@@ -1208,7 +1215,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"taskbar-action", L"Refresh", L"Aktualisieren"},
     {L"taskbar-action", L"Refresh all", L"Alle aktualisieren"},
     {L"taskbar-action", L"Settings", L"Einstellungen"},
-    {L"taskbar-action", L"Show on taskbar", L"Auf der Taskleiste anzeigen"},
+    {L"taskbar-action", L"Show on taskbar", L"In der Taskleiste anzeigen"},
     {L"taskbar-action", L"Sign in", L"Anmelden"},
     {L"taskbar-action", L"Usage history", L"Nutzungsverlauf"},
     {L"taskbar-countdown", L"no reset", L"kein Reset"},
@@ -1239,7 +1246,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"usage-band", L"From red", L"Ab Rot"},
     {L"usage-band", L"From yellow", L"Ab Gelb"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}",
-     L"Beim Tempo der letzten 24 Std.: Limit in ~{duration}"},
+     L"Beim Tempo der letzten 24 Std.: Limit in ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
      L"Beim Tempo seit {time}: Limit in ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",

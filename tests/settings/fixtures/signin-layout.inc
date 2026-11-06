@@ -166,7 +166,7 @@ static void RunSignInLayoutTests() {
     Run("sign-in layout: Russian widens Open in browser and Copy link; a paste flow keeps its English width", [&] {
         // Открыть в браузере 109 + 20, Не удалось скопировать 135 + 20, Ввести код 59 + 20 within 82:
         // 129 + 6 + 155 + 6 + 82 + 6 + 84 = 468.
-        SignInMeasures m{15, 468, SignInWidths(ru, {109, 108, 75, 135, 59, 33, 42, 46, 193, 89}),
+        SignInMeasures m{15, 468, SignInWidths(ru, {109, 108, 75, 135, 59, 33, 42, 46, 186, 89}),
                          {{L"instructions", 3}, {L"other sign-in", 2}}};
         LoginLayout link = SignInTestLayout(SignInTestText(ru, Alternate), 96, m);
         CHECK(link.client.cx == 492 && link.client.cy == 108);

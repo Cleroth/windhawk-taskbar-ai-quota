@@ -292,8 +292,8 @@ static void RunHistoryLayoutTests() {
         w->controller.Compose();
         UiFrame french = HistoryLayoutFrame(g, *w, kHistoryLayoutMinClient);
         const UiItem* title = TestFind(french.main, L"Tous les comptes");
-        const UiItem* status = TestFind(french.main, L"Mis \u00E0 jour sam. 31 oct. 14:32");
-        pill = TestFind(french.main, L"Enregistrement \u00B7 90 jours");
+        const UiItem* status = TestFind(french.main, L"Mis \u00E0 jour\u202F: sam.\u00A031\u00A0oct. 14:32");
+        pill = TestFind(french.main, L"Enregistrement \u00B7 90\u00A0jours");
         float statusWidth = std::ceil(UiLayoutSize(UiLayout(g, status->runs[0].text, UiTextStyleFor(UiFont::Note), 10000,
                                                             false)).width);
         CHECK(title && title->rect.right == 784 - 24 - 104 - 12 &&

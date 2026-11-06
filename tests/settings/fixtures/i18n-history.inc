@@ -5,8 +5,9 @@
 // built in the old one (the status, the series, the ticks, the readout and its key, an operation's
 // notice). An export's notice and progress in Russian with their plurals, Delete history's dialog
 // and notices in Russian with the journal's reason, a dialog keeping the language it opened in,
-// and the readout's rows in Chinese. Regional number formats (support.inc's regions): values,
-// hours, axis labels and cards in English and German with de-DE's decimal comma, never grouped;
+// the readout's rows in Chinese, and abbreviated credits' own template in Russian. Regional
+// number formats (support.inc's regions): values, hours, axis labels and cards in English and
+// German with de-DE's decimal comma, never grouped;
 // export counts in each region's digit groups inside their plurals; the large-export warning's
 // ungrouped estimate; a regional format change re-labeling the composed window and the readout.
 // Expected text is written out by hand from the production catalogs.
@@ -25,11 +26,11 @@ static void RunHistoryI18nTests() {
         ULONGLONG saturday = TestLocalMs(2026, 10, 31, 14, 31), may = TestLocalMs(2026, 5, 25, 23, 59);
         const std::tuple<PCWSTR, PCWSTR, PCWSTR> cases[] = {
             {L"en", L"Sat 31 Oct 14:31", L"25 May 2026 23:59"},
-            {L"de", L"Sa 31. Okt 14:31", L"25. Mai 2026 23:59"},
-            {L"es", L"s\u00E1b 31 oct 14:31", L"25 may 2026 23:59"},
-            {L"fr", L"sam. 31 oct. 14:31", L"25 mai 2026 23:59"},
+            {L"de", L"Sa\u00A031.\u00A0Okt\u00A014:31", L"25.\u00A0Mai\u00A02026\u00A023:59"},
+            {L"es", L"s\u00E1b\u00A031\u00A0oct 14:31", L"25\u00A0may\u00A02026 23:59"},
+            {L"fr", L"sam.\u00A031\u00A0oct. 14:31", L"25\u00A0mai\u00A02026 23:59"},
             {L"ja", L"10\u670831\u65E5(\u571F) 14:31", L"2026\u5E745\u670825\u65E5 23:59"},
-            {L"pt-BR", L"s\u00E1b 31 out 14:31", L"25 mai 2026 23:59"},
+            {L"pt-BR", L"s\u00E1b\u00A031\u00A0out 14:31", L"25\u00A0mai\u00A02026 23:59"},
             {L"ru", L"\u0441\u0431 31 \u043E\u043A\u0442 14:31", L"25 \u043C\u0430\u044F 2026 23:59"},
             {L"zh-Hans", L"10\u670831\u65E5 \u5468\u516D 14:31", L"2026\u5E745\u670825\u65E5 23:59"},
             // The pseudo-locale: each name and the pattern bracketed and padded.
@@ -64,7 +65,7 @@ static void RunHistoryI18nTests() {
         CHECK((labels(L"ru", may - 30 * kHistoryDayMs, may) ==
                std::vector<std::wstring>{L"4 \u043C\u0430\u044F", L"11 \u043C\u0430\u044F", L"18 \u043C\u0430\u044F",
                                          L"25 \u043C\u0430\u044F"}));
-        CHECK((labels(L"fr", may - 30 * kHistoryDayMs, may).front() == L"4 mai"));
+        CHECK((labels(L"fr", may - 30 * kHistoryDayMs, may).front() == L"4\u00A0mai"));
         CHECK((labels(L"ja", may - 30 * kHistoryDayMs, may).front() == L"5\u67084\u65E5"));
         // 200 days: every month from May.
         CHECK((labels(L"en", kWeekTo - 200 * kHistoryDayMs, kWeekTo) ==
@@ -125,17 +126,17 @@ static void RunHistoryI18nTests() {
         w->ops.locale = de;
         c.Notify();
         CHECK(c.ProcessRefresh(false, false));
-        CHECK(c.view.locale == de && c.view.status == L"Aktualisiert Sa 31. Okt 14:32" && c.seriesKey.locale == de);
+        CHECK(c.view.locale == de && c.view.status == L"Aktualisiert Sa\u00A031.\u00A0Okt\u00A014:32" && c.seriesKey.locale == de);
         CHECK(std::any_of(c.view.cards.begin(), c.view.cards.end(), [](const HistoryUiCard& card) {
             return std::any_of(card.lines.begin(), card.lines.end(),
-                               [](const std::wstring& line) { return line.find(L". Okt ") != std::wstring::npos; });
+                               [](const std::wstring& line) { return line.find(L".\u00A0Okt\u00A0") != std::wstring::npos; });
         }));
         // The same plot: the ticks are labeled again, the readout too, under another key.
         TestLaid(*w);
         CHECK((TestLabels(chart.ticks).front() == L"So 25.") && chart.tickLocale == de);
         UiTooltipContent german;
         c.Hover(TestAt(chart, 0, 0, 0), german, palette);
-        CHECK(german.key && german.key != english.key && UiRunsText(german.rows[0].detail).ends_with(L"Sa 24. Okt 14:33") &&
+        CHECK(german.key && german.key != english.key && UiRunsText(german.rows[0].detail).ends_with(L"Sa\u00A024.\u00A0Okt\u00A014:33") &&
               german.more(3) == L"+3 weitere \u2013 Linien in der Legende ausblenden oder ein Konto ausw\u00E4hlen");
         // A modal keeps its language; the next composition after it takes the current one.
         w->ops.locale = TestLocale(L"ja");
@@ -241,14 +242,14 @@ static void RunHistoryI18nTests() {
             L"\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u0438\u044F \u0443\u0434\u0430\u043B\u0451\u043D"
             L"\u043D\u043E\u0433\u043E \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0430 Anthropic account_000000000"
             L"000dead?\r\n\r\n"));
-        // Не удалось удалить историю этого аккаунта. Хранилище истории используется другим сеансом проводника
+        // Не удалось удалить историю этого аккаунта. Хранилище истории используется другим сеансом Проводника
         // или недоступно.
         CHECK(c.view.notice.text ==
               L"\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0443\u0434\u0430\u043B\u0438\u0442\u044C "
               L"\u0438\u0441\u0442\u043E\u0440\u0438\u044E \u044D\u0442\u043E\u0433\u043E \u0430\u043A\u043A\u0430"
               L"\u0443\u043D\u0442\u0430. \u0425\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0435 \u0438\u0441\u0442"
               L"\u043E\u0440\u0438\u0438 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0435\u0442\u0441\u044F "
-              L"\u0434\u0440\u0443\u0433\u0438\u043C \u0441\u0435\u0430\u043D\u0441\u043E\u043C \u043F\u0440\u043E"
+              L"\u0434\u0440\u0443\u0433\u0438\u043C \u0441\u0435\u0430\u043D\u0441\u043E\u043C \u041F\u0440\u043E"
               L"\u0432\u043E\u0434\u043D\u0438\u043A\u0430 \u0438\u043B\u0438 \u043D\u0435\u0434\u043E\u0441\u0442"
               L"\u0443\u043F\u043D\u043E.");
         CHECK(c.view.notice.severity == UiSeverity::Error);
@@ -308,6 +309,19 @@ static void RunHistoryI18nTests() {
               L"[\u5F53\u524D] USD 11.00 \u00B7 10\u670827\u65E5 \u5468\u4E8C 12:31");
     });
 
+    Run("history credits: an abbreviated amount takes its own template (Russian: кредитов after 25.0K, кредита "
+        "after 125.50); English alike either way", [] {
+        const I18nLocale ru = TestLocale(L"ru");
+        CHECK(HistoryUiValue({}, 7, 125.5, 0) == L"125.50 credits" && HistoryUiValue({}, 7, 25000, 0) == L"25.0K credits");
+        // 125.50 кредита, 9999.99 кредита; 25.0K кредитов, 1.2M кредитов (a no-break space before the unit).
+        CHECK(HistoryUiValue(ru, 7, 125.5, 0) == L"125.50\u00A0\u043A\u0440\u0435\u0434\u0438\u0442\u0430");
+        CHECK(HistoryUiValue(ru, 7, 9999.99, 0) == L"9999.99\u00A0\u043A\u0440\u0435\u0434\u0438\u0442\u0430");
+        CHECK(HistoryUiValue(ru, 7, 25000, 0) == L"25.0K\u00A0\u043A\u0440\u0435\u0434\u0438\u0442\u043E\u0432");
+        CHECK(HistoryUiValue(ru, 7, 1234567, 0) == L"1.2M\u00A0\u043A\u0440\u0435\u0434\u0438\u0442\u043E\u0432");
+        // Rounding that carries into the next magnitude abbreviates: 9999.996 shows 10.0K.
+        CHECK(HistoryUiValue(ru, 7, 9999.996, 0) == L"10.0K\u00A0\u043A\u0440\u0435\u0434\u0438\u0442\u043E\u0432");
+    });
+
     Run("history numbers in a regional format: values, hours, axis labels and the cards take its decimal "
         "separator, never grouped, in English and German; dates stay the language's compact form", [] {
         const I18nLocale en = TestRegional(L"en", L"de-DE"), de = TestRegional(L"de", L"de-DE"),
@@ -319,8 +333,8 @@ static void RunHistoryI18nTests() {
         CHECK(HistoryUiNumber(hi, 9999.99, 2) == L"9999.99");
         CHECK(HistoryUiValue(en, 1, 93.04, 0) == L"93%" && HistoryUiValue(en, 5, 38.04, 1) == L"38,0%");
         CHECK(HistoryUiValue(en, 6, 10, 0) == L"USD 10,00" && HistoryUiValue(de, 6, 10, 0) == L"USD 10,00");
-        CHECK(HistoryUiValue(en, 7, 1240, 0) == L"1240,00 credits" && HistoryUiValue(de, 7, 1240, 0) == L"1240,00 Guthaben");
-        CHECK(HistoryUiHours(en, 23.2 * double(kHourMs)) == L"23,2 h" && HistoryUiHours(de, 23.2 * double(kHourMs)) == L"23,2 Std.");
+        CHECK(HistoryUiValue(en, 7, 1240, 0) == L"1240,00 credits" && HistoryUiValue(de, 7, 1240, 0) == L"1240,00\u00A0Credits");
+        CHECK(HistoryUiHours(en, 23.2 * double(kHourMs)) == L"23,2 h" && HistoryUiHours(de, 23.2 * double(kHourMs)) == L"23,2\u00A0Std.");
         CHECK(HistoryUiHours(en, 166 * double(kHourMs)) == L"166 h" && HistoryUiHours(en, 87600 * double(kHourMs)) == L"87600 h");
         // Axis labels: trailing decimal zeros dropped before the region's separator.
         CHECK(HistoryChartAxisLabel(en, 1, 0.5) == L"0,5 USD" && HistoryChartAxisLabel(en, 1, 0.75) == L"0,75 USD");
@@ -340,13 +354,14 @@ static void RunHistoryI18nTests() {
               english[0].when == L"now");
         CHECK((english[0].lines == std::vector<std::wstring>{L"Peak 95% \u00B7 Sat 24 Oct 16:32", L"Coverage 2 h (1,2%)",
                                                               L"Est. \u226590%: 1,1 h"}));
-        // Wöchentlich 93% jetzt; Höchstwert 95% · Sa 24. Okt 16:32; Abdeckung 2 Std. (1,2%); Geschätzt ≥90%: 1,1 Std.
+        // Wöchentlich 93% jetzt; Höchstwert 95% · Sa 24. Okt 16:32; Abdeckung 2 Std. (1,2%); Geschätzt ≥90%: 1,1 Std.,
+        // no-break spaces inside the date and before each unit.
         std::vector<HistoryUiCard> german = cards(de);
         CHECK(german.size() == 2 && german[0].title == L"W\u00F6chentlich" && german[0].value == L"93%" &&
               german[0].when == L"jetzt");
-        CHECK((german[0].lines == std::vector<std::wstring>{L"H\u00F6chstwert 95% \u00B7 Sa 24. Okt 16:32",
-                                                             L"Abdeckung 2 Std. (1,2%)",
-                                                             L"Gesch\u00E4tzt \u226590%: 1,1 Std."}));
+        CHECK((german[0].lines == std::vector<std::wstring>{L"H\u00F6chstwert 95% \u00B7 Sa\u00A024.\u00A0Okt\u00A016:32",
+                                                             L"Abdeckung 2\u00A0Std. (1,2%)",
+                                                             L"Gesch\u00E4tzt \u226590%: 1,1\u00A0Std."}));
     });
 
     Run("history export counts in a region's digit groups inside their plurals: progress and the exported notice "

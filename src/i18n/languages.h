@@ -14,13 +14,13 @@ struct I18nLanguage {
 // English, the source language, first.
 static constexpr I18nLanguage kI18nLanguages[] = {
     {L"en", L"English", L"en-US", I18nPluralRule::English, false, {}, false},
-    {L"de", L"Deutsch", L"de-DE", I18nPluralRule::English, true, kI18nCatalogDe, false},
-    {L"es", L"Español", L"es-ES", I18nPluralRule::Spanish, true, kI18nCatalogEs, false},
-    {L"fr", L"Français", L"fr-FR", I18nPluralRule::French, true, kI18nCatalogFr, false},
-    {L"ja", L"日本語", L"ja-JP", I18nPluralRule::OtherOnly, true, kI18nCatalogJa, false},
-    {L"pt-BR", L"Português (Brasil)", L"pt-BR", I18nPluralRule::French, true, kI18nCatalogPtBr, false},
-    {L"ru", L"Русский", L"ru-RU", I18nPluralRule::Russian, true, kI18nCatalogRu, false},
-    {L"zh-Hans", L"简体中文", L"zh-CN", I18nPluralRule::OtherOnly, true, kI18nCatalogZhHans, false},
+    {L"de", L"Deutsch", L"de-DE", I18nPluralRule::English, false, kI18nCatalogDe, false},
+    {L"es", L"Español", L"es-ES", I18nPluralRule::Spanish, false, kI18nCatalogEs, false},
+    {L"fr", L"Français", L"fr-FR", I18nPluralRule::French, false, kI18nCatalogFr, false},
+    {L"ja", L"日本語", L"ja-JP", I18nPluralRule::OtherOnly, false, kI18nCatalogJa, false},
+    {L"pt-BR", L"Português (Brasil)", L"pt-BR", I18nPluralRule::French, false, kI18nCatalogPtBr, false},
+    {L"ru", L"Русский", L"ru-RU", I18nPluralRule::Russian, false, kI18nCatalogRu, false},
+    {L"zh-Hans", L"简体中文", L"zh-CN", I18nPluralRule::OtherOnly, false, kI18nCatalogZhHans, false},
 };
 
 // The pseudo-locale (i18n/pseudo.h): not among the languages, so only an explicit choice reaches it.

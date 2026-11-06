@@ -45,7 +45,8 @@ are native: `core/language.h` (rules: [../AGENTS.md](../AGENTS.md) Concurrency).
 - Native code snapshots the context with `CurrentLocale()` (`core/language.h`): the current
   language and the user's regional format, read anew each time.
 - `I18nLanguageByTag` (explicit choice) reaches any language and `qps-ploc`;
-  `I18nMatchLanguage` (Automatic) skips `inProgress` ones and never picks `qps-ploc`.
+  `I18nMatchLanguage` (Automatic) skips `inProgress` ones and never picks `qps-ploc`. Every
+  shipped language is finished; a new one stays `inProgress` until its catalog is reviewed.
 - Intentional English literals (IDs, CSV, protocol text) carry `// i18n-en` on their line;
   `Wh_Log` arguments need none.
 - API entry points carry `[[maybe_unused]]`: a build or test target may use only some.

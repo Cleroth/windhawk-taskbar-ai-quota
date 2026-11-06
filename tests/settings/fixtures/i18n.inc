@@ -405,7 +405,7 @@ static void RunI18nTests() {
             {L"ja", {L"A", L"A、B", L"A、B、C", L"A、B、C、D、E"}},
             {L"pt-BR", {L"A", L"A e B", L"A, B e C", L"A, B, C, D e E"}},
             {L"ru", {L"A", L"A и B", L"A, B и C", L"A, B, C, D и E"}},
-            {L"zh-Hans", {L"A", L"A和B", L"A、B和C", L"A、B、C、D和E"}},
+            {L"zh-Hans", {L"A", L"A 和 B", L"A、B 和 C", L"A、B、C、D 和 E"}},
         };
         for (const auto& [tag, expected] : kLists) {
             const I18nLocale locale(LocLanguage(tag));
@@ -439,8 +439,8 @@ static void RunI18nTests() {
             const I18nLanguage& language = kI18nLanguages[i];
             CHECK(language.tag == kLanguages[i].tag && language.nativeName == kLanguages[i].name &&
                   language.localeName == kLanguages[i].locale && language.catalog.empty() != kLanguages[i].catalog);
-            // Every translation starts in progress; English is the source.
-            CHECK(language.inProgress == (i != 0) && !language.pseudo);
+            // Every language is finished, so Automatic can pick it; English is the source.
+            CHECK(!language.inProgress && !language.pseudo);
         }
         CHECK(kI18nPseudoLanguage.tag == L"qps-ploc" && kI18nPseudoLanguage.pseudo &&
               kI18nPseudoLanguage.plural == I18nPluralRule::English && kI18nPseudoLanguage.catalog.empty());
@@ -456,11 +456,9 @@ static void RunI18nTests() {
         CHECK(english == I18nLocale(kI18nLanguages[0]) && !(english == chinese));
     });
 
-    Run("i18n matching: Automatic over preferred tag lists", [] {
-        std::array<I18nLanguage, std::size(kI18nLanguages)> ready{};
-        std::copy(std::begin(kI18nLanguages), std::end(kI18nLanguages), ready.begin());
-        for (I18nLanguage& language : ready) language.inProgress = false;
-        auto match = [](const std::vector<std::wstring_view>& preferred, std::span<const I18nLanguage> languages) {
+    Run("i18n matching: Automatic over preferred tag lists; a test registry's languages in progress never match", [] {
+        auto match = [](const std::vector<std::wstring_view>& preferred,
+                        std::span<const I18nLanguage> languages = kI18nLanguages) {
             return std::wstring(I18nMatchLanguage(preferred, languages).tag);
         };
         const std::pair<std::vector<std::wstring_view>, std::wstring_view> kCases[] = {
@@ -504,15 +502,18 @@ static void RunI18nTests() {
             {{L"", L"-", L"de"}, L"de"},
             {{L"nl-NL", L"sv"}, L"en"},
         };
-        for (const auto& [tags, expected] : kCases) CHECK_TEXT(match(tags, ready), std::wstring(expected));
-        // Languages in progress never match automatically.
-        CHECK_TEXT(match({L"de-DE"}, kI18nLanguages), L"en");
-        CHECK_TEXT(match({L"ja-JP", L"zh-CN", L"pt-BR"}, kI18nLanguages), L"en");
-        std::array<I18nLanguage, std::size(kI18nLanguages)> french{};
-        std::copy(std::begin(kI18nLanguages), std::end(kI18nLanguages), french.begin());
-        french[3].inProgress = false;
-        CHECK_TEXT(match({L"de-DE", L"fr-FR"}, french), L"fr");
-        CHECK_TEXT(match({L"de-AT"}, french), L"en");
+        for (const auto& [tags, expected] : kCases) CHECK_TEXT(match(tags), std::wstring(expected));
+        // A test registry with every translation in progress: none matches automatically.
+        std::array<I18nLanguage, std::size(kI18nLanguages)> inProgress{};
+        std::copy(std::begin(kI18nLanguages), std::end(kI18nLanguages), inProgress.begin());
+        for (size_t i = 1; i < inProgress.size(); i++) inProgress[i].inProgress = true;
+        CHECK_TEXT(match({L"de-DE"}, inProgress), L"en");
+        CHECK_TEXT(match({L"ja-JP", L"zh-CN", L"pt-BR"}, inProgress), L"en");
+        // French finished: it matches, its parent's tags too; German stays skipped.
+        inProgress[3].inProgress = false;
+        CHECK_TEXT(match({L"de-DE", L"fr-FR"}, inProgress), L"fr");
+        CHECK_TEXT(match({L"fr-CA"}, inProgress), L"fr");
+        CHECK_TEXT(match({L"de-AT"}, inProgress), L"en");
     });
 
     Run("i18n pseudo-locale: accents, padding and brackets around unchanged syntax", [] {

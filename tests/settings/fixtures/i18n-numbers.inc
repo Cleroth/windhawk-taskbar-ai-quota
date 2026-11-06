@@ -139,8 +139,8 @@ static void RunI18nNumberTests() {
         for (auto [tag, spent, credits, copilot] :
              {std::tuple{L"en", L"$12,50 of $1234,00 spent", L"123456 left of 200000 credits",
                          L"1234,5 of 1500 AI credits used"},
-              std::tuple{L"de", L"$12,50 von $1234,00 ausgegeben", L"123456 von 200000 Guthaben \u00FCbrig",
-                         L"1234,5 von 1500 KI-Guthaben verbraucht"}}) {
+              std::tuple{L"de", L"$12,50 von $1234,00 ausgegeben", L"123456 von 200000 Credits \u00FCbrig",
+                         L"1234,5 von 1500 AI Credits verbraucht"}}) {
             const I18nLocale locale = TestRegional(tag, L"de-DE");
             CHECK_TEXT(I18nText(locale, TrCtx(L"quota-amount", L"{used} of {limit} spent"),
                                 {{L"used", L"$" + I18nFixed(locale, 12.5, 2)},
@@ -149,7 +149,7 @@ static void RunI18nNumberTests() {
             CHECK_TEXT(I18nText(locale, TrCtx(L"quota-amount", L"{left} left of {limit} credits"),
                                 {{L"left", I18nFixed(locale, 123456, 0)}, {L"limit", I18nFixed(locale, 200000, 0)}}),
                        credits);
-            std::wstring unit = std::wstring_view(tag) == L"en" ? L"AI credits" : L"KI-Guthaben";
+            std::wstring unit = std::wstring_view(tag) == L"en" ? L"AI credits" : L"AI Credits";
             CHECK_TEXT(I18nText(locale, TrCtx(L"quota-amount", L"{used} of {limit} {unit} used"),
                                 {{L"used", I18nTrimmed(locale, 1234.5, 2)}, {L"limit", I18nTrimmed(locale, 1500, 2)},
                                  {L"unit", unit}}),

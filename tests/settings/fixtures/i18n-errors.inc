@@ -101,7 +101,7 @@ static void RunI18nErrorTests() {
         CHECK_TEXT(alone({}, provider), L"Token refresh failed: invalid_grant: Refresh token expired");
         // échec de l’actualisation du jeton : invalid_grant: …; Не удалось обновить токен: invalid_grant: ….
         CHECK_TEXT(AccountErrorText(fr, provider),
-                   L"\u00E9chec de l\u2019actualisation du jeton\u00A0: invalid_grant: Refresh token expired");
+                   L"\u00E9chec de l\u2019actualisation du jeton\u202F: invalid_grant: Refresh token expired");
         CHECK_TEXT(alone(ru, provider), L"\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u043D"
                                         L"\u043E\u0432\u0438\u0442\u044C \u0442\u043E\u043A\u0435\u043D: invalid_grant:"
                                         L" Refresh token expired");
@@ -172,11 +172,12 @@ static void RunI18nErrorTests() {
                                       L"in 2h 5m (14:05)");
         CHECK_TEXT(enBody, L"Anthropic - resets in 2h 5m (14:05)");
         CHECK_TEXT(text({}, L"copilot", kExtraUsageBar, 91.4).second, L"GitHub Copilot");
-        // 5 Std.: 91% genutzt / Anthropic – Reset in 2 Std. 5 Min. (14:05).
+        // 5 Std.: 91% genutzt / Anthropic – Reset in 2 Std. 5 Min. (14:05), a no-break space before
+        // each unit.
         auto [deTitle, deBody] = text(de, L"anthropic", kFiveHourBar, 91.4, 0, CopilotUnit::AiCredits,
-                                      L"in 2 Std. 5 Min. (14:05)");
-        CHECK_TEXT(deTitle, L"5 Std.: 91% genutzt");
-        CHECK_TEXT(deBody, L"Anthropic \u2013 Reset in 2 Std. 5 Min. (14:05)");
+                                      L"in 2\u00A0Std. 5\u00A0Min. (14:05)");
+        CHECK_TEXT(deTitle, L"5\u00A0Std.: 91% genutzt");
+        CHECK_TEXT(deBody, L"Anthropic \u2013 Reset in 2\u00A0Std. 5\u00A0Min. (14:05)");
         // Премиум-запросы: использовано 95%; Argon, неделя: использовано 95%.
         CHECK_TEXT(text(ru, L"copilot", kExtraUsageBar, 95, 0, CopilotUnit::PremiumRequests).first,
                    L"\u041F\u0440\u0435\u043C\u0438\u0443\u043C-\u0437\u0430\u043F\u0440\u043E\u0441\u044B: \u0438"
@@ -197,14 +198,15 @@ static void RunI18nErrorTests() {
             AccountData data;
             data.win5h = {91.4, 0, 0};
             return data;
-        }(), kFiveHourBar, L"dans 2 h 5 min (14:05)");
-        // 5 h : utilisation à 91% / Anthropic – réinitialisation dans 2 h 5 min (14:05).
-        CHECK_TEXT(title, L"5 h\u00A0: utilisation \u00E0 91%");
-        CHECK_TEXT(body, L"Anthropic \u2013 r\u00E9initialisation dans 2 h 5 min (14:05)");
+        }(), kFiveHourBar, L"dans 2\u00A0h\u00A05\u00A0min (14:05)");
+        // 5 h : utilisation à 91% / Anthropic – réinitialisation dans 2 h 5 min (14:05): no-break spaces
+        // in the units, a narrow one before the colon.
+        CHECK_TEXT(title, L"5\u00A0h\u202F: utilisation \u00E0 91%");
+        CHECK_TEXT(body, L"Anthropic \u2013 r\u00E9initialisation dans 2\u00A0h\u00A05\u00A0min (14:05)");
         CHECK_TEXT(ThresholdToastXml(title, body, L"Au rythme <24 h> & \"plus\"", L"https://claude.ai/?a=1&b=2"),
                    L"<toast activationType=\"protocol\" launch=\"https://claude.ai/?a=1&amp;b=2\"><visual>"
-                   L"<binding template=\"ToastGeneric\"><text>5 h\u00A0: utilisation \u00E0 91%</text>"
-                   L"<text>Anthropic \u2013 r\u00E9initialisation dans 2 h 5 min (14:05)</text>"
+                   L"<binding template=\"ToastGeneric\"><text>5\u00A0h\u202F: utilisation \u00E0 91%</text>"
+                   L"<text>Anthropic \u2013 r\u00E9initialisation dans 2\u00A0h\u00A05\u00A0min (14:05)</text>"
                    L"<text>Au rythme &lt;24 h&gt; &amp; &quot;plus&quot;</text></binding></visual></toast>");
         // Without a link or projection; already escaped text is escaped again, as text.
         CHECK_TEXT(ThresholdToastXml(L"A &amp; B", L"x", L"", nullptr),
@@ -223,7 +225,7 @@ static void RunI18nErrorTests() {
         CHECK_TEXT(signInTitle({}, L"copilot"), L"Sign in: Work & play (GitHub Copilot)");
         CHECK_TEXT(signInTitle({}, L"opencode"), L"Sign in: Work & play (OpenCode Go)");
         CHECK_TEXT(signInTitle(de, L"copilot"), L"Anmelden: Work & play (GitHub Copilot)");
-        CHECK_TEXT(signInTitle(fr, L"openai"), L"Connexion\u00A0: Work & play (OpenAI)");
+        CHECK_TEXT(signInTitle(fr, L"openai"), L"Connexion\u202F: Work & play (OpenAI)");
         auto loopback = [](const I18nLocale& locale) {
             return I18nText(locale,
                             TrCtx(L"sign-in-window",
@@ -242,7 +244,8 @@ static void RunI18nErrorTests() {
               russian.ends_with(L"\u041D\u0430 \u0434\u0440\u0443\u0433\u043E\u043C \u0443\u0441\u0442\u0440\u043E"
                                 L"\u0439\u0441\u0442\u0432\u0435 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 "
                                 L"\u00AB\u0412\u0432\u0435\u0441\u0442\u0438 \u043A\u043E\u0434\u00BB."));
-        CHECK(loopback(de).ends_with(L"Auf einem anderen Ger\u00E4t w\u00E4hlen Sie \u201ECode verwenden\u201C."));
+        CHECK(loopback(de).ends_with(L"Um sich auf einem anderen Ger\u00E4t anzumelden, w\u00E4hlen Sie \u201ECode "
+                                     L"verwenden\u201C."));
         auto retrying = [](const I18nLocale& locale, const AccountError& failure) {
             return I18nText(locale, TrCtx(L"sign-in-status", L"{reason}, retrying\u2026"),
                             {{L"reason", AccountErrorText(locale, failure, AccountErrorForm::Alone)}});
@@ -268,7 +271,7 @@ static void RunI18nErrorTests() {
         ProviderOutage outage{OutageLevel::Degraded, L"OpenCode Go", 0, L"", 0, OutageReason::Errors, L"glm-5.3-flash"};
         CHECK_TEXT(ProviderOutageIncident({}, outage), L"Elevated errors: glm-5.3-flash");
         // Taux d’erreurs élevé : glm-5.3-flash; 上游提供商问题.
-        CHECK_TEXT(ProviderOutageIncident(fr, outage), L"Taux d\u2019erreurs \u00E9lev\u00E9\u00A0: glm-5.3-flash");
+        CHECK_TEXT(ProviderOutageIncident(fr, outage), L"Taux d\u2019erreurs \u00E9lev\u00E9\u202F: glm-5.3-flash");
         CHECK_TEXT(ProviderOutageIncident(zh, {.reason = OutageReason::Upstream}), L"\u4E0A\u6E38\u63D0\u4F9B\u5546"
                                                                                    L"\u95EE\u9898");
         CHECK_TEXT(ProviderOutageIncident({}, {.reason = OutageReason::Latency}), L"Slow responses");

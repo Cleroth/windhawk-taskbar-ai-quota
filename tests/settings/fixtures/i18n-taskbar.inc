@@ -44,9 +44,9 @@ static void RunI18nTaskbarTests() {
     Run("quota keys: English as before; Chinese, Russian and the pseudo-locale from their catalogs, the "
         "brand-derived keys kept", [] {
         CHECK((TestQuotaKeys({}) == std::vector<std::wstring>{L"5h", L"7d", L"Fa", L"Ex", L"Ar", L"Cr", L"Mo", L"Mo"}));
-        // 5h 7天 Fa 额外 Ar 积分 月 月
+        // 5h 周 Fa 额外 Ar 积分 月 月
         CHECK((TestQuotaKeys(TestLocale(L"zh-Hans")) ==
-               std::vector<std::wstring>{L"5h", L"7\u5929", L"Fa", L"\u989D\u5916", L"Ar", L"\u79EF\u5206", L"\u6708",
+               std::vector<std::wstring>{L"5h", L"\u5468", L"Fa", L"\u989D\u5916", L"Ar", L"\u79EF\u5206", L"\u6708",
                                          L"\u6708"}));
         // 5ч 7д Fa Ex Ar Кр Мс Мс
         CHECK((TestQuotaKeys(TestLocale(L"ru")) ==
@@ -59,7 +59,7 @@ static void RunI18nTaskbarTests() {
         // The reserve list holds each key once, in QuotaKey's order.
         std::vector<std::wstring> reserved;
         for (I18nKey key : kQuotaKeys) reserved.push_back(I18nText(TestLocale(L"zh-Hans"), key));
-        CHECK((reserved == std::vector<std::wstring>{L"5h", L"7\u5929", L"Fa", L"\u989D\u5916", L"Ar", L"\u79EF\u5206",
+        CHECK((reserved == std::vector<std::wstring>{L"5h", L"\u5468", L"Fa", L"\u989D\u5916", L"Ar", L"\u79EF\u5206",
                                                      L"\u6708"}));
     });
 
@@ -70,9 +70,9 @@ static void RunI18nTaskbarTests() {
         Settings settings;
         MeterDisplay zh = MeterDisplayFor(settings, TestLocale(L"zh-Hans"), TestMeasure, kNow, 1, 48);
         AccountMeters bars = AccountMeterState(zh, BarLayout::Stacked, Account(L"openai"), data, 0, 0);
-        CHECK(bars.quotas[0].key == L"5h" && bars.quotas[1].key == L"7\u5929" && bars.quotas[3].key == L"\u79EF\u5206");
+        CHECK(bars.quotas[0].key == L"5h" && bars.quotas[1].key == L"\u5468" && bars.quotas[3].key == L"\u79EF\u5206");
         AccountMeters headline = AccountMeterState(zh, BarLayout::LogoHeadline, Account(L"openai"), data, 0, 0);
-        CHECK(headline.headline == L"80%" && headline.headlineKey == L"7\u5929");
+        CHECK(headline.headline == L"80%" && headline.headlineKey == L"\u5468");
         MeterDisplay ru = MeterDisplayFor(settings, TestLocale(L"ru"), TestMeasure, kNow, 1, 48);
         AccountMeters matrix = AccountMeterState(ru, BarLayout::QuotaMatrix, Account(L"copilot"), data, 0, 0);
         CHECK(matrix.quotas[0].key == L"5\u0447" && matrix.quotas[3].key == L"\u041C\u0441");
@@ -99,14 +99,14 @@ static void RunI18nTaskbarTests() {
         CHECK(TestCountdown(zh, hour + 30 * kMinute) == L"\u21BB 1h 30m");
         CHECK(TestCountdown(zh, 0 - (long long)kMinute) == L"\u21BB \u73B0\u5728");
         CHECK(TestCountdown(zh, 0) == L"\u21BB \u65E0\u91CD\u7F6E");
-        // Russian: 3д 12ч, 3д, 1ч 30м, 2ч, 45м; сейчас; без сброса.
+        // Russian: 3д 12ч, 3д, 1ч 30м, 2ч, 45м; сейчас; нет.
         CHECK(TestCountdown(ru, 3 * day + 12 * hour) == L"\u21BB 3\u0434 12\u0447");
         CHECK(TestCountdown(ru, 3 * day) == L"\u21BB 3\u0434");
         CHECK(TestCountdown(ru, hour + 30 * kMinute) == L"\u21BB 1\u0447 30\u043C");
         CHECK(TestCountdown(ru, 2 * hour) == L"\u21BB 2\u0447");
         CHECK(TestCountdown(ru, 44 * kMinute + 1) == L"\u21BB 45\u043C");
         CHECK(TestCountdown(ru, 0 - (long long)kMinute) == L"\u21BB \u0441\u0435\u0439\u0447\u0430\u0441");
-        CHECK(TestCountdown(ru, 0) == L"\u21BB \u0431\u0435\u0437 \u0441\u0431\u0440\u043E\u0441\u0430");
+        CHECK(TestCountdown(ru, 0) == L"\u21BB \u043D\u0435\u0442");
         // The pseudo-locale: [3ð 12ĥ ļ], [3ð ], [1ĥ 30ɱ ļ], [2ĥ ], [45ɱ ], [ñöŵ ļ], [ñö ŕéšéţ ļö].
         CHECK(TestCountdown(pseudo, 3 * day + 12 * hour) == L"\u21BB [3\u00F0 12\u0125 \u013C]");
         CHECK(TestCountdown(pseudo, 3 * day) == L"\u21BB [3\u00F0 ]");
@@ -127,16 +127,16 @@ static void RunI18nTaskbarTests() {
             measured.emplace_back(text);
             return double(text.size());
         };
-        // Russian: 00д 00ч, 00д, 00ч 00м, 00ч, 00м, сейчас, без сброса; no reset the widest, 12
-        // characters with the arrow.
-        CHECK_NEAR(HeadlineCountdownReserve(TestLocale(L"ru"), count, 9), 12);
+        // Russian: 00д 00ч, 00д, 00ч 00м, 00ч, 00м, сейчас, нет; the days-and-hours form the
+        // widest, 9 characters with the arrow.
+        CHECK_NEAR(HeadlineCountdownReserve(TestLocale(L"ru"), count, 9), 9);
         CHECK((measured == std::vector<std::wstring>{
                                L"\u21BB 00\u0434 00\u0447", L"\u21BB 00\u0434", L"\u21BB 00\u0447 00\u043C",
                                L"\u21BB 00\u0447", L"\u21BB 00\u043C",
                                L"\u21BB \u0441\u0435\u0439\u0447\u0430\u0441",
-                               L"\u21BB \u0431\u0435\u0437 \u0441\u0431\u0440\u043E\u0441\u0430"}));
+                               L"\u21BB \u043D\u0435\u0442"}));
         CHECK(regular);
-        // English: no reset's 10 characters outcount 00h 00m's 9; Japanese (リセットなし) 8, its
+        // English: no reset's 10 characters outcount 00h 00m's 9; Japanese's no reset (なし) 4, its
         // hours-and-minutes form 9; the pseudo-locale's no reset ([ñö ŕéšéţ ļö]) 15.
         measured.clear();
         CHECK_NEAR(HeadlineCountdownReserve({}, count, 9), 10);
@@ -181,7 +181,7 @@ static void RunI18nTaskbarTests() {
         bars.showBarLabels = true;
         std::vector<std::wstring> zhBars =
             texts(SettingsPreviewLayout(TestGraphics(), bars, zh, 48, 1, kNow, false, false, 0xFFFFFFFF));
-        CHECK(has(zhBars, L"7\u5929") && has(zhBars, L"\u989D\u5916") && has(zhBars, L"\u79EF\u5206"));
+        CHECK(has(zhBars, L"\u5468") && has(zhBars, L"\u989D\u5916") && has(zhBars, L"\u79EF\u5206"));
         CHECK(!has(zhBars, L"7d") && !has(zhBars, L"Ex"));
         Settings headline = With([](Settings& s) {
             s.barLayout = BarLayout::LogoHeadline;
@@ -270,8 +270,8 @@ static void RunI18nTaskbarTests() {
         // The default 48 x 32 chart, 8 DIP text (5.6 cap height), the ring 3.6 DIPs around the
         // reading. Weekly alone, 10% at 62.5% of the window: the reading at (30, 27.25), the ring
         // from x 26.4 to 33.6 across the bottom box (y 23.4 to 29). English "7d" (9.6 DIPs) from x
-        // 35.4: clear, kept at the bottom; Chinese 7天 (4.8 + 8 DIPs) from 32.2: hit, moved to
-        // the top.
+        // 35.4 and Chinese 周 (8 DIPs) from 37: clear, kept at the bottom; the pseudo-locale's
+        // [7ð ] (5 x 4.8 DIPs) from 21: hit, moved to the top.
         auto weeklyKey = [](const wchar_t* tag) {
             AccountData data = Fresh();
             data.winWeek = {10, kNow + (ULONGLONG)std::llround(0.375 * kWeeklyWindowMs), kWeeklyWindowMs};
@@ -281,7 +281,8 @@ static void RunI18nTaskbarTests() {
                                      data, 0, 0).quotas[kWeeklyBar];
         };
         CHECK(weeklyKey(L"en").key == L"7d" && !weeklyKey(L"en").sparkKeyTop);
-        CHECK(weeklyKey(L"zh-Hans").key == L"7\u5929" && weeklyKey(L"zh-Hans").sparkKeyTop);
+        CHECK(weeklyKey(L"zh-Hans").key == L"\u5468" && !weeklyKey(L"zh-Hans").sparkKeyTop);
+        CHECK(weeklyKey(L"qps-ploc").key == L"[7\u00F0 ]" && weeklyKey(L"qps-ploc").sparkKeyTop);
         // The extra usage's percentage and key on an 80 DIP weekly chart: "40%" (14.4 DIPs), the 2
         // DIP gap and "Ex" (9.6) from x 3 to 29 in English; 额外 (16) to 35.4 in Chinese. 110% at
         // 25% of the window, (20, 2), the ring from x 16.4: inside both, which move to the bottom
@@ -350,7 +351,7 @@ static void RunI18nTaskbarTests() {
                                return TestWideMeasure(text, font, size) + (size < 7 ? 3 : 0);
                            }),
                    6);
-        // 7天, 1.6 ems (6.17 + 2): fits.
+        // 周, an em (3.86 + 2): fits.
         CHECK_NEAR(keyFont(L"zh-Hans", {10, 90, -1, 20}), key);
         // The pseudo-locale's [Éẋ ], three ems: down to 6, where it still doesn't fit.
         CHECK_NEAR(keyFont(L"qps-ploc", {10, 20, -1, 90}), 6);
@@ -469,12 +470,12 @@ static void RunI18nTaskbarTests() {
         };
         UiFrame english = frameOf({}, {AccountErrorCode::AntigravityNotRunning});
         CHECK((stateOf(english) == std::vector<std::wstring>{L"Sign-in needed", L"Local app not running"}));
-        // 本地应用未运行; Локальное приложение не запущено.
+        // 本地应用未运行; Приложение не запущено.
         CHECK(stateOf(frameOf(TestLocale(L"zh-Hans"), {AccountErrorCode::AntigravityNotRunning})).back() ==
               L"\u672C\u5730\u5E94\u7528\u672A\u8FD0\u884C");
         CHECK(stateOf(frameOf(TestLocale(L"ru"), {AccountErrorCode::AntigravityNotRunning})).back() ==
-              L"\u041B\u043E\u043A\u0430\u043B\u044C\u043D\u043E\u0435 \u043F\u0440\u0438\u043B\u043E\u0436\u0435"
-              L"\u043D\u0438\u0435 \u043D\u0435 \u0437\u0430\u043F\u0443\u0449\u0435\u043D\u043E");
+              L"\u041F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u043D\u0435 \u0437\u0430\u043F\u0443"
+              L"\u0449\u0435\u043D\u043E");
         // Another error of the local app: its alone form, as the first letter's capital was before;
         // provider text whole on a line that ellipsizes it, the card header's tooltip holding it.
         CHECK(stateOf(frameOf({}, {AccountErrorCode::LanguageServerNetwork})).back() ==
@@ -487,13 +488,13 @@ static void RunI18nTaskbarTests() {
         CHECK(std::any_of(cut.content.begin(), cut.content.end(), [&](const UiItem& item) {
             return item.trim && UiRunsText(item.runs).ends_with(provider);
         }));
-        // The quota chips in the card headers: OAI's 5h and 7d (5h, 7天).
+        // The quota chips in the card headers: OAI's 5h and 7d (5h, 周).
         UiFrame chinese = frameOf(TestLocale(L"zh-Hans"), {});
         std::vector<std::wstring> chips;
         for (const UiItem& item : chinese.content) {
             if (item.kind == UiItemKind::Chip) chips.push_back(item.text);
         }
-        CHECK(std::find(chips.begin(), chips.end(), L"7\u5929") != chips.end() &&
+        CHECK(std::find(chips.begin(), chips.end(), L"\u5468") != chips.end() &&
               std::find(chips.begin(), chips.end(), L"7d") == chips.end());
     });
 
@@ -624,16 +625,17 @@ static void RunI18nTaskbarTests() {
                                    L"\u043B\u0430\u0442\u043D\u044B\u0445 \u0441\u0431\u0440\u043E\u0441\u043E\u0432");
         CHECK(freeResets(ru, 21) == L"\u0414\u043E\u0441\u0442\u0443\u043F\u0435\u043D 21 \u0431\u0435\u0441\u043F"
                                     L"\u043B\u0430\u0442\u043D\u044B\u0439 \u0441\u0431\u0440\u043E\u0441");
-        // через 2 д, then: Доступно 3 бесплатных сброса · ближайший истекает через 2 д.
+        // через 2 д, then: Доступно 3 бесплатных сброса · ближайший истекает через 2 д (a no-break space
+        // before the unit).
         std::wstring when = I18nText(ru, TrCtx(L"reset-when", L"in {duration}"),
                                      {{L"duration", I18nText(ru, TrCtx(L"duration", L"{days}d"), {{L"days", 2}})}});
-        CHECK(when == L"\u0447\u0435\u0440\u0435\u0437 2 \u0434");
+        CHECK(when == L"\u0447\u0435\u0440\u0435\u0437 2\u00A0\u0434");
         CHECK(I18nText(ru, TrCtx(L"free-resets", L"{count, plural, one{# free reset available} other{# free resets "
                                                  L"available}} \u00B7 next expires {when}"),
                        {{L"count", 3}, {L"when", when}}) ==
               L"\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E 3 \u0431\u0435\u0441\u043F\u043B\u0430\u0442\u043D"
               L"\u044B\u0445 \u0441\u0431\u0440\u043E\u0441\u0430 \u00B7 \u0431\u043B\u0438\u0436\u0430\u0439\u0448"
-              L"\u0438\u0439 \u0438\u0441\u0442\u0435\u043A\u0430\u0435\u0442 \u0447\u0435\u0440\u0435\u0437 2 "
+              L"\u0438\u0439 \u0438\u0441\u0442\u0435\u043A\u0430\u0435\u0442 \u0447\u0435\u0440\u0435\u0437 2\u00A0"
               L"\u0434");
 
         auto others = [](const I18nLocale& locale, int count) {
@@ -644,9 +646,9 @@ static void RunI18nTaskbarTests() {
                              {L"level", I18nText(locale, TrCtx(L"outage-level", L"partial outage"))}});
         };
         CHECK(others({}, 1) == L"Codex API and 1 more: partial outage");
-        CHECK(others(fr, 1) == L"Codex API et 1 autre\u00A0: panne partielle");
-        CHECK(others(fr, 0) == L"Codex API et 0 autre\u00A0: panne partielle");
-        CHECK(others(fr, 2) == L"Codex API et 2 autres\u00A0: panne partielle");
+        CHECK(others(fr, 1) == L"Codex API et 1 autre\u202F: panne partielle");
+        CHECK(others(fr, 0) == L"Codex API et 0 autre\u202F: panne partielle");
+        CHECK(others(fr, 2) == L"Codex API et 2 autres\u202F: panne partielle");
         // Codex API: снижение производительности · с 14:05 · Elevated error rates (the incident as written).
         std::wstring line = I18nText(ru, TrCtx(L"outage-line", L"{component}: {level}"),
                                      {{L"component", L"Codex API"},
@@ -667,7 +669,7 @@ static void RunI18nTaskbarTests() {
             return I18nText(locale, TrCtx(L"quota-reset", L"Resets {when}"), {{L"when", when}});
         };
         CHECK(resets({}) == L"Resets in 3d 4h (Fr 04:59)");
-        CHECK(resets(de) == L"Reset in 3 T. 4 Std. (Fr 04:59)");
+        CHECK(resets(de) == L"Reset in 3\u00A0T. 4\u00A0Std. (Fr 04:59)");
         // Fehler: Antigravity läuft nicht – neuer Versuch in 4 Min. 12 Sek.
         auto retry = [](const I18nLocale& locale) {
             return I18nText(locale, TrCtx(L"flyout-note", L"Error: {error} - retry in {duration}"),
@@ -676,7 +678,7 @@ static void RunI18nTaskbarTests() {
                                                     {{L"minutes", 4}, {L"seconds", 12}})}});
         };
         CHECK(retry({}) == L"Error: Antigravity not running - retry in 4m 12s");
-        CHECK(retry(de) == L"Fehler: Antigravity l\u00E4uft nicht \u2013 neuer Versuch in 4 Min. 12 Sek.");
+        CHECK(retry(de) == L"Fehler: Antigravity l\u00E4uft nicht \u2013 neuer Versuch in 4\u00A0Min. 12\u00A0Sek.");
 
         // Использовано 12.5 из 300 (премиум-запросы), then Дополнительно: 4 (премиум-запросы): the unit's
         // running-text name as an argument, twice on two lines.

@@ -332,6 +332,7 @@ static void RunUiTests() {
             L"https://github.com/Cleroth/windhawk-taskbar-ai-quota",
             L"https://github.com/Cleroth/windhawk-taskbar-ai-quota/issues/new",
             L"https://github.com/Cleroth/windhawk-taskbar-ai-quota#usage-history",
+            L"https://github.com/Cleroth/windhawk-taskbar-ai-quota/issues",
             L"https://github.com/amirf147", L"https://github.com/HughMacdonald", L"https://github.com/incconutwo",
             L"https://github.com/smnio", L"https://github.com/Sof2245", L"https://github.com/yalov",
             L"https://simpleicons.org", L"https://github.com/primer/octicons", L"https://opensource.org/license/mit"};
@@ -358,6 +359,30 @@ static void RunUiTests() {
             }
         }
         CHECK(linkCards == 3);
+        // Under the link cards, the translation corrections' line: a caption across the column, 8 DIP
+        // below the last link card, its link to the issues; the next section 20 DIP under it.
+        const UiItem* corrections = nullptr;
+        const UiItem* lastLink = nullptr;
+        for (const UiItem& item : frame.content) {
+            if (item.kind == UiItemKind::Card && item.action.kind == UiActionKind::OpenUrl) lastLink = &item;
+            if (UiRunsText(item.runs) ==
+                L"Translations are machine-made. Corrections are welcome as GitHub issues or pull requests.") {
+                corrections = &item;
+            }
+        }
+        CHECK(corrections && lastLink && corrections->kind == UiItemKind::Text && corrections->font == UiFont::Caption &&
+              corrections->runs.size() == 3 && corrections->runs[1].text == L"GitHub issues" &&
+              corrections->runs[1].style == UiRunStyle::Link);
+        if (corrections && lastLink) {
+            CHECK_NEAR(corrections->rect.top, lastLink->rect.bottom + 8);
+            CHECK_NEAR(corrections->rect.right - corrections->rect.left, 680);
+            const UiItem* credits = nullptr;
+            for (const UiItem& item : frame.content) {
+                if (UiRunsText(item.runs) == L"Credits and license") credits = &item;
+            }
+            CHECK(credits);
+            if (credits) CHECK_NEAR(credits->rect.top, corrections->rect.bottom + 20);
+        }
         // The logos card shows each provider's mark once, OpenCode's last.
         std::vector<PCWSTR> marks;
         for (const UiItem& item : frame.content) {
@@ -369,9 +394,9 @@ static void RunUiTests() {
         });
         CHECK((marks == std::vector<PCWSTR>{kClaudeLogoPath, kOpenAiLogoPath, kGeminiLogoPath, kCopilotLogoPath,
                                             kOpenCodeLogoPath}));
-        // The pages, Copy, the link cards, the contributors' six links, the logos' two, then the
-        // license's.
-        CHECK(UiFocusStops(frame).size() == 6 + 1 + 3 + 6 + 3);
+        // The pages, Copy, the link cards, the translation corrections' link, the contributors' six
+        // links, the logos' two, then the license's.
+        CHECK(UiFocusStops(frame).size() == 6 + 1 + 3 + 1 + 6 + 3);
     });
 
     Run("controls: toggles, dropdowns and number boxes are tab stops; spin buttons click only", [] {
