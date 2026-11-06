@@ -127,7 +127,7 @@ static void RunLayoutTests() {
         Settings s;
         const std::pair<SettingsField, int> values[] = {
             {SettingsField::BarLayout, 4},     {SettingsField::BarStyle, 1},
-            {SettingsField::BarLength, 180},  {SettingsField::BarThickness, 12},
+            {SettingsField::BarLength, 180},  {SettingsField::VerticalBarLength, 40}, {SettingsField::BarThickness, 12},
             {SettingsField::BarGap, 5},        {SettingsField::RingSize, 36},    {SettingsField::RingThickness, 5},
             {SettingsField::HeadlineFontSize, 18}, {SettingsField::HeadlineBarLength, 24},
             {SettingsField::HeadlineBarThickness, 6}, {SettingsField::HeadlineCountdown, 1},
@@ -171,6 +171,7 @@ static void RunLayoutTests() {
         CHECK(!SettingsFieldRange(SettingsField::SparklineExtra));
         const std::tuple<SettingsField, int, int> clamps[] = {
             {SettingsField::BarLength, 99999, 500},   {SettingsField::BarThickness, 0, 2},
+            {SettingsField::VerticalBarLength, 999, 100}, {SettingsField::VerticalBarLength, 0, 10},
             {SettingsField::RingSize, 100, 40},       {SettingsField::RingThickness, -3, 1},
             {SettingsField::HeadlineFontSize, 9, 10}, {SettingsField::HeadlineFontSize, 99, 24},
             {SettingsField::HeadlineBarLength, 0, 4}, {SettingsField::HeadlineBarLength, 999, 60},
@@ -205,11 +206,12 @@ static void RunLayoutTests() {
         }
     });
 
-    Run("layout reset: the forty-one Layout fields back to defaults, nothing else", [] {
+    Run("layout reset: the forty-two Layout fields back to defaults, nothing else", [] {
         Settings changed;
         changed.barLayout = BarLayout::LogoHeadline;
         changed.barStyle = BarStyle::Rail;
         changed.barLength = 220;
+        changed.verticalBarLength = 60;
         changed.barThickness = 14;
         changed.barGap = 6;
         changed.ringSize = 38;
@@ -262,6 +264,7 @@ static void RunLayoutTests() {
         expected.barLayout = defaults.barLayout;
         expected.barStyle = defaults.barStyle;
         expected.barLength = defaults.barLength;
+        expected.verticalBarLength = defaults.verticalBarLength;
         expected.barThickness = defaults.barThickness;
         expected.barGap = defaults.barGap;
         expected.ringSize = defaults.ringSize;
@@ -302,12 +305,13 @@ static void RunLayoutTests() {
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetLayout, 0);
         CHECK(reset == expected);
-        CHECK(reset.barLayout == BarLayout::Sparkline && reset.placement == TaskbarPlacement::BeforeIcons);
+        CHECK(reset.barLayout == BarLayout::Sparkline && reset.placement == TaskbarPlacement::BeforeIcons &&
+              reset.verticalBarLength == 32);
         CHECK(reset.sparklineHeight == 80 && reset.sparklineExtra == SparklineExtra::Amount && reset.sparklineTextSize == 8 &&
               reset.sparklineElapsed && reset.sparklineNowLine && !reset.sparklineNowCaret && reset.sparklineRing &&
               reset.sparklineReadingScale == 100 && reset.sparklineOutline && reset.sparklineSpan == SparklineSpan::Window &&
               reset.sparklineHoverSpan == SparklineSpan::Hours24);
-        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 41);
+        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 42);
         // Each group field is one the reset restores.
         for (SettingsField field : SettingsGroupFields(SettingsField::ResetLayout)) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
@@ -401,11 +405,16 @@ static void RunLayoutTests() {
         CHECK_NEAR(strip.width, 4 * (24 + 6));
         CHECK_NEAR(strip.columns[0].top, 4);
         CHECK(Strip(s, 0).height == 48);
-        // Gallery thumbnails: the two Anthropic accounts, no mock taskbar.
+        // Gallery thumbnails: the OpenAI and an Anthropic account, no mock taskbar.
         strip = Strip(s, 48, true);
         CHECK(strip.columns.size() == 2 && strip.pieces.empty());
         CHECK_NEAR(strip.width, 2 * 38);
         CHECK(Strip(s).pieces.size() == 6);
+        // Usage graphs: both, each with its 5h chart alone.
+        s.barLayout = BarLayout::Sparkline;
+        strip = Strip(s, 48, true);
+        CHECK(strip.columns.size() == 2 && OpsOfKind(strip, SettingsPreviewOp::Kind::Logo).size() == 2);
+        CHECK(TextOps(strip, L"5h").size() == 2 && TextOps(strip, L"7d").empty());
     });
 
     Run("preview: bars mirror the XAML columns; percent text follows its visibility", [] {
@@ -467,8 +476,13 @@ static void RunLayoutTests() {
         s.labelPosition = LabelPosition::Hidden;
         strip = Strip(s);
         CHECK_NEAR(strip.columns[0].right - strip.columns[0].left, 3 + 100 + 3);
-        // Vertical bars stand 100 DIPs tall.
+        // Vertical bars stand their own length tall, not the bar length: 32 DIPs by default, inside
+        // the 40 DIP box; 100 grow it.
         s.barLayout = BarLayout::Vertical;
+        strip = Strip(s);
+        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.bottom - OpsOfColor(strip, 0x46808080)[0].rect.top, 32);
+        CHECK_NEAR(strip.columns[0].bottom - strip.columns[0].top, 40);
+        s.verticalBarLength = 100;
         strip = Strip(s);
         CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.bottom - OpsOfColor(strip, 0x46808080)[0].rect.top, 100);
         CHECK_NEAR(strip.columns[0].bottom - strip.columns[0].top, 100);
@@ -531,23 +545,25 @@ static void RunLayoutTests() {
         // Vertical: 100 DIP bars grow it, still centred on the strip; 32 DIP ones sit in the
         // middle of the 40 DIP box.
         s.barLayout = BarLayout::Vertical;
+        s.verticalBarLength = 100;
         strip = Strip(s);
         CHECK_NEAR(strip.columns[0].top, -26); CHECK_NEAR(strip.columns[0].bottom, 74);
-        s.barLength = 32;
+        s.verticalBarLength = 32;
         strip = Strip(s);
         CHECK_NEAR(strip.columns[0].top, 4); CHECK_NEAR(strip.columns[0].bottom, 44);
         CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.top, 8);
 
-        // The gallery's Anthropic pair: their logos badged "1" and "2" (each the number over eight
-        // halo copies), the bars after the logo, the badge's overhang and the 3 DIP gap; no label.
+        // The gallery's OpenAI and Anthropic samples: their logos, without a badge (one account per
+        // provider), a label or the OpenAI sample's outage mark; the bars 3 DIPs after the logo.
         s = StackedSettings();
         strip = Strip(s, 48, true);
         std::vector<SettingsPreviewOp> logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
-        CHECK(logos.size() == 2 && OpsOfColor(strip, TilePaletteFor(false).badgeHalo).size() == 16 &&
+        CHECK(logos.size() == 2 && OpsOfColor(strip, TilePaletteFor(false).badgeHalo).empty() &&
               OpsOfColor(strip, hover).size() == 2);
-        CHECK(TextOps(strip, L"1").size() == 9 && TextOps(strip, L"2").size() == 9 && TextOps(strip, L"CC 1").empty());
+        CHECK(logos[0].path == ProviderLogoPath(L"openai") && logos[1].path == ProviderLogoPath(L"anthropic"));
+        CHECK(TextOps(strip, L"OAI\u2009").empty() && TextOps(strip, L"OAI").empty() && TextOps(strip, kOutageGlyph).empty());
         CHECK_NEAR(logos[0].rect.left, strip.columns[0].left + 3);
-        CHECK(NearDip(OpsOfColor(strip, 0x46808080)[0].rect.left, strip.columns[0].left + 3 + 15 + kBadgeRight + 3));
+        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, logos[0].rect.right + 3);
     });
 
     Run("preview: each identity form at every identity position in Stacked; the badge counts in its box", [] {
@@ -728,7 +744,7 @@ static void RunLayoutTests() {
         Settings s = StackedSettings();
         s.accountMargin = 10;  // The box's full 7 DIP padding, 3 DIPs outside it.
         s.barLayout = BarLayout::Vertical;
-        s.barLength = 32;
+        s.verticalBarLength = 32;
         auto center = [](const SettingsPreviewOp& a, const SettingsPreviewOp& b) {
             return (a.rect.left + b.rect.right) / 2;
         };
@@ -1246,9 +1262,10 @@ static void RunLayoutTests() {
         CHECK_NEAR(cores[0].rect.right - cores[0].rect.left, 6);
         CHECK_NEAR(cores[0].rect.top, notches[0].rect.top + 1);
 
-        // Vertical bars fill upward: start corners at the bottom, the highlight on the left.
+        // 100 DIP vertical bars fill upward: start corners at the bottom, the highlight on the left.
         s = StackedSettings();
         s.barLayout = BarLayout::Vertical;
+        s.verticalBarLength = 100;
         strip = Strip(s);
         shaded = fills(strip);
         CHECK(shaded[0].shadeLeft && (*shaded[0].corners == Corners{0, 0, 2, 2}));
@@ -1454,9 +1471,10 @@ static void RunLayoutTests() {
         s.showPaceTicks = false;
         CHECK(OpsOfColor(at(13500000), 0x46808080).size() == 2);
         s.showPaceTicks = true;
-        // Vertical bars: right of each bar, 1 DIP out, filling up from the bottom; the next bar the
-        // gap after it.
+        // 100 DIP vertical bars: right of each bar, 1 DIP out, filling up from the bottom; the next
+        // bar the gap after it.
         s.barLayout = BarLayout::Vertical;
+        s.verticalBarLength = 100;
         strip = at(13500000);
         tracks = OpsOfColor(strip, 0x46808080);
         fills = OpsOfColor(strip, 0xFFDEDEDE);
@@ -2198,6 +2216,7 @@ static void RunLayoutTests() {
     Run("preview: extreme and out-of-range settings stay drawable and bounded", [] {
         Settings large = StackedSettings();
         large.barLength = 500;
+        large.verticalBarLength = 100;
         large.barThickness = 50;
         large.labelFontSize = large.percentFontSize = 24;
         large.barGap = large.labelGap = large.accountMargin = large.rightMargin = 500;
@@ -2211,6 +2230,7 @@ static void RunLayoutTests() {
         wild.headlineBarLength = 100000;
         wild.headlineBarThickness = -1;
         wild.barLength = 100000;
+        wild.verticalBarLength = -100000;
         wild.barThickness = -5;
         wild.labelFontSize = wild.percentFontSize = 0;
         wild.barGap = wild.labelGap = -10;
@@ -2672,13 +2692,23 @@ static void RunLayoutTests() {
               stop(SettingsControlId(SettingsField::PaceTickColor, 3)) &&
               stop(SettingsControlId(SettingsField::BarLayout, 10)) &&
               !stop(SettingsControlId(SettingsField::PreviewScroll)));
-        // Vertical bars have it too.
+        CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::VerticalBarLength, 1)) &&
+              !HasText(frame, L"Vertical bar length"));
+        // Vertical bars have it too; their own length instead of the bar length.
         view.settings.barLayout = BarLayout::Vertical;
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, SettingsField::BarLayout, 10).action.kind == UiActionKind::Navigate &&
               HasText(frame, L"Account identity is set per account in Accounts") &&
               HasText(frame, L"Identity position"));
+        const UiItem& vertical = Control(frame, SettingsField::VerticalBarLength, 1);
+        CHECK(vertical.kind == UiItemKind::Slider && vertical.minimum == 10 && vertical.maximum == 100 &&
+              vertical.action.value == 32 && Control(frame, SettingsField::VerticalBarLength).text == L"32");
+        CHECK(HasText(frame, L"Vertical bar length") && HasText(frame, L"Pixels up each bar.") &&
+              !UiFindItem(frame, SettingsControlId(SettingsField::BarLength, 1)) &&
+              !HasText(frame, L"Pixels along each bar."));
+        CHECK(Control(frame, SettingsField::BarStyle).rect.bottom < vertical.rect.top &&
+              vertical.rect.bottom < Control(frame, SettingsField::BarThickness, 1).rect.top);
     });
 
     Run("layout page: ring and headline sections", [] {

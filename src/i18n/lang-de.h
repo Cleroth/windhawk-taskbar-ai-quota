@@ -346,6 +346,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
      L"Pixel nach rechts, bei negativen Werten nach links, von der unteren rechten Ecke des Logos aus (bei Ringen "
      L"innerhalb des Lochs)."},
+    {L"", L"Pixels up each bar.", L"Höhe jedes Balkens in Pixeln."},
     {L"", L"Position", L"Position"},
     {L"", L"Primary display only", L"Nur Hauptbildschirm"},
     {L"", L"Primary display, all displays, or one display.",
@@ -651,6 +652,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Used on tiles when Identity is Label.",
      L"Wird auf Kacheln verwendet, wenn „Identität“ auf „Bezeichnung“ steht."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Version {version}  ·  von Cleroth  ·  Windhawk-Mod"},
+    {L"", L"Vertical bar length", L"Länge vertikaler Balken"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
      L"Warten Sie, bis die aktuelle Anmeldung abgeschlossen ist, bevor Sie die Identität ändern."},
     {L"", L"Wait for the current sign-in to finish before removing accounts.",

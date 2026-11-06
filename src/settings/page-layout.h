@@ -210,7 +210,13 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {text(TrCtx(L"bar-style", L"Thin rail")), int(BarStyle::Rail)}},
                                         int(s.barStyle));
         }
-        {
+        // Stacked and vertical bars each keep their own length.
+        if (layout == BarLayout::Vertical) {
+            UiCardSpec spec;
+            spec.title = text(Tr(L"Vertical bar length"));
+            spec.description = {{text(Tr(L"Pixels up each bar."))}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::VerticalBarLength);
+        } else {
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar length"));
             spec.description = {{text(Tr(L"Pixels along each bar."))}};

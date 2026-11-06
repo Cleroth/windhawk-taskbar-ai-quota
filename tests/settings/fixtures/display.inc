@@ -147,7 +147,7 @@ static void RunDisplayPageTests() {
             CHECK(SettingsFieldValue(changed, field) != SettingsFieldValue(defaults, field));
         }
 
-        // All 67 scalar settings changed: the four page resets restore every one, and no field
+        // All 68 scalar settings changed: the four page resets restore every one, and no field
         // belongs to two groups (Show on holds the monitor mode and number; Keep history and its
         // custom days both set the retention).
         Settings every = changed;
@@ -161,6 +161,7 @@ static void RunDisplayPageTests() {
         every.historyDefaultRange = HistoryUiRange::Quarter;
         every.barLayout = BarLayout::LogoHeadline;
         every.barStyle = BarStyle::Rail;
+        every.verticalBarLength = 60;
         every.barThickness = 14;
         every.barGap = 6;
         every.ringSize = 38;
@@ -211,7 +212,7 @@ static void RunDisplayPageTests() {
         fresh.accounts = every.accounts;
         CHECK(restored == fresh);
         std::sort(seen.begin(), seen.end());
-        CHECK(seen.size() == 67 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+        CHECK(seen.size() == 68 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     });
 
     Run("projection: thresholds stay ordered while typing; out-of-range and bad text", [] {

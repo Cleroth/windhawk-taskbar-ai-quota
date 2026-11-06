@@ -30,6 +30,7 @@ enum class SettingsField : uint8_t {
     BarLayout,        // Tile style: a BarLayout
     BarStyle,         // A BarStyle
     BarLength,
+    VerticalBarLength,
     BarThickness,
     BarGap,
     RingSize,
@@ -137,6 +138,7 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
         case SettingsField::PollMinutes: return SettingsNumberRange{2, 24 * 60};
         case SettingsField::RetentionDays: return SettingsNumberRange{1, 3650};
         case SettingsField::BarLength: return SettingsNumberRange{10, 500};
+        case SettingsField::VerticalBarLength: return SettingsNumberRange{kVerticalBarLengthMin, kVerticalBarLengthMax};
         case SettingsField::BarThickness: return SettingsNumberRange{2, 50};
         case SettingsField::RingSize: return SettingsNumberRange{kRingSizeMin, kRingSizeMax};
         case SettingsField::RingThickness: return SettingsNumberRange{kRingThicknessMin, kRingThicknessMax};
@@ -179,7 +181,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::HistoryRange};
         case SettingsField::ResetLayout:
             return {SettingsField::BarLayout,       SettingsField::BarStyle,
-                    SettingsField::BarLength,       SettingsField::BarThickness,
+                    SettingsField::BarLength,       SettingsField::VerticalBarLength,
+                    SettingsField::BarThickness,
                     SettingsField::BarGap,          SettingsField::RingSize,
                     SettingsField::RingThickness,   SettingsField::HeadlineFontSize,
                     SettingsField::HeadlineBarLength, SettingsField::HeadlineBarThickness,
@@ -235,6 +238,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::BarLayout: return int(s.barLayout);
         case SettingsField::BarStyle: return int(s.barStyle);
         case SettingsField::BarLength: return s.barLength;
+        case SettingsField::VerticalBarLength: return s.verticalBarLength;
         case SettingsField::BarThickness: return s.barThickness;
         case SettingsField::BarGap: return s.barGap;
         case SettingsField::RingSize: return s.ringSize;
@@ -337,6 +341,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.barStyle = BarStyle(std::clamp(value, int(BarStyle::Track), int(BarStyle::Rail)));
             break;
         case SettingsField::BarLength: s.barLength = value; break;
+        case SettingsField::VerticalBarLength: s.verticalBarLength = value; break;
         case SettingsField::BarThickness: s.barThickness = value; break;
         case SettingsField::BarGap: s.barGap = value; break;
         case SettingsField::RingSize: s.ringSize = value; break;
@@ -441,6 +446,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.barLayout = defaults.barLayout;
             s.barStyle = defaults.barStyle;
             s.barLength = defaults.barLength;
+            s.verticalBarLength = defaults.verticalBarLength;
             s.barThickness = defaults.barThickness;
             s.barGap = defaults.barGap;
             s.ringSize = defaults.ringSize;

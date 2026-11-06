@@ -191,7 +191,7 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
          [&](Settings& s) { s.barLayout = BarLayout::ConcentricRings; thresholds(s, 20, 40, 60); }},
         {L"Vertical 32, identity top, colorblind", [](Settings& s) {
              s.barLayout = BarLayout::Vertical;
-             s.barLength = 32;
+             s.verticalBarLength = 32;
              s.labelPosition = LabelPosition::Top;
              s.usagePalette = UsagePalette::Colorblind;
          }, -1, 72},
@@ -229,7 +229,7 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Time track, vertical 32", [](Settings& s) {
              s.paceTickStyle = PaceTickStyle::TimeTrack;
              s.barLayout = BarLayout::Vertical;
-             s.barLength = 32;
+             s.verticalBarLength = 32;
          }},
         {L"Pace pink", [](Settings& s) { s.paceTickColor = RGB(0xFF, 0x6E, 0xC7); }},
         {L"Pace off", [](Settings& s) { s.showPaceTicks = false; }},
@@ -244,16 +244,16 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              s.barLength = 60;
              s.barThickness = 14;
          }},
-        {L"Vertical, length 32", [](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 32; }},
+        {L"Vertical, length 32", [](Settings& s) { s.barLayout = BarLayout::Vertical; s.verticalBarLength = 32; }},
         {L"Vertical 32, line", [](Settings& s) {
              s.barLayout = BarLayout::Vertical;
-             s.barLength = 32;
+             s.verticalBarLength = 32;
              s.paceTickStyle = PaceTickStyle::Line;
          }},
         {L"Thin rail, vertical 32", [](Settings& s) {
              s.barStyle = BarStyle::Rail;
              s.barLayout = BarLayout::Vertical;
-             s.barLength = 32;
+             s.verticalBarLength = 32;
          }},
         {L"Labels 24, text 14", [&](Settings& s) { always(s); s.labelFontSize = 24; s.percentFontSize = 14; }},
         {L"Bars 10 x 2", [](Settings& s) { s.barLength = 10; s.barThickness = 2; }},
@@ -331,35 +331,35 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
              s.labelGap = 8;
              s.labelPosition = LabelPosition::Top;
          }, -1, 80},
-        {L"Vertical 32, identity left", [](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 32; }},
+        {L"Vertical 32, identity left", [](Settings& s) { s.barLayout = BarLayout::Vertical; s.verticalBarLength = 32; }},
         {L"Vertical 32, identity right", [](Settings& s) {
              s.barLayout = BarLayout::Vertical;
-             s.barLength = 32;
+             s.verticalBarLength = 32;
              s.labelPosition = LabelPosition::Right;
          }},
         {L"Vertical 32, identity top", [](Settings& s) {
              s.barLayout = BarLayout::Vertical;
-             s.barLength = 32;
+             s.verticalBarLength = 32;
              s.labelPosition = LabelPosition::Top;
          }, -1, 72},
         {L"Vertical 32, identity bottom", [](Settings& s) {
              s.barLayout = BarLayout::Vertical;
-             s.barLength = 32;
+             s.verticalBarLength = 32;
              s.labelPosition = LabelPosition::Bottom;
          }, -1, 72},
         {L"Vertical 32, identity hidden", [](Settings& s) {
              s.barLayout = BarLayout::Vertical;
-             s.barLength = 32;
+             s.verticalBarLength = 32;
              s.labelPosition = LabelPosition::Hidden;
          }},
         {L"Hover CC 1 (badged logo)", [](Settings&) {}, 1},
         {L"Bars 60, hover OAI (label)", [](Settings& s) { s.barLength = 60; }, 0},
         {L"Identity top, hover Go (stale)", [](Settings& s) { s.labelPosition = LabelPosition::Top; }, 3, 72},
         {L"Identity hidden, hover CC 2", [](Settings& s) { s.labelPosition = LabelPosition::Hidden; }, 2},
-        {L"Vertical 32, hover CC 1", [](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 32; }, 1},
+        {L"Vertical 32, hover CC 1", [](Settings& s) { s.barLayout = BarLayout::Vertical; s.verticalBarLength = 32; }, 1},
         {L"Vertical 80, hover Go (box grows)", [](Settings& s) {
              s.barLayout = BarLayout::Vertical;
-             s.barLength = 80;
+             s.verticalBarLength = 80;
          }, 3, 96},
         {L"Hover CC 1, 32 DIP taskbar", [](Settings&) {}, 1, 32},
         {L"Headline %", [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; }},

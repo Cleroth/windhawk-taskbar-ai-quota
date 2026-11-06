@@ -586,7 +586,8 @@ struct MeterDisplay {
     I18nLocale locale;        // The keys' and the countdown's language.
     TileTextMeasure measure;  // Text widths in that language, as the renderer lays text out.
     BarMode barMode;
-    int barLength;            // 10-500 DIPs.
+    // The style's bar length: Stacked 10-500 DIPs, Vertical kVerticalBarLengthMin-kVerticalBarLengthMax.
+    int barLength;
     int barThickness;         // 2-50 DIPs.
     int barGap;               // 0-500 DIPs.
     // Bars' quota key column, while keys show (else 0): the widest key at the percent font,
@@ -666,7 +667,9 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& 
         .measure = measure,
         .barMode = settings.barMode,
         .barLength = stacked ? fit(std::clamp(settings.barLength, 10, 500), 10, keyColumn) :
-                               std::clamp(settings.barLength, 10, 500),
+                     settings.barLayout == BarLayout::Vertical ?
+                         std::clamp(settings.verticalBarLength, kVerticalBarLengthMin, kVerticalBarLengthMax) :
+                         std::clamp(settings.barLength, 10, 500),
         .barThickness = std::clamp(settings.barThickness, 2, 50),
         .barGap = std::clamp(settings.barGap, 0, 500),
         .barKeyColumn = keyColumn,

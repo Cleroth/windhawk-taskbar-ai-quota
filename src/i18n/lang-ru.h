@@ -329,6 +329,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
      L"Сдвиг вправо в пикселях (влево при отрицательном значении) от правого нижнего угла логотипа (у колец — внутри "
      L"отверстия)."},
+    {L"", L"Pixels up each bar.", L"Высота каждой полосы в пикселях."},
     {L"", L"Position", L"Положение"},
     {L"", L"Primary display only", L"Только основной дисплей"},
     {L"", L"Primary display, all displays, or one display.", L"Основной дисплей, все дисплеи или один дисплей."},
@@ -617,6 +618,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Used on tiles when Identity is Label.",
      L"Используется на плитках, если в поле «Идентификация» выбрано «Метка»."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Версия {version}  ·  автор Cleroth  ·  мод Windhawk"},
+    {L"", L"Vertical bar length", L"Длина вертикальной полосы"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
      L"Дождитесь завершения текущего входа, прежде чем менять идентификацию."},
     {L"", L"Wait for the current sign-in to finish before removing accounts.",

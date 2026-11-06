@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.15.1
+// @version         2.16.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -904,6 +904,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
      L"Pixel nach rechts, bei negativen Werten nach links, von der unteren rechten Ecke des Logos aus (bei Ringen "
      L"innerhalb des Lochs)."},
+    {L"", L"Pixels up each bar.", L"Höhe jedes Balkens in Pixeln."},
     {L"", L"Position", L"Position"},
     {L"", L"Primary display only", L"Nur Hauptbildschirm"},
     {L"", L"Primary display, all displays, or one display.",
@@ -1209,6 +1210,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Used on tiles when Identity is Label.",
      L"Wird auf Kacheln verwendet, wenn „Identität“ auf „Bezeichnung“ steht."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Version {version}  ·  von Cleroth  ·  Windhawk-Mod"},
+    {L"", L"Vertical bar length", L"Länge vertikaler Balken"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
      L"Warten Sie, bis die aktuelle Anmeldung abgeschlossen ist, bevor Sie die Identität ändern."},
     {L"", L"Wait for the current sign-in to finish before removing accounts.",
@@ -2151,6 +2153,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
      L"Píxeles hacia la derecha, o hacia la izquierda si es negativo, desde la esquina inferior derecha del logotipo "
      L"(dentro del hueco en los anillos)."},
+    {L"", L"Pixels up each bar.", L"Altura de cada barra, en píxeles."},
     {L"", L"Position", L"Posición"},
     {L"", L"Primary display only", L"Solo la pantalla principal"},
     {L"", L"Primary display, all displays, or one display.", L"La pantalla principal, todas las pantallas o una sola."},
@@ -2444,6 +2447,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Used on tiles when Identity is Label.", L"Se usa en los mosaicos cuando Identidad es Etiqueta."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod",
      L"Versión {version}  ·  por Cleroth  ·  mod de Windhawk"},
+    {L"", L"Vertical bar length", L"Longitud de barra vertical"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
      L"Espera a que termine el inicio de sesión actual antes de cambiar la identidad."},
     {L"", L"Wait for the current sign-in to finish before removing accounts.",
@@ -3397,6 +3401,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
      L"Pixels vers la droite, ou vers la gauche si négatif, depuis le coin inférieur droit du logo (dans le trou "
      L"central sur les anneaux)."},
+    {L"", L"Pixels up each bar.", L"Pixels sur la hauteur de chaque barre."},
     {L"", L"Position", L"Position"},
     {L"", L"Primary display only", L"Écran principal uniquement"},
     {L"", L"Primary display, all displays, or one display.", L"L’écran principal, tous les écrans ou un seul écran."},
@@ -3695,6 +3700,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"suivent toujours l’utilisation."},
     {L"", L"Used on tiles when Identity is Label.", L"Utilisé sur les vignettes quand Identité vaut Libellé."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Version {version}  ·  par Cleroth  ·  mod Windhawk"},
+    {L"", L"Vertical bar length", L"Longueur des barres verticales"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
      L"Attendez la fin de la connexion en cours avant de changer d’identité."},
     {L"", L"Wait for the current sign-in to finish before removing accounts.",
@@ -4579,6 +4585,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Pixels down, or up when negative.", L"下方向へのピクセル数。負の値では上方向。"},
     {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
      L"ロゴの右下隅 (リングでは穴の内側) から右方向へのピクセル数。負の値では左方向。"},
+    {L"", L"Pixels up each bar.", L"各バーの高さ (ピクセル単位)。"},
     {L"", L"Position", L"位置"},
     {L"", L"Primary display only", L"メイン ディスプレイのみ"},
     {L"", L"Primary display, all displays, or one display.",
@@ -4810,6 +4817,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"［使用量］ではクォータの消費につれてバーが伸び、［残量］では残りの分だけバーが表示されます。色は常に使用量に従います。"},
     {L"", L"Used on tiles when Identity is Label.", L"［識別表示］が［ラベル］のとき、タイルで使われます。"},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"バージョン {version}  ·  作者 Cleroth  ·  Windhawk Mod"},
+    {L"", L"Vertical bar length", L"縦バーの長さ"},
     {L"", L"Wait for the current sign-in to finish before changing identity.", L"ID を変更する前に、現在のサインインが完了するまでお待ちください。"},
     {L"", L"Wait for the current sign-in to finish before removing accounts.", L"アカウントを削除する前に、現在のサインインが完了するまでお待ちください。"},
     {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
@@ -5704,6 +5712,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
      L"Pixels para a direita, ou para a esquerda quando negativo, a partir do canto inferior direito do logo (dentro "
      L"do furo nos anéis)."},
+    {L"", L"Pixels up each bar.", L"Pixels de altura de cada barra."},
     {L"", L"Position", L"Posição"},
     {L"", L"Primary display only", L"Somente a tela principal"},
     {L"", L"Primary display, all displays, or one display.", L"A tela principal, todas as telas ou uma tela."},
@@ -5993,6 +6002,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Used on tiles when Identity is Label.", L"Usado nos blocos quando Identidade é Rótulo."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod",
      L"Versão {version}  ·  por Cleroth  ·  mod do Windhawk"},
+    {L"", L"Vertical bar length", L"Comprimento da barra vertical"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
      L"Aguarde o login atual terminar antes de alterar a identidade."},
     {L"", L"Wait for the current sign-in to finish before removing accounts.",
@@ -6923,6 +6933,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
      L"Сдвиг вправо в пикселях (влево при отрицательном значении) от правого нижнего угла логотипа (у колец — внутри "
      L"отверстия)."},
+    {L"", L"Pixels up each bar.", L"Высота каждой полосы в пикселях."},
     {L"", L"Position", L"Положение"},
     {L"", L"Primary display only", L"Только основной дисплей"},
     {L"", L"Primary display, all displays, or one display.", L"Основной дисплей, все дисплеи или один дисплей."},
@@ -7211,6 +7222,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Used on tiles when Identity is Label.",
      L"Используется на плитках, если в поле «Идентификация» выбрано «Метка»."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Версия {version}  ·  автор Cleroth  ·  мод Windhawk"},
+    {L"", L"Vertical bar length", L"Длина вертикальной полосы"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
      L"Дождитесь завершения текущего входа, прежде чем менять идентификацию."},
     {L"", L"Wait for the current sign-in to finish before removing accounts.",
@@ -8068,6 +8080,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Pixels down, or up when negative.", L"向下偏移的像素，负值时向上。"},
     {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
      L"相对徽标右下角（圆环样式下为中心孔内）向右偏移的像素，负值时向左。"},
+    {L"", L"Pixels up each bar.", L"每个条形的高度（像素）。"},
     {L"", L"Position", L"位置"},
     {L"", L"Primary display only", L"仅主显示器"},
     {L"", L"Primary display, all displays, or one display.", L"主显示器、所有显示器或某一个显示器。"},
@@ -8286,6 +8299,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"“已用量”随配额消耗而填充；“剩余量”以剩余部分填充。颜色始终跟随用量。"},
     {L"", L"Used on tiles when Identity is Label.", L"“标识”为“标签”时在磁贴上使用。"},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"版本 {version}  ·  作者 Cleroth  ·  Windhawk 模组"},
+    {L"", L"Vertical bar length", L"垂直条形长度"},
     {L"", L"Wait for the current sign-in to finish before changing identity.", L"请等待当前登录完成后再更改标识。"},
     {L"", L"Wait for the current sign-in to finish before removing accounts.", L"请等待当前登录完成后再移除账户。"},
     {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
@@ -9399,6 +9413,9 @@ enum class BarStyle {
     Rail,   // A thin centred rail under a full-thickness fill.
 };
 
+// Vertical bars' length, in DIPs.
+static constexpr int kVerticalBarLengthMin = 10;
+static constexpr int kVerticalBarLengthMax = 100;
 static constexpr int kRingSizeMin = 24;
 static constexpr int kRingSizeMax = 40;
 static constexpr int kRingThicknessMin = 1;
@@ -9567,7 +9584,8 @@ struct Settings {
     // The range the usage history window opens on.
     HistoryUiRange historyDefaultRange = HistoryUiRange::Week;
     bool skipHiddenPolling = true;
-    int barLength = 100;
+    int barLength = 100;          // Stacked bars'
+    int verticalBarLength = 32;   // Vertical bars', short enough to fit the taskbar
     int barThickness = 8;
     BarStyle barStyle = BarStyle::Track;
     // Ring diameter and stroke, in DIPs, also the gauge's, the rounded square's and (size only)
@@ -18461,7 +18479,8 @@ struct MeterDisplay {
     I18nLocale locale;        // The keys' and the countdown's language.
     TileTextMeasure measure;  // Text widths in that language, as the renderer lays text out.
     BarMode barMode;
-    int barLength;            // 10-500 DIPs.
+    // The style's bar length: Stacked 10-500 DIPs, Vertical kVerticalBarLengthMin-kVerticalBarLengthMax.
+    int barLength;
     int barThickness;         // 2-50 DIPs.
     int barGap;               // 0-500 DIPs.
     // Bars' quota key column, while keys show (else 0): the widest key at the percent font,
@@ -18541,7 +18560,9 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& 
         .measure = measure,
         .barMode = settings.barMode,
         .barLength = stacked ? fit(std::clamp(settings.barLength, 10, 500), 10, keyColumn) :
-                               std::clamp(settings.barLength, 10, 500),
+                     settings.barLayout == BarLayout::Vertical ?
+                         std::clamp(settings.verticalBarLength, kVerticalBarLengthMin, kVerticalBarLengthMax) :
+                         std::clamp(settings.barLength, 10, 500),
         .barThickness = std::clamp(settings.barThickness, 2, 50),
         .barGap = std::clamp(settings.barGap, 0, 500),
         .barKeyColumn = keyColumn,
@@ -30670,6 +30691,8 @@ static bool NormalizeSettings(Settings* s) {
     s->taskbarMonitorNumber = std::clamp(s->taskbarMonitorNumber > 0 ?
                                              s->taskbarMonitorNumber : 1, 1, 64);
     s->barLength = std::clamp(s->barLength > 0 ? s->barLength : 100, 10, 500);
+    s->verticalBarLength = std::clamp(s->verticalBarLength > 0 ? s->verticalBarLength : 32, kVerticalBarLengthMin,
+                                      kVerticalBarLengthMax);
     s->barThickness = std::clamp(s->barThickness > 0 ? s->barThickness : 8, 2, 50);
     s->ringSize = std::clamp(s->ringSize > 0 ? s->ringSize : 32, kRingSizeMin, kRingSizeMax);
     s->ringThickness = std::clamp(s->ringThickness > 0 ? s->ringThickness : 3,
@@ -30803,6 +30826,7 @@ static std::wstring SerializeSettings(const Settings& s) {
                                           s.historyDefaultRange == HistoryUiRange::All ? L"all" : L"week");
         setBool(L"skipHiddenPolling", s.skipHiddenPolling);
         setNumber(L"barLength", s.barLength);
+        setNumber(L"verticalBarLength", s.verticalBarLength);
         setNumber(L"barThickness", s.barThickness);
         setString(L"barStyle", s.barStyle == BarStyle::Rail ? L"rail" : L"track");
         setNumber(L"ringSize", s.ringSize);
@@ -31054,6 +31078,12 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                       barLayout == L"sparkline" ? BarLayout::Sparkline :
                       barLayout == L"quotaMatrix" ? BarLayout::QuotaMatrix :
                                                     BarLayout::Stacked;
+        // Settings saved before vertical bars had a length of their own keep the shared one on
+        // vertical bars.
+        double verticalBarLength =
+            GetNum(root, L"verticalBarLength", s.barLayout == BarLayout::Vertical ? s.barLength : 32);
+        s.verticalBarLength = std::isfinite(verticalBarLength) ?
+                                  (int)std::clamp(verticalBarLength, 0.0, (double)kVerticalBarLengthMax) : 0;
         s.barMode = GetStr(root, L"barMode") == L"remaining" ?
                         BarMode::Remaining : BarMode::Used;
         s.showPaceTicks = getBoolDefault(L"showPaceTicks", true);
@@ -31327,6 +31357,7 @@ static bool LoadLegacySettings(Settings* out) {
     s.barLength = getInt(L"barLength", 100);
     s.barThickness = getInt(L"barThickness", 8);
     s.barLayout = getText(L"barLayout") == L"vertical" ? BarLayout::Vertical : BarLayout::Stacked;
+    if (s.barLayout == BarLayout::Vertical) s.verticalBarLength = s.barLength;
     s.barMode = getText(L"barMode") == L"remaining" ? BarMode::Remaining : BarMode::Used;
     s.showPaceTicks = getBool(L"showPaceTicks", true);
     s.labelPosition = !getBool(L"showLabels", true) ? LabelPosition::Hidden :
@@ -31718,6 +31749,7 @@ enum class SettingsField : uint8_t {
     BarLayout,        // Tile style: a BarLayout
     BarStyle,         // A BarStyle
     BarLength,
+    VerticalBarLength,
     BarThickness,
     BarGap,
     RingSize,
@@ -31825,6 +31857,7 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
         case SettingsField::PollMinutes: return SettingsNumberRange{2, 24 * 60};
         case SettingsField::RetentionDays: return SettingsNumberRange{1, 3650};
         case SettingsField::BarLength: return SettingsNumberRange{10, 500};
+        case SettingsField::VerticalBarLength: return SettingsNumberRange{kVerticalBarLengthMin, kVerticalBarLengthMax};
         case SettingsField::BarThickness: return SettingsNumberRange{2, 50};
         case SettingsField::RingSize: return SettingsNumberRange{kRingSizeMin, kRingSizeMax};
         case SettingsField::RingThickness: return SettingsNumberRange{kRingThicknessMin, kRingThicknessMax};
@@ -31867,7 +31900,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::HistoryRange};
         case SettingsField::ResetLayout:
             return {SettingsField::BarLayout,       SettingsField::BarStyle,
-                    SettingsField::BarLength,       SettingsField::BarThickness,
+                    SettingsField::BarLength,       SettingsField::VerticalBarLength,
+                    SettingsField::BarThickness,
                     SettingsField::BarGap,          SettingsField::RingSize,
                     SettingsField::RingThickness,   SettingsField::HeadlineFontSize,
                     SettingsField::HeadlineBarLength, SettingsField::HeadlineBarThickness,
@@ -31923,6 +31957,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::BarLayout: return int(s.barLayout);
         case SettingsField::BarStyle: return int(s.barStyle);
         case SettingsField::BarLength: return s.barLength;
+        case SettingsField::VerticalBarLength: return s.verticalBarLength;
         case SettingsField::BarThickness: return s.barThickness;
         case SettingsField::BarGap: return s.barGap;
         case SettingsField::RingSize: return s.ringSize;
@@ -32025,6 +32060,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.barStyle = BarStyle(std::clamp(value, int(BarStyle::Track), int(BarStyle::Rail)));
             break;
         case SettingsField::BarLength: s.barLength = value; break;
+        case SettingsField::VerticalBarLength: s.verticalBarLength = value; break;
         case SettingsField::BarThickness: s.barThickness = value; break;
         case SettingsField::BarGap: s.barGap = value; break;
         case SettingsField::RingSize: s.ringSize = value; break;
@@ -32129,6 +32165,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.barLayout = defaults.barLayout;
             s.barStyle = defaults.barStyle;
             s.barLength = defaults.barLength;
+            s.verticalBarLength = defaults.verticalBarLength;
             s.barThickness = defaults.barThickness;
             s.barGap = defaults.barGap;
             s.ringSize = defaults.ringSize;
@@ -33889,11 +33926,12 @@ static SettingsPreviewRow SettingsPreviewRowAt(const SettingsPreviewStrip& strip
     return row;
 }
 
-// The taskbar's layout of the sample accounts in `settings`. Gallery: the two Anthropic sample
-// accounts on a 48 DIP strip, without a tray. `light` and `text` color the tile chrome and the
-// taskbar's text (logos without brand colors, labels, keys, tray). Tests may pass accounts with
-// their data (and their providers' outage levels, none without) to lay out instead of the samples,
-// whose outage is VisualTestOutage's; either shows only while outage marks are on.
+// The taskbar's layout of the sample accounts in `settings`. Gallery: the OpenAI and the first
+// Anthropic sample account by their logos on a 48 DIP strip, without a tray. `light` and `text`
+// color the tile chrome and the taskbar's text (logos without brand colors, labels, keys, tray).
+// Tests may pass accounts with their data (and their providers' outage levels, none without) to
+// lay out instead of the samples, whose outage is VisualTestOutage's; either shows only while
+// outage marks are on.
 static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings, const I18nLocale& locale,
                                                   double taskbarHeight, float scale, ULONGLONG now,
                                                   bool gallery, bool light, uint32_t text,
@@ -33937,9 +33975,15 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                      testOutages && i < testOutages->size() ? (*testOutages)[i] : OutageLevel::None;
     }
     if (gallery) {
-        accounts = {accounts[1], accounts[2]};
-        data = {data[1], data[2]};
-        outages = {outages[1], outages[2]};
+        // OpenAI and the first Anthropic sample, each by its logo, without an outage mark; usage
+        // graphs chart only their 5-hour quotas, so both charts fit the thumbnail at full size.
+        accounts.resize(2);
+        data.resize(2);
+        outages.assign(2, OutageLevel::None);
+        for (AccountConfig& account : accounts) {
+            account.tileIdentity = TileIdentity::LogoBadge;
+            if (settings.barLayout == BarLayout::Sparkline) account.showBars = {true, false, false, false};
+        }
     }
     const BarLayout layout = BarLayout(std::clamp(int(settings.barLayout), int(BarLayout::Sparkline),
                                                   int(kLastBarLayout)));
@@ -35624,7 +35668,13 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {text(TrCtx(L"bar-style", L"Thin rail")), int(BarStyle::Rail)}},
                                         int(s.barStyle));
         }
-        {
+        // Stacked and vertical bars each keep their own length.
+        if (layout == BarLayout::Vertical) {
+            UiCardSpec spec;
+            spec.title = text(Tr(L"Vertical bar length"));
+            spec.description = {{text(Tr(L"Pixels up each bar."))}};
+            y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::VerticalBarLength);
+        } else {
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar length"));
             spec.description = {{text(Tr(L"Pixels along each bar."))}};

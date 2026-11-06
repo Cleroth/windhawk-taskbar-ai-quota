@@ -55,6 +55,23 @@ static void RunDisplayTests() {
         CHECK(high.redThreshold == 100); CHECK(high.paceTickColor == 0x123456);
     });
 
+    Run("display: vertical bars take their own length, clamped to its range; other styles the shared one", [] {
+        auto length = [](BarLayout layout, int verticalBarLength) {
+            return Display(With([&](Settings& s) {
+                       s.barLayout = layout;
+                       s.barLength = 120;
+                       s.verticalBarLength = verticalBarLength;
+                   }))
+                .barLength;
+        };
+        CHECK(length(BarLayout::Vertical, 40) == 40);
+        CHECK(length(BarLayout::Vertical, 0) == 10);
+        CHECK(length(BarLayout::Vertical, 101) == 100);
+        CHECK(length(BarLayout::Stacked, 40) == 120);
+        CHECK(length(BarLayout::Sparkline, 40) == 120);
+        CHECK(Display(With([](Settings& s) { s.barLayout = BarLayout::Vertical; })).barLength == 32);
+    });
+
     Run("display: unordered thresholds order upward", [] {
         MeterDisplay a = Display(With([](Settings& s) {
             s.yellowThreshold = 80; s.orangeThreshold = 60; s.redThreshold = 70;
@@ -3571,7 +3588,7 @@ static void RunSideTests() {
         // 14) out of the bars' room.
         CHECK(side(With([](Settings& s) { s.barLayout = BarLayout::Stacked; s.showBarLabels = true; })).barLength == 26);
         // Vertical bars run down the taskbar: their length stays.
-        CHECK(side(With([](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 120; })).barLength == 120);
+        CHECK(side(With([](Settings& s) { s.barLayout = BarLayout::Vertical; s.verticalBarLength = 90; })).barLength == 90);
         // Shorter settings stay as set; a narrow taskbar keeps each range's minimum.
         CHECK(side(With([](Settings& s) { s.barLayout = BarLayout::Stacked; s.barLength = 30; s.sparklineWidth = 24; }))
                   .barLength == 30);

@@ -259,6 +259,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Pixels down, or up when negative.", L"向下偏移的像素，负值时向上。"},
     {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
      L"相对徽标右下角（圆环样式下为中心孔内）向右偏移的像素，负值时向左。"},
+    {L"", L"Pixels up each bar.", L"每个条形的高度（像素）。"},
     {L"", L"Position", L"位置"},
     {L"", L"Primary display only", L"仅主显示器"},
     {L"", L"Primary display, all displays, or one display.", L"主显示器、所有显示器或某一个显示器。"},
@@ -477,6 +478,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"“已用量”随配额消耗而填充；“剩余量”以剩余部分填充。颜色始终跟随用量。"},
     {L"", L"Used on tiles when Identity is Label.", L"“标识”为“标签”时在磁贴上使用。"},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"版本 {version}  ·  作者 Cleroth  ·  Windhawk 模组"},
+    {L"", L"Vertical bar length", L"垂直条形长度"},
     {L"", L"Wait for the current sign-in to finish before changing identity.", L"请等待当前登录完成后再更改标识。"},
     {L"", L"Wait for the current sign-in to finish before removing accounts.", L"请等待当前登录完成后再移除账户。"},
     {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "

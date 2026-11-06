@@ -59,6 +59,9 @@ enum class BarStyle {
     Rail,   // A thin centred rail under a full-thickness fill.
 };
 
+// Vertical bars' length, in DIPs.
+static constexpr int kVerticalBarLengthMin = 10;
+static constexpr int kVerticalBarLengthMax = 100;
 static constexpr int kRingSizeMin = 24;
 static constexpr int kRingSizeMax = 40;
 static constexpr int kRingThicknessMin = 1;
@@ -227,7 +230,8 @@ struct Settings {
     // The range the usage history window opens on.
     HistoryUiRange historyDefaultRange = HistoryUiRange::Week;
     bool skipHiddenPolling = true;
-    int barLength = 100;
+    int barLength = 100;          // Stacked bars'
+    int verticalBarLength = 32;   // Vertical bars', short enough to fit the taskbar
     int barThickness = 8;
     BarStyle barStyle = BarStyle::Track;
     // Ring diameter and stroke, in DIPs, also the gauge's, the rounded square's and (size only)

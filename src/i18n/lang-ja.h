@@ -272,6 +272,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Pixels down, or up when negative.", L"下方向へのピクセル数。負の値では上方向。"},
     {L"", L"Pixels right, or left when negative, from the logo’s lower-right corner (inside the hole on rings).",
      L"ロゴの右下隅 (リングでは穴の内側) から右方向へのピクセル数。負の値では左方向。"},
+    {L"", L"Pixels up each bar.", L"各バーの高さ (ピクセル単位)。"},
     {L"", L"Position", L"位置"},
     {L"", L"Primary display only", L"メイン ディスプレイのみ"},
     {L"", L"Primary display, all displays, or one display.",
@@ -503,6 +504,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"［使用量］ではクォータの消費につれてバーが伸び、［残量］では残りの分だけバーが表示されます。色は常に使用量に従います。"},
     {L"", L"Used on tiles when Identity is Label.", L"［識別表示］が［ラベル］のとき、タイルで使われます。"},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"バージョン {version}  ·  作者 Cleroth  ·  Windhawk Mod"},
+    {L"", L"Vertical bar length", L"縦バーの長さ"},
     {L"", L"Wait for the current sign-in to finish before changing identity.", L"ID を変更する前に、現在のサインインが完了するまでお待ちください。"},
     {L"", L"Wait for the current sign-in to finish before removing accounts.", L"アカウントを削除する前に、現在のサインインが完了するまでお待ちください。"},
     {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "

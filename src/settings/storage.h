@@ -87,6 +87,8 @@ static bool NormalizeSettings(Settings* s) {
     s->taskbarMonitorNumber = std::clamp(s->taskbarMonitorNumber > 0 ?
                                              s->taskbarMonitorNumber : 1, 1, 64);
     s->barLength = std::clamp(s->barLength > 0 ? s->barLength : 100, 10, 500);
+    s->verticalBarLength = std::clamp(s->verticalBarLength > 0 ? s->verticalBarLength : 32, kVerticalBarLengthMin,
+                                      kVerticalBarLengthMax);
     s->barThickness = std::clamp(s->barThickness > 0 ? s->barThickness : 8, 2, 50);
     s->ringSize = std::clamp(s->ringSize > 0 ? s->ringSize : 32, kRingSizeMin, kRingSizeMax);
     s->ringThickness = std::clamp(s->ringThickness > 0 ? s->ringThickness : 3,
@@ -220,6 +222,7 @@ static std::wstring SerializeSettings(const Settings& s) {
                                           s.historyDefaultRange == HistoryUiRange::All ? L"all" : L"week");
         setBool(L"skipHiddenPolling", s.skipHiddenPolling);
         setNumber(L"barLength", s.barLength);
+        setNumber(L"verticalBarLength", s.verticalBarLength);
         setNumber(L"barThickness", s.barThickness);
         setString(L"barStyle", s.barStyle == BarStyle::Rail ? L"rail" : L"track");
         setNumber(L"ringSize", s.ringSize);
@@ -471,6 +474,12 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                       barLayout == L"sparkline" ? BarLayout::Sparkline :
                       barLayout == L"quotaMatrix" ? BarLayout::QuotaMatrix :
                                                     BarLayout::Stacked;
+        // Settings saved before vertical bars had a length of their own keep the shared one on
+        // vertical bars.
+        double verticalBarLength =
+            GetNum(root, L"verticalBarLength", s.barLayout == BarLayout::Vertical ? s.barLength : 32);
+        s.verticalBarLength = std::isfinite(verticalBarLength) ?
+                                  (int)std::clamp(verticalBarLength, 0.0, (double)kVerticalBarLengthMax) : 0;
         s.barMode = GetStr(root, L"barMode") == L"remaining" ?
                         BarMode::Remaining : BarMode::Used;
         s.showPaceTicks = getBoolDefault(L"showPaceTicks", true);
@@ -744,6 +753,7 @@ static bool LoadLegacySettings(Settings* out) {
     s.barLength = getInt(L"barLength", 100);
     s.barThickness = getInt(L"barThickness", 8);
     s.barLayout = getText(L"barLayout") == L"vertical" ? BarLayout::Vertical : BarLayout::Stacked;
+    if (s.barLayout == BarLayout::Vertical) s.verticalBarLength = s.barLength;
     s.barMode = getText(L"barMode") == L"remaining" ? BarMode::Remaining : BarMode::Used;
     s.showPaceTicks = getBool(L"showPaceTicks", true);
     s.labelPosition = !getBool(L"showLabels", true) ? LabelPosition::Hidden :

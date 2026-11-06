@@ -124,11 +124,12 @@ static SettingsPreviewRow SettingsPreviewRowAt(const SettingsPreviewStrip& strip
     return row;
 }
 
-// The taskbar's layout of the sample accounts in `settings`. Gallery: the two Anthropic sample
-// accounts on a 48 DIP strip, without a tray. `light` and `text` color the tile chrome and the
-// taskbar's text (logos without brand colors, labels, keys, tray). Tests may pass accounts with
-// their data (and their providers' outage levels, none without) to lay out instead of the samples,
-// whose outage is VisualTestOutage's; either shows only while outage marks are on.
+// The taskbar's layout of the sample accounts in `settings`. Gallery: the OpenAI and the first
+// Anthropic sample account by their logos on a 48 DIP strip, without a tray. `light` and `text`
+// color the tile chrome and the taskbar's text (logos without brand colors, labels, keys, tray).
+// Tests may pass accounts with their data (and their providers' outage levels, none without) to
+// lay out instead of the samples, whose outage is VisualTestOutage's; either shows only while
+// outage marks are on.
 static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings, const I18nLocale& locale,
                                                   double taskbarHeight, float scale, ULONGLONG now,
                                                   bool gallery, bool light, uint32_t text,
@@ -172,9 +173,15 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                      testOutages && i < testOutages->size() ? (*testOutages)[i] : OutageLevel::None;
     }
     if (gallery) {
-        accounts = {accounts[1], accounts[2]};
-        data = {data[1], data[2]};
-        outages = {outages[1], outages[2]};
+        // OpenAI and the first Anthropic sample, each by its logo, without an outage mark; usage
+        // graphs chart only their 5-hour quotas, so both charts fit the thumbnail at full size.
+        accounts.resize(2);
+        data.resize(2);
+        outages.assign(2, OutageLevel::None);
+        for (AccountConfig& account : accounts) {
+            account.tileIdentity = TileIdentity::LogoBadge;
+            if (settings.barLayout == BarLayout::Sparkline) account.showBars = {true, false, false, false};
+        }
     }
     const BarLayout layout = BarLayout(std::clamp(int(settings.barLayout), int(BarLayout::Sparkline),
                                                   int(kLastBarLayout)));
