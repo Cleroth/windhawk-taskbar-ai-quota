@@ -191,15 +191,15 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Exporta os dados brutos de todos os medidores da conta selecionada, ou de todas as contas em Todas as contas. "
      L"Usa o período selecionado, mais os 7 dias que o antecedem ao comparar semanas. Data e hora em UTC; IDs em "
      L"texto; sem rótulos."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all accounts) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{{count} linha de medidor exportada} many{{count} de linhas de medidores exportadas} "
-     L"other{{count} linhas de medidores exportadas}} (todas as contas) para {path}. Rótulos omitidos; horários em "
+     L"{rows, plural, one{# linha de medidor exportada} many{# de linhas de medidores exportadas} "
+     L"other{# linhas de medidores exportadas}} (todas as contas) para {path}. Rótulos omitidos; horários em "
      L"UTC."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{{count} linha de medidor exportada} many{{count} de linhas de medidores exportadas} "
-     L"other{{count} linhas de medidores exportadas}} (conta selecionada) para {path}. Rótulos omitidos; horários em "
+     L"{rows, plural, one{# linha de medidor exportada} many{# de linhas de medidores exportadas} "
+     L"other{# linhas de medidores exportadas}} (conta selecionada) para {path}. Rótulos omitidos; horários em "
      L"UTC."},
     {L"", L"Free to use, modify and share.", L"Livre para usar, modificar e compartilhar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
@@ -863,8 +863,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"history-card", L"{title} — details only", L"{title} — só detalhes"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
-    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
-     L"{rows, plural, one{Exportando {count} linha…} many{Exportando {count} de linhas…} other{Exportando {count} "
+    {L"history-export", L"{rows, plural, one{Exporting # rows…} other{Exporting # rows…}}",
+     L"{rows, plural, one{Exportando # linha…} many{Exportando # de linhas…} other{Exportando # "
      L"linhas…}}"},
     {L"history-menu", L"About these charts", L"Sobre estes gráficos"},
     {L"history-menu", L"Clear all history…", L"Limpar todo o histórico…"},

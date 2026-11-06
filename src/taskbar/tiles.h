@@ -101,13 +101,13 @@ static void UpdateHoverSpans(QuotaUiInstance& state) {
 // above all). English leaves the language Explorer's tree passes down, so labels and provider text
 // in the user's own language render as they always have.
 static void SetXamlLanguage(FrameworkElement const& element, I18nLocale const& locale) {
-    if (locale != I18nLocale()) element.Language(winrt::hstring(locale.LocaleName()));
+    if (&locale.Language() != &kI18nLanguages[0]) element.Language(winrt::hstring(locale.LocaleName()));
 }
 
 // A tooltip in the frame's language: a ToolTip of its own carries it; English keeps the plain text
 // value, as SetXamlLanguage leaves it.
 static void SetXamlToolTip(DependencyObject const& element, std::wstring const& text, I18nLocale const& locale) {
-    if (locale == I18nLocale()) {
+    if (&locale.Language() == &kI18nLanguages[0]) {
         ToolTipService::SetToolTip(element, winrt::box_value(text));
         return;
     }

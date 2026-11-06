@@ -106,13 +106,6 @@ static std::string HistoryCsvId(const char* prefix, uint64_t id) {
     return text;
 }
 
-// Hours with two decimals: `1.50`.
-static std::wstring HistoryHours(double ms) {
-    wchar_t text[40];
-    swprintf(text, ARRAYSIZE(text), L"%.2f", ms / 3600000.0);
-    return text;
-}
-
 // Reduction boundary, also callable by isolated structural tests. Each continuous
 // segment/pixel keeps its first, minimum, maximum and last raw samples in temporal
 // order. A break flushes the bucket even inside the same pixel, so no extrema or
@@ -320,7 +313,8 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                                           I18nText(locale, TrCtx(L"quota-name", L"{hours}h"),
                                                    {{L"hours", shortDuration / 3600000}});
                 } else {
-                    std::wstring hours = HistoryHours(double(shortDuration));
+                    // Hours with two decimals in the regional format: `1.50`, de-DE `1,50`.
+                    std::wstring hours = I18nFixed(locale, double(shortDuration) / 3600000.0, 2);
                     label = antigravity ? I18nText(locale, TrCtx(L"quota-name", L"{name} {hours} h"),
                                                    {{L"name", family}, {L"hours", hours}}) :
                                           I18nText(locale, TrCtx(L"hours-value", L"{hours} h"), {{L"hours", hours}});

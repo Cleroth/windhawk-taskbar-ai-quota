@@ -589,9 +589,11 @@ static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARA
         // Brand-colored logos give way to the text color in high contrast: rebuild them.
         StartRetryInject(true);
     } else if (message == WM_SETTINGCHANGE && lParam && !g_unloading &&
-               wcscmp(reinterpret_cast<PCWSTR>(lParam), L"ImmersiveColorSet") == 0) {
-        // Light/dark switch: once the taskbar has handled it, repaint the tiles' theme colors.
-        // Window procedures run on the window's thread, which owns this taskbar's XAML.
+               (wcscmp(reinterpret_cast<PCWSTR>(lParam), L"ImmersiveColorSet") == 0 ||
+                wcscmp(reinterpret_cast<PCWSTR>(lParam), L"intl") == 0)) {
+        // Light/dark switch or a regional format change: once the taskbar has handled it, repaint
+        // the tiles' theme colors and numbers. Window procedures run on the window's thread,
+        // which owns this taskbar's XAML.
         LRESULT result = DefSubclassProc(hWnd, message, wParam, lParam);
         if (!g_unloading) {
             try {

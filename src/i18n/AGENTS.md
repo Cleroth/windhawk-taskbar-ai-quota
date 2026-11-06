@@ -2,10 +2,11 @@
 
 Pure fragments (no globals, state, WinRT, registry or `Wh_Log`): `template.h` (grammar, plural
 rules), `catalog.h` (entry order), `lang-<tag>.h` (one catalog per language), `languages.h`
-(registry, pseudo-locale, explicit choice, Automatic match, `I18nLocale`), `pseudo.h`, `format.h`
-(keys, arguments, runs, fallback, lists), `ui-runs.h` (runs as the toolkit's, after `ui/`).
-English is the source and has no catalog. The process's current language and the per-user
-preference are native: `core/language.h` (rules: [../AGENTS.md](../AGENTS.md) Concurrency).
+(registry, pseudo-locale, explicit choice, Automatic match, `I18nNumberFormat`, `I18nLocale`),
+`pseudo.h`, `format.h` (keys, arguments, runs, fallback, lists), `numbers.h` (regional number
+formats), `ui-runs.h` (runs as the toolkit's, after `ui/`). English is the source and has no
+catalog. The process's current language, the per-user preference and the user's regional format
+are native: `core/language.h` (rules: [../AGENTS.md](../AGENTS.md) Concurrency).
 
 ## Call forms
 
@@ -21,10 +22,12 @@ preference are native: `core/language.h` (rules: [../AGENTS.md](../AGENTS.md) Co
   items)`: items' runs joined by the catalog's list patterns (contexts `list-pair`, `list-start`,
   `list-middle`, `list-end`).
 - Arguments: text (inserted as is, never parsed), integers of any type (ASCII digits, `-` when
-  negative, no grouping), or trusted runs (keep their bold and links, take the template's bold,
-  and its link where they have none). Build them in the call: they refer to the caller's values.
-  A missing one shows as `{name}`.
-- Pure code gets an `I18nLocale` (language, locale name) through its inputs, never a global:
+  negative, no grouping), an integer with its shown text (`{L"rows", rows, I18nInteger(locale,
+  rows)}`: a plural selects by the number, `#` and `{rows}` show the text), or trusted runs (keep
+  their bold and links, take the template's bold, and its link where they have none). Build them
+  in the call: they refer to the caller's values. A missing one shows as `{name}`.
+- Pure code gets an `I18nLocale` (language, locale name, regional number format) through its
+  inputs, never a global:
   `SettingsView::locale`, `HistoryUiView::locale` (the controller takes it from
   `HistoryOps::Locale`, and passes it on in `HistorySeriesQuery::locale` and
   `HistoryChart::locale`), `MeterDisplay::locale` (`MeterDisplayFor`'s), and the history formats'
@@ -39,11 +42,30 @@ preference are native: `core/language.h` (rules: [../AGENTS.md](../AGENTS.md) Co
   settings window's notices and draft errors (`SettingsNoticeCode`, `SettingsDraftError` in
   `settings/edits.h`) and the history window's operation notices (`HistoryNoticeCode`,
   `history/controller.h`), formatted when a message box opens or a frame is built.
+- Native code snapshots the context with `CurrentLocale()` (`core/language.h`): the current
+  language and the user's regional format, read anew each time.
 - `I18nLanguageByTag` (explicit choice) reaches any language and `qps-ploc`;
   `I18nMatchLanguage` (Automatic) skips `inProgress` ones and never picks `qps-ploc`.
 - Intentional English literals (IDs, CSV, protocol text) carry `// i18n-en` on their line;
   `Wh_Log` arguments need none.
 - API entry points carry `[[maybe_unused]]`: a build or test target may use only some.
+
+## Regional formats
+
+Numbers follow the user's Windows regional format, words the UI language. `I18nLocale::Numbers()`
+holds the decimal separator, digit group separator and grouping (`LOCALE_SGROUPING`; default
+en-US: `.`, `,`, `3;0`). `numbers.h`: `I18nFixed` (fixed decimals), `I18nTrimmed` (trailing
+decimal zeros dropped), both never grouped; `I18nInteger` (the region's digit groups);
+`I18nDigits` (ASCII as `to_chars` writes it, for formats those don't cover). Digits stay ASCII
+and `-`; `%`, `$`, `USD`, `k`/`M` and `K`/`M`/`G`/`T` stay the callers'.
+
+- Group only what English grouped before (counts such as export rows, number boxes); amounts,
+  values, minutes and day counts stay ungrouped, so en-US English stays as it was.
+- Never for text that is read back: CSV, logs, storage, protocol, copied version info.
+- Settings number boxes parse what `I18nInteger` shows (a space separator takes any space), in
+  the format the box showed it in: the frame's as typing starts, kept while the draft is text.
+- Times: the taskbar, flyout and notifications use Windows' regional time formats; the usage
+  history window the language's compact 24-hour form.
 
 ## Grammar
 

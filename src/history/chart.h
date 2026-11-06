@@ -48,15 +48,11 @@ struct HistoryChartAxis {
     std::vector<double> values;
 };
 
-// Axis labels: rounded, trailing decimal zeros dropped, abbreviated from 10,000. Dollars keep their
-// currency code and percentages their sign in every language.
+// Axis labels: rounded, trailing decimal zeros dropped, abbreviated from 10,000, in the regional
+// decimal separator. Dollars keep their currency code and percentages their sign in every
+// language and format.
 static std::wstring HistoryChartAxisLabel(const I18nLocale& locale, size_t axis, double value) {
-    std::wstring number = HistoryUiNumber(value, 2);
-    size_t end = std::min(number.find_first_not_of(L"-0123456789."), number.size()), dot = number.find(L'.');
-    if (dot < end) {
-        size_t last = number.find_last_not_of(L'0', end - 1);
-        number.erase(last == dot ? dot : last + 1, end - (last == dot ? dot : last + 1));
-    }
+    std::wstring number = HistoryUiNumber(locale, value, 2, true);
     if (axis == 2) return I18nText(locale, TrCtx(L"chart-axis", L"{value} cr"), {{L"value", number}});
     return number + (axis == 0 ? L"%" : L" USD");
 }
@@ -383,8 +379,8 @@ static UiReadoutRow HistoryChartRow(const I18nLocale& locale, std::wstring name,
 }
 
 // The readout of picked points in the locale's language: one row each, in their order, keyed by
-// the recorded samples they name and the language (none: key 0). Its overflow hint names what
-// shows the rest.
+// the recorded samples they name, the language and the decimal separator their values show (none:
+// key 0). Its overflow hint names what shows the rest.
 static UiTooltipContent HistoryChartReadout(const I18nLocale& locale, const HistoryChart& c,
                                             const std::vector<HistoryChartHit>& hits, const UiPalette& p,
                                             bool oneAccount, ULONGLONG now, const HistoryUiLocalTime& localTime) {
@@ -396,6 +392,7 @@ static UiTooltipContent HistoryChartReadout(const I18nLocale& locale, const Hist
     };
     mix(c.generation);
     mix(std::hash<std::wstring_view>{}(locale.Language().tag));
+    mix(std::hash<std::wstring_view>{}(locale.Numbers().Decimal()));
     for (const HistoryChartHit& hit : hits) {
         const HistoryUiLine& line = c.lines[hit.line];
         const HistoryRenderPoint& point = c.render[hit.line][size_t(hit.period)].points[hit.point];

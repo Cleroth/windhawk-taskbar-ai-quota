@@ -84,11 +84,6 @@ struct SettingsProductionStore final : SettingsStore {
             status.historyFolder = std::wstring(localAppData) + L"\\TaskbarAIQuota\\" WH_MOD_ID;
         }
         CoTaskMemFree(localAppData);
-        wchar_t separator[8] = {};
-        if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STHOUSAND, separator,
-                            ARRAYSIZE(separator)) > 1) {
-            status.groupSeparator = separator[0];
-        }
         return baseline;
     }
 

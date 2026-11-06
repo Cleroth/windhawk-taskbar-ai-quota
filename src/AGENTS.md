@@ -121,12 +121,15 @@ first, then reads/updates XAML.
 - Check `g_unloading` in loops and before slow/marshaled work.
 - The current UI language (`core/language.h`: `g_language`, an immutable registry entry) is read
   lock-free by any thread and written only under `g_configEditMutex` (and at init). Native code
-  snapshots one `I18nLocale` per frame, notification or dialog; text built from it is cached
-  under that locale. A language-only edit stores the preference and switches it, publishing
-  nothing else; callers then rebuild the taskbar (only when the shown language changed) without
-  waking polling and notify the windows.
-- A taskbar grid keeps the locale it was built in (`QuotaUiInstance::buildLocale`) for its
-  updates, menus and flyouts; a switch rebuilds it. `SetXamlLanguage` gives a non-English
+  snapshots one `I18nLocale` per frame, notification or dialog (`CurrentLocale`, with the user's
+  regional number format read anew); text built from it is cached under that locale. A
+  language-only edit stores the preference and switches it, publishing nothing else; callers
+  then rebuild the taskbar (only when the shown language changed) without waking polling and
+  notify the windows. A regional format change (`WM_SETTINGCHANGE` "intl") updates the taskbar
+  and recomposes the open windows.
+- A taskbar grid keeps the language it was built in (`QuotaUiInstance::buildLocale`) for its
+  updates, menus and flyouts; a switch rebuilds it. Each update refreshes its regional number
+  format: no width measured at build holds a separator. `SetXamlLanguage` gives a non-English
   language to our XAML roots (the grid, the flyout card, each menu item, localized tooltips
   through `SetXamlToolTip`) and to detached measurement probes before they measure; English
   keeps Explorer's inherited language.

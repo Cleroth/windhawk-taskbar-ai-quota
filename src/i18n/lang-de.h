@@ -201,13 +201,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Exportiert alle Messgrößen als Rohdaten für das ausgewählte Konto oder, unter „Alle Konten“, für jedes Konto. "
      L"Verwendet den ausgewählten Zeitraum, beim Wochenvergleich zuzüglich der 7 Tage davor. UTC-Zeitstempel; IDs "
      L"als Text; keine Bezeichnungen."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all accounts) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{{count} Messwertzeile} other{{count} Messwertzeilen}} (alle Konten) nach {path} "
+     L"{rows, plural, one{# Messwertzeile} other{# Messwertzeilen}} (alle Konten) nach {path} "
      L"exportiert. Ohne Bezeichnungen; Zeiten in UTC."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{{count} Messwertzeile} other{{count} Messwertzeilen}} (ausgewähltes Konto) nach {path} "
+     L"{rows, plural, one{# Messwertzeile} other{# Messwertzeilen}} (ausgewähltes Konto) nach {path} "
      L"exportiert. Ohne Bezeichnungen; Zeiten in UTC."},
     {L"", L"Free to use, modify and share.", L"Frei nutzbar, veränderbar und weitergebbar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
@@ -902,8 +902,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"history-card", L"{title} — details only", L"{title} – nur Details"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
-    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
-     L"{rows, plural, one{{count} Zeile wird exportiert…} other{{count} Zeilen werden exportiert…}}"},
+    {L"history-export", L"{rows, plural, one{Exporting # rows…} other{Exporting # rows…}}",
+     L"{rows, plural, one{# Zeile wird exportiert…} other{# Zeilen werden exportiert…}}"},
     {L"history-menu", L"About these charts", L"Über diese Diagramme"},
     {L"history-menu", L"Clear all history…", L"Gesamten Verlauf löschen…"},
     {L"history-menu", L"Open history folder", L"Verlaufsordner öffnen"},

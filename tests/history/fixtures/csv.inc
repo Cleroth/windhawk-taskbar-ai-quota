@@ -192,6 +192,29 @@
               accountF.find("monthly,percent,88,") != std::string::npos);
     });
 
+    Run("csv: a regional number format changes no byte: the history model built under German with de-DE's "
+        "decimal comma beside the same scopes' English bytes, values with their point", [&] {
+        std::vector<HistoryUiAccount> accounts(1);
+        accounts[0].id = 0xA1;
+        accounts[0].provider = 1;
+        accounts[0].label = L"CC";
+        for (size_t row = 0; row < samples.size(); row++) {
+            if (samples[row].accountId == 0xA1) accounts[0].rows.push_back(row);
+        }
+        HistorySeriesQuery query{-1, HistoryView::AllMeters, baseTime, baseTime + kHistoryWeekMs, baseTime, false, 90,
+                                 false, I18nLocale(*I18nLanguageByTag(L"de"), I18nNumberFormatFrom(L",", L".", L"3;0"))};
+        HistorySeriesSet regional = HistoryBuildSeries(samples, accounts, query, Never);
+        CHECK(Series(regional, 0, 0).legendTitle == L"CC \u00B7 5 Std.");
+        for (uint64_t account : {0xA1ULL, 0xF6ULL}) {
+            Pieces pieces;
+            size_t rows = 0;
+            CHECK(direct(scope(account), rows, pieces, Never) == HistoryCsvEnd::Written);
+            CHECK(pieces.Joined() == header + (account == 0xA1 ? accountA : accountF));
+        }
+        CHECK(accountA.find(",12.5,") != std::string::npos && accountA.find(",7.25,") != std::string::npos &&
+              accountF.find(",42.5,") != std::string::npos);
+    });
+
     Run("csv: a large export goes out in pieces of at least 64 KiB, then a shorter last one", [&] {
         std::vector<HistorySample> many;
         for (int i = 0; i < 3000; i++) {

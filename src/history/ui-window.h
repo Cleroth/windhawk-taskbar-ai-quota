@@ -78,8 +78,9 @@ struct HistoryUiClient final : UiHostClient {
     // operation runs. A load or refresh that changed the selection (its request, or the account no
     // longer listed) moves focus to the selected entry. Esc closes. An export's write runs once
     // the frame with its progress was published by the command's rebuild: painted first (else it
-    // writes nothing), then repainted as rows are written, the item found again each time.
-    bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM, LRESULT& result) override {
+    // writes nothing), then repainted as rows are written, the item found again each time. A
+    // regional format change composes again like a notification.
+    bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) override {
         result = 0;
         uint64_t selected = controller.selectedId;
         bool rebuild = true;
@@ -100,6 +101,9 @@ struct HistoryUiClient final : UiHostClient {
             case kHistoryConsentChangedMessage:
                 controller.Notify();
                 return true;
+            case WM_SETTINGCHANGE:
+                if (lParam && wcscmp(reinterpret_cast<PCWSTR>(lParam), L"intl") == 0) controller.Notify();
+                return false;
             case kHistoryRefreshMessage:
                 rebuild = controller.ProcessRefresh(host.popup.open, PointerOnChart(host));
                 break;

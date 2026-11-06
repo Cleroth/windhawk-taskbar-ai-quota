@@ -98,7 +98,7 @@ struct SettingsUiClient final : UiHostClient {
 
     // A dialog's language: the current one as it opens, kept until it closes. Windows' own buttons
     // follow the Windows display language.
-    static I18nLocale DialogLocale() { return I18nLocale(*g_language.load(std::memory_order_acquire)); }
+    static I18nLocale DialogLocale() { return CurrentLocale(); }
 
     // The controller's notices, a message box each. Account operations explain their failures;
     // other failed saves get the general message.
@@ -164,13 +164,14 @@ struct SettingsUiClient final : UiHostClient {
         UiHostRequestRebuild(host, false);
     }
 
-    // Each frame takes the current language, its text, the toolkit's text formats and the title
-    // all. The preview's scroll stays within what the built strip can scroll, and a new position
-    // starts it from its home. Account cards follow the projection's order, a dragged card its
-    // drag order. The window takes the projected material at once.
+    // Each frame takes the current language and regional number format: its text, numbers, the
+    // toolkit's text formats and the title all, and number boxes parse what they show in it. The
+    // preview's scroll stays within what the built strip can scroll, and a new position starts it
+    // from its home. Account cards follow the projection's order, a dragged card its drag order.
+    // The window takes the projected material at once.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         // The title first: setting it sends messages, which must never see the view half built.
-        const I18nLocale locale(*g_language.load(std::memory_order_acquire));
+        const I18nLocale locale = CurrentLocale();
         if (titleLocale != locale) {
             SetWindowTextW(host.main, SettingsWindowTitle(locale).c_str());
             titleLocale = locale;
@@ -523,7 +524,7 @@ struct SettingsUiClient final : UiHostClient {
                 KillStepTimer(host, field);
                 if (field == SettingsField::PollMinutes) pollCustom = true;
                 if (field == SettingsField::RetentionDays) retentionCustom = true;
-                edits.SetText(action.key, field, std::move(action.text));
+                edits.SetText(action.key, field, std::move(action.text), view.locale);
                 UiHostRequestRebuild(host, false);
                 break;
             case UiActionKind::TextCommit:
@@ -559,7 +560,7 @@ struct SettingsUiClient final : UiHostClient {
                 }
                 if (field == SettingsField::PollMinutes) pollCustom = true;
                 if (field == SettingsField::RetentionDays) retentionCustom = true;
-                steps[field] = {action.key, edits.Step(action.key, field, action.value)};
+                steps[field] = {action.key, edits.Step(action.key, field, action.value, view.locale)};
                 SetTimer(host.main, kSettingsStepTimer + UINT_PTR(field), 250, nullptr);
                 UiHostRequestRebuild(host, false);
                 break;
@@ -653,7 +654,7 @@ struct SettingsUiClient final : UiHostClient {
         }
     }
 
-    bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM, LRESULT& result) override {
+    bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) override {
         result = 0;
         switch (message) {
             case kSettingsProcessMessage:
@@ -680,6 +681,12 @@ struct SettingsUiClient final : UiHostClient {
             case kExitVisualTestMessage:
                 SetVisualTestMode(false);
                 return true;
+            // A regional format change: the next frame shows numbers in the new one.
+            case WM_SETTINGCHANGE:
+                if (lParam && wcscmp(reinterpret_cast<PCWSTR>(lParam), L"intl") == 0) {
+                    UiHostRequestRebuild(host, false);
+                }
+                return false;
             case WM_DISPLAYCHANGE:
                 // The display list changed (the taskbar re-injects on its own).
                 if (modalDepth || (drag.key && host.handleDrag)) {

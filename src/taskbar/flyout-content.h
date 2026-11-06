@@ -750,16 +750,9 @@ static void UpdateAccountFlyout(
                              (d.creditsUnlimited || d.creditsBalance >= 0 || d.hasCredits);
         // GitHub Copilot's monthly allowance, in its unit, which also names its row: a percentage
         // of a finite allowance, else an unlimited pooled one without. Credits are fractional:
-        // two decimals at most, trailing zeros trimmed.
+        // two decimals at most, trailing zeros trimmed, in the regional decimal separator.
         std::wstring copilotUnit = CopilotUnitName(locale, d.copilotUnit);
-        auto copilotAmount = [](double amount) {
-            wchar_t number[64];
-            swprintf(number, ARRAYSIZE(number), L"%.2f", amount);
-            std::wstring trimmed = number;
-            trimmed.erase(trimmed.find_last_not_of(L'0') + 1);
-            if (trimmed.ends_with(L'.')) trimmed.pop_back();
-            return trimmed;
-        };
+        auto copilotAmount = [&](double amount) { return I18nTrimmed(locale, amount, 2); };
         // Past a finite allowance, or beside a pooled one, the additional usage on a line of its own.
         bool overage = copilot && d.copilotOverage > 0;
         std::wstring overageAmount = overage ? copilotAmount(d.copilotOverage) : L"";
@@ -811,9 +804,8 @@ static void UpdateAccountFlyout(
 
             if (r == kFlyoutExtraRow && creditsAmount) {
                 bool balance = !d.creditsUnlimited && d.creditsBalance >= 0;
-                if (balance) swprintf(text, ARRAYSIZE(text), L"%.0f", d.creditsBalance);
                 row.number.Text(d.creditsUnlimited ? I18nText(locale, TrCtx(L"quota-value", L"Unlimited")) :
-                                balance            ? std::wstring(text) :
+                                balance            ? I18nFixed(locale, d.creditsBalance, 0) :
                                                      I18nText(locale, TrCtx(L"quota-value", L"Available")));
                 row.unit.Text(balance ? I18nText(locale, TrCtx(L"quota-unit", L"left")) : L"");
                 row.unit.Foreground(theme.mutedText);
@@ -1031,18 +1023,16 @@ static void UpdateAccountFlyout(
                                    {L"overage", overageAmount}});
             } else if (r == kFlyoutExtraRow && d.extraLimitAmount >= 0) {
                 // Credits state the balance so the text reads the same in both bar modes. Amounts are
-                // whole credits, or US dollars to the cent, in every language.
-                wchar_t limit[ARRAYSIZE(text)];
+                // whole credits, or US dollars to the cent in the regional decimal separator, in
+                // every language; never grouped.
                 if (openAi) {
-                    swprintf(text, ARRAYSIZE(text), L"%.0f", d.extraLimitAmount - d.extraUsedAmount);
-                    swprintf(limit, ARRAYSIZE(limit), L"%.0f", d.extraLimitAmount);
                     amount = I18nText(locale, TrCtx(L"quota-amount", L"{left} left of {limit} credits"),
-                                      {{L"left", text}, {L"limit", limit}});
+                                      {{L"left", I18nFixed(locale, d.extraLimitAmount - d.extraUsedAmount, 0)},
+                                       {L"limit", I18nFixed(locale, d.extraLimitAmount, 0)}});
                 } else {
-                    swprintf(text, ARRAYSIZE(text), L"$%.2f", d.extraUsedAmount);
-                    swprintf(limit, ARRAYSIZE(limit), L"$%.2f", d.extraLimitAmount);
                     amount = I18nText(locale, TrCtx(L"quota-amount", L"{used} of {limit} spent"),
-                                      {{L"used", text}, {L"limit", limit}});
+                                      {{L"used", L"$" + I18nFixed(locale, d.extraUsedAmount, 2)},
+                                       {L"limit", L"$" + I18nFixed(locale, d.extraLimitAmount, 2)}});
                 }
             }
             row.amount.Text(amount);

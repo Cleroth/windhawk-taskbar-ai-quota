@@ -18,7 +18,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     }
     std::vector<AccountConfig>& accounts = settings.accounts;
 
-    // In the grid's language, which its reserved widths and labels were built in.
+    // In the grid's language, which its reserved widths and labels were built in, with the
+    // current regional number format: no width measured at build holds a separator, so a change
+    // shows from this update on (the flyout's too).
+    state.buildLocale = I18nLocale(state.buildLocale.Language(), ReadNumberFormat());
     MeterDisplay display = MeterDisplayFor(settings, state.buildLocale, NowUnixMs(), state.rasterizationScale,
                                            state.taskbarHeight, state.sideWidth);
     ULONGLONG now = display.now;

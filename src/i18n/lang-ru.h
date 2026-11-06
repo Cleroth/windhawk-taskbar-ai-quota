@@ -188,15 +188,15 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Экспорт всех исходных показателей выбранного аккаунта или, при выборе «Все аккаунты», всех аккаунтов. "
      L"Используется выбранный период, а при сравнении недель — ещё и 7 предшествующих дней. Время в UTC; текстовые "
      L"идентификаторы; без меток."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all accounts) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{Экспортирована {count} строка показателей} few{Экспортированы {count} строки показателей} "
-     L"many{Экспортировано {count} строк показателей} other{Экспортировано {count} строки показателей}} (все "
+     L"{rows, plural, one{Экспортирована # строка показателей} few{Экспортированы # строки показателей} "
+     L"many{Экспортировано # строк показателей} other{Экспортировано # строки показателей}} (все "
      L"аккаунты) в {path}. Метки не включены; время в UTC."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{Экспортирована {count} строка показателей} few{Экспортированы {count} строки показателей} "
-     L"many{Экспортировано {count} строк показателей} other{Экспортировано {count} строки показателей}} (выбранный "
+     L"{rows, plural, one{Экспортирована # строка показателей} few{Экспортированы # строки показателей} "
+     L"many{Экспортировано # строк показателей} other{Экспортировано # строки показателей}} (выбранный "
      L"аккаунт) в {path}. Метки не включены; время в UTC."},
     {L"", L"Free to use, modify and share.", L"Можно свободно использовать, изменять и распространять."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
@@ -857,9 +857,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"history-card", L"{title} — details only", L"{title} — только сведения"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
-    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
-     L"{rows, plural, one{Экспорт: {count} строка…} few{Экспорт: {count} строки…} many{Экспорт: {count} строк…} "
-     L"other{Экспорт: {count} строки…}}"},
+    {L"history-export", L"{rows, plural, one{Exporting # rows…} other{Exporting # rows…}}",
+     L"{rows, plural, one{Экспорт: # строка…} few{Экспорт: # строки…} many{Экспорт: # строк…} "
+     L"other{Экспорт: # строки…}}"},
     {L"history-menu", L"About these charts", L"Об этих графиках"},
     {L"history-menu", L"Clear all history…", L"Очистить всю историю…"},
     {L"history-menu", L"Open history folder", L"Открыть папку истории"},

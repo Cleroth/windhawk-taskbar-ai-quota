@@ -766,7 +766,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         // Text, toast and balloon allocate; a failure skips only this notification
                         // (nothing above the fetch loop catches).
                         try {
-                            const I18nLocale locale(*g_language.load(std::memory_order_acquire));
+                            const I18nLocale locale = CurrentLocale();
                             auto [title, body] = ThresholdNotificationText(
                                 locale, publishedAccounts[i].provider, publishedResults[i], w,
                                 (w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs ?

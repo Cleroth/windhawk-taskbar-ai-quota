@@ -14,7 +14,7 @@ struct SettingsViewAccount {
 };
 
 struct SettingsView {
-    I18nLocale locale;                  // The frame's language
+    I18nLocale locale;                  // The frame's language and regional number format
     SettingsUiPage page = SettingsUiPage::Accounts;
     std::wstring version;
     Settings settings;                  // Render projection (SettingsEdits::Projection)
@@ -114,15 +114,15 @@ static float SettingsAddDropdownCard(UiGraphics& g, const SettingsView& view,
     return card.card.bottom;
 }
 
-// A number box shows its draft's text while there is one, else the projected value grouped.
+// A number box shows its draft's text while there is one, else the projected value in the
+// regional digit groups.
 static float SettingsAddNumberCard(UiGraphics& g, const SettingsView& view,
                                    std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                    float width, UiCardSpec spec, SettingsField field,
                                    std::wstring unit) {
     const SettingsDraft* draft = SettingsViewDraft(view, field);
-    std::wstring text = draft && draft->text ?
-        draft->raw : SettingsFormatNumber(SettingsFieldValue(view.settings, field),
-                                          view.status.groupSeparator);
+    std::wstring text = draft && draft->text ? draft->raw :
+                                               I18nInteger(view.locale, SettingsFieldValue(view.settings, field));
     spec.trailing = UiNumberBoxSize(g, unit);
     if (draft && draft->text) spec.error = SettingsDraftErrorText(view.locale, *draft);
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
@@ -148,7 +148,7 @@ static float SettingsAddSliderCard(UiGraphics& g, const SettingsView& view,
     box.id = SettingsControlId(field);
     box.kind = UiItemKind::NumberBox;
     box.rect = {slot.left, slot.top, slot.left + 60, slot.bottom};
-    box.text = draft && draft->text ? draft->raw : SettingsFormatNumber(value, view.status.groupSeparator);
+    box.text = draft && draft->text ? draft->raw : I18nInteger(view.locale, value);
     box.align = DWRITE_TEXT_ALIGNMENT_CENTER;
     box.enabled = spec.enabled;
     box.action = SettingsCommand(field);

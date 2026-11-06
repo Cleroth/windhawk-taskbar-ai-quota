@@ -219,6 +219,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "i18n/format.h"
 
+#include "i18n/numbers.h"
+
 #include "core/model.h"
 
 #include "core/account-error.h"

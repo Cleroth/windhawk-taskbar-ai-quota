@@ -72,3 +72,24 @@ static Settings With(const std::function<void(Settings&)>& edit) {
     edit(settings);
     return settings;
 }
+
+// Regional number formats from the strings Windows 11 gives for these regions (LOCALE_SDECIMAL,
+// LOCALE_STHOUSAND, LOCALE_SGROUPING; read 2026-11-06), and two a user can set: grouping off
+// ("0") and one group ("3"). Anything else: en-US.
+static I18nNumberFormat TestNumbers(std::wstring_view region) {
+    if (region == L"de-DE") return I18nNumberFormatFrom(L",", L".", L"3;0");
+    if (region == L"fr-FR") return I18nNumberFormatFrom(L",", L"\u202F", L"3;0");
+    if (region == L"ru-RU") return I18nNumberFormatFrom(L",", L"\u00A0", L"3;0");
+    if (region == L"hi-IN") return I18nNumberFormatFrom(L".", L",", L"3;2;0");
+    if (region == L"de-CH") return I18nNumberFormatFrom(L".", L"\u2019", L"3;0");
+    if (region == L"no-grouping") return I18nNumberFormatFrom(L".", L",", L"0");
+    if (region == L"one-group") return I18nNumberFormatFrom(L".", L",", L"3");
+    return {};
+}
+
+// A production language (by its tag) with a region's number format.
+static I18nLocale TestRegional(std::wstring_view tag, std::wstring_view region) {
+    const I18nLanguage* language = I18nLanguageByTag(tag);
+    if (!language) throw std::runtime_error("no language");
+    return I18nLocale(*language, TestNumbers(region));
+}

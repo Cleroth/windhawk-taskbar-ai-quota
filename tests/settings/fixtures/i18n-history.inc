@@ -5,8 +5,11 @@
 // built in the old one (the status, the series, the ticks, the readout and its key, an operation's
 // notice). An export's notice and progress in Russian with their plurals, Delete history's dialog
 // and notices in Russian with the journal's reason, a dialog keeping the language it opened in,
-// and the readout's rows in Chinese. Expected text is written out by hand from the production
-// catalogs.
+// and the readout's rows in Chinese. Regional number formats (support.inc's regions): values,
+// hours, axis labels and cards in English and German with de-DE's decimal comma, never grouped;
+// export counts in each region's digit groups inside their plurals; the large-export warning's
+// ungrouped estimate; a regional format change re-labeling the composed window and the readout.
+// Expected text is written out by hand from the production catalogs.
 
 static I18nLocale TestLocale(std::wstring_view tag) {
     const I18nLanguage* language = I18nLanguageByTag(tag);
@@ -303,5 +306,120 @@ static void RunHistoryI18nTests() {
         // [当前] USD 11.00 · 10月27日 周二 12:31: dollars keep their code.
         CHECK(UiRunsText(row(6, 0, 11, 27, 12, 31)) ==
               L"[\u5F53\u524D] USD 11.00 \u00B7 10\u670827\u65E5 \u5468\u4E8C 12:31");
+    });
+
+    Run("history numbers in a regional format: values, hours, axis labels and the cards take its decimal "
+        "separator, never grouped, in English and German; dates stay the language's compact form", [] {
+        const I18nLocale en = TestRegional(L"en", L"de-DE"), de = TestRegional(L"de", L"de-DE"),
+                         hi = TestRegional(L"en", L"hi-IN");
+        CHECK(HistoryUiNumber(en, 9999.99, 2) == L"9999,99");
+        CHECK(HistoryUiNumber(en, 9999.996, 2) == L"10,0K");
+        CHECK(HistoryUiNumber(en, 12345, 2) == L"12,3K" && HistoryUiNumber(en, -12345, 2) == L"-12,3K");
+        CHECK(HistoryUiNumber(en, 999950, 2) == L"1,0M" && HistoryUiNumber(en, 62.4, 0) == L"62");
+        CHECK(HistoryUiNumber(hi, 9999.99, 2) == L"9999.99");
+        CHECK(HistoryUiValue(en, 1, 93.04, 0) == L"93%" && HistoryUiValue(en, 5, 38.04, 1) == L"38,0%");
+        CHECK(HistoryUiValue(en, 6, 10, 0) == L"USD 10,00" && HistoryUiValue(de, 6, 10, 0) == L"USD 10,00");
+        CHECK(HistoryUiValue(en, 7, 1240, 0) == L"1240,00 credits" && HistoryUiValue(de, 7, 1240, 0) == L"1240,00 Guthaben");
+        CHECK(HistoryUiHours(en, 23.2 * double(kHourMs)) == L"23,2 h" && HistoryUiHours(de, 23.2 * double(kHourMs)) == L"23,2 Std.");
+        CHECK(HistoryUiHours(en, 166 * double(kHourMs)) == L"166 h" && HistoryUiHours(en, 87600 * double(kHourMs)) == L"87600 h");
+        // Axis labels: trailing decimal zeros dropped before the region's separator.
+        CHECK(HistoryChartAxisLabel(en, 1, 0.5) == L"0,5 USD" && HistoryChartAxisLabel(en, 1, 0.75) == L"0,75 USD");
+        CHECK(HistoryChartAxisLabel(en, 1, 1250) == L"1250 USD" && HistoryChartAxisLabel(en, 0, -25) == L"-25%");
+        CHECK(HistoryChartAxisLabel(en, 2, 12500) == L"12,5K cr" && HistoryChartAxisLabel(en, 2, 10000) == L"10K cr");
+        CHECK(HistoryChartAxisLabel(de, 2, 12500) == L"12,5K cr" && HistoryChartAxisLabel(hi, 1, 0.75) == L"0.75 USD");
+        // One account's cards (Weekly 40, 95 and 93%): coverage and the time at the threshold.
+        ULONGLONG recorded = kWeekFrom + 3 * kHourMs;
+        auto cards = [&](const I18nLocale& locale) {
+            return TestCards(TestOneAccount(), [&](HistoryUiView& view) {
+                TestPolled(recorded - 5)(view);
+                view.locale = locale;
+            }).cards;
+        };
+        std::vector<HistoryUiCard> english = cards(en);
+        CHECK(english.size() == 2 && english[0].title == L"Weekly" && english[0].value == L"93%" &&
+              english[0].when == L"now");
+        CHECK((english[0].lines == std::vector<std::wstring>{L"Peak 95% \u00B7 Sat 24 Oct 16:32", L"Coverage 2 h (1,2%)",
+                                                              L"Est. \u226590%: 1,1 h"}));
+        // Wöchentlich 93% jetzt; Höchstwert 95% · Sa 24. Okt 16:32; Abdeckung 2 Std. (1,2%); Geschätzt ≥90%: 1,1 Std.
+        std::vector<HistoryUiCard> german = cards(de);
+        CHECK(german.size() == 2 && german[0].title == L"W\u00F6chentlich" && german[0].value == L"93%" &&
+              german[0].when == L"jetzt");
+        CHECK((german[0].lines == std::vector<std::wstring>{L"H\u00F6chstwert 95% \u00B7 Sa 24. Okt 16:32",
+                                                             L"Abdeckung 2 Std. (1,2%)",
+                                                             L"Gesch\u00E4tzt \u226590%: 1,1 Std."}));
+    });
+
+    Run("history export counts in a region's digit groups inside their plurals: progress and the exported notice "
+        "(English, German, Russian, Spanish, hi-IN); the large-export warning's estimate stays ungrouped", [] {
+        const I18nLocale de = TestRegional(L"de", L"de-DE"), hi = TestRegional(L"en", L"hi-IN");
+        CHECK(HistoryUiProgressText(TestRegional(L"en", L"en-US"), 12345) == L"Exporting 12,345 rows\u2026");
+        CHECK(HistoryUiProgressText(TestRegional(L"en", L"fr-FR"), 12345) == L"Exporting 12\u202F345 rows\u2026");
+        CHECK(HistoryUiProgressText(hi, 1234567) == L"Exporting 12,34,567 rows\u2026");
+        CHECK(HistoryUiProgressText(TestRegional(L"en", L"no-grouping"), 12345) == L"Exporting 12345 rows\u2026");
+        CHECK(HistoryUiProgressText(de, 1) == L"1 Zeile wird exportiert\u2026");
+        CHECK(HistoryUiProgressText(de, 12345) == L"12.345 Zeilen werden exportiert\u2026");
+        // Экспорт: 21 строка… / 1 234 строки… / 12 345 строк…, ru-RU's no-break space between groups.
+        const I18nLocale ru = TestRegional(L"ru", L"ru-RU");
+        CHECK(HistoryUiProgressText(ru, 21) ==
+              L"\u042D\u043A\u0441\u043F\u043E\u0440\u0442: 21 \u0441\u0442\u0440\u043E\u043A\u0430\u2026");
+        CHECK(HistoryUiProgressText(ru, 1234) ==
+              L"\u042D\u043A\u0441\u043F\u043E\u0440\u0442: 1\u00A0234 \u0441\u0442\u0440\u043E\u043A\u0438\u2026");
+        CHECK(HistoryUiProgressText(ru, 12345) ==
+              L"\u042D\u043A\u0441\u043F\u043E\u0440\u0442: 12\u00A0345 \u0441\u0442\u0440\u043E\u043A\u2026");
+        // Spanish's many for a million: Exportando 1.000.000 de filas…
+        CHECK(HistoryUiProgressText(TestRegional(L"es", L"de-DE"), 1000000) == L"Exportando 1.000.000 de filas\u2026");
+        HistoryNotice exported{.code = HistoryNoticeCode::Exported, .rows = 1234567, .all = true, .text = L"C:\\x.csv"};
+        CHECK(HistoryNoticeText(de, exported).text ==
+              L"1.234.567 Messwertzeilen (alle Konten) nach C:\\x.csv exportiert. Ohne Bezeichnungen; Zeiten in UTC.");
+        exported.rows = 1;
+        CHECK(HistoryNoticeText(de, exported).text ==
+              L"1 Messwertzeile (alle Konten) nach C:\\x.csv exportiert. Ohne Bezeichnungen; Zeiten in UTC.");
+        exported.rows = 1234567;
+        exported.all = false;
+        CHECK(HistoryNoticeText(hi, exported).text ==
+              L"Exported 12,34,567 meter rows (selected account) to C:\\x.csv. Labels omitted; times UTC.");
+        // OC (OpenCode Go, 0x0C): 166,667 readings of three rows, about 500,001: the warning's estimate as
+        // before, ungrouped, under de-DE.
+        TestHistoryOps ops = TestControllerOps();
+        ops.locale = TestRegional(L"en", L"de-DE");
+        ops.settings.settings.accounts.push_back(TestHistoryAccount(L"opencode", L"OC", 0x0C));
+        for (ULONGLONG i = 0; i < 166667; i++) ops.journal.push_back(TestReading(0x0C, 5, kWeekFrom + i * 3000, {}));
+        ops.stamp.appended = ops.journal.size();
+        ops.answers = {IDCANCEL};
+        HistoryController c(ops);
+        TestLoaded(c, ops, 0x0C);
+        c.Command(HistoryUiCommand::Export);
+        TestSettled(c, ops);
+        CHECK(ops.asked.size() == 1 && ops.asked[0].first.starts_with(L"This export contains about 500001 rows. "));
+    });
+
+    Run("history controller: a regional format change composes the window again in the same language: the cards' "
+        "and the readout's decimals (its key moves), the ticks' labels as they were", [] {
+        UiPalette palette = TestPalette(UiThemeKind::Dark);
+        auto w = TestChartOf(TestMockupWeek());
+        HistoryController& c = w->controller;
+        HistoryChart& chart = TestLaid(*w);
+        UiTooltipContent before;
+        c.Hover(TestAt(chart, 0, 0, 0), before, palette);
+        CHECK(before.key && before.rows.at(0).detail.at(1).text.find(L'.') != std::wstring::npos);
+        const I18nLocale regional = TestRegional(L"en", L"de-DE");
+        w->ops.locale = regional;
+        c.Notify();
+        CHECK(c.ProcessRefresh(false, false));
+        CHECK(c.view.locale == regional && c.seriesKey.locale == regional &&
+              c.view.status == L"Updated Sat 31 Oct 14:32");
+        CHECK(std::any_of(c.view.cards.begin(), c.view.cards.end(), [](const HistoryUiCard& card) {
+            return std::any_of(card.lines.begin(), card.lines.end(), [](const std::wstring& line) {
+                return line.starts_with(L"Coverage ") && line.find(L',') != std::wstring::npos &&
+                       line.find(L'.') == std::wstring::npos;
+            });
+        }));
+        TestLaid(*w);
+        CHECK((TestLabels(chart.ticks).front() == L"Sun 25") && chart.tickLocale == regional);
+        UiTooltipContent after;
+        c.Hover(TestAt(chart, 0, 0, 0), after, palette);
+        const std::wstring& value = after.rows.at(0).detail.at(1).text;
+        CHECK(after.key && after.key != before.key && value.find(L',') != std::wstring::npos &&
+              value.find(L'.') == std::wstring::npos);
     });
 }

@@ -87,7 +87,7 @@ struct HistoryOps {
     // Unix ms, and one as the user's local clock and zone (zero on failure).
     virtual ULONGLONG Now() = 0;
     virtual SYSTEMTIME LocalTime(ULONGLONG ms) = 0;
-    // The current language.
+    // The current language and regional number format.
     virtual I18nLocale Locale() = 0;
 
 protected:
@@ -168,14 +168,15 @@ static HistoryUiNotice HistoryNoticeText(const I18nLocale& locale, const History
                                                L"unchanged."),
                                     {{L"code", notice.error}}));
         case Exported: {
-            std::wstring count = HistoryUiCount(notice.rows);
+            // The row count in the regional digit groups.
+            std::wstring count = I18nInteger(locale, notice.rows);
             std::wstring text =
-                notice.all ? I18nText(locale, Tr(L"Exported {rows, plural, one{{count} meter rows} other{{count} meter "
-                                                 L"rows}} (all accounts) to {path}. Labels omitted; times UTC."),
-                                      {{L"rows", notice.rows}, {L"count", count}, {L"path", notice.text}}) :
-                             I18nText(locale, Tr(L"Exported {rows, plural, one{{count} meter rows} other{{count} meter "
-                                                 L"rows}} (selected account) to {path}. Labels omitted; times UTC."),
-                                      {{L"rows", notice.rows}, {L"count", count}, {L"path", notice.text}});
+                notice.all ? I18nText(locale, Tr(L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all "
+                                                 L"accounts) to {path}. Labels omitted; times UTC."),
+                                      {{L"rows", notice.rows, count}, {L"path", notice.text}}) :
+                             I18nText(locale, Tr(L"Exported {rows, plural, one{# meter rows} other{# meter rows}} "
+                                                 L"(selected account) to {path}. Labels omitted; times UTC."),
+                                      {{L"rows", notice.rows, count}, {L"path", notice.text}});
             if (notice.compare) {
                 text = I18nText(locale, Tr(L"{exported} Includes both elapsed 7-day periods."), {{L"exported", text}});
             }

@@ -96,20 +96,42 @@ static constexpr bool I18nTagEquals(std::wstring_view a, std::wstring_view b) {
     return languages.front();
 }
 
+// A regional number format, as Windows' Region settings give it (LOCALE_SDECIMAL,
+// LOCALE_STHOUSAND, LOCALE_SGROUPING), in fixed arrays so the localization context stays cheap to
+// copy. Default: en-US (1,234.5). i18n/numbers.h reads Windows' strings into one and writes
+// numbers in it.
+struct I18nNumberFormat {
+    // Each at most 3 characters, as Windows allows, null-padded
+    std::array<wchar_t, 4> decimal{L'.'};
+    std::array<wchar_t, 4> group{L','};
+    // Digit group sizes from the decimal separator leftwards, `count` of them, the last repeated
+    // when `repeat` (3;2;0: 12,34,56,789); none: no grouping
+    std::array<uint8_t, 8> sizes{3};
+    uint8_t count = 1;
+    bool repeat = true;
+
+    constexpr std::wstring_view Decimal() const { return decimal.data(); }
+    constexpr std::wstring_view Group() const { return group.data(); }
+    constexpr bool operator==(const I18nNumberFormat&) const = default;
+};
+
 // The localization context: one immutable value per frame, notification or dialog that pure code
-// receives through its inputs, never from a global. Regional formats join it later. Default:
-// English.
+// receives through its inputs, never from a global: the language, and the regional number format
+// numbers show in whatever the language. Default: English with en-US numbers.
 class I18nLocale {
 public:
     constexpr I18nLocale() = default;
-    constexpr explicit I18nLocale(const I18nLanguage& language) : language_(&language) {}
+    constexpr explicit I18nLocale(const I18nLanguage& language, const I18nNumberFormat& numbers = {})
+        : language_(&language), numbers_(numbers) {}
 
     constexpr const I18nLanguage& Language() const { return *language_; }
     // DirectWrite's locale and XAML's Language.
     constexpr std::wstring_view LocaleName() const { return language_->localeName; }
+    constexpr const I18nNumberFormat& Numbers() const { return numbers_; }
 
     constexpr bool operator==(const I18nLocale&) const = default;
 
 private:
     const I18nLanguage* language_ = &kI18nLanguages[0];
+    I18nNumberFormat numbers_{};
 };

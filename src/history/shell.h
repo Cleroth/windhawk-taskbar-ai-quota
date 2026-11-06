@@ -61,7 +61,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
             UiRun value{L"\u2014", UiRunStyle::Normal, UiInk::Muted};
             if (account.weeklyPct >= 0) {
                 double shown = view.remaining ? std::clamp(100 - account.weeklyPct, 0.0, 100.0) : account.weeklyPct;
-                value.text = HistoryUiNumber(shown, 0) + L"%";
+                value.text = HistoryUiNumber(locale, shown, 0) + L"%";
                 if (!account.stale) {
                     // Light theme: darker variants of the default and colorblind usage colors,
                     // readable on its surface; another color darkens in OKLCH until it reads at

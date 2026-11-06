@@ -27,8 +27,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     try {
         bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
         // The grid's language for its lifetime: its updates, menus and flyouts too. A switch
-        // rebuilds it.
-        const I18nLocale locale(*g_language.load(std::memory_order_acquire));
+        // rebuilds it; its updates refresh the regional number format.
+        const I18nLocale locale = CurrentLocale();
         state.buildLocale = locale;
         Settings settings;
         {

@@ -204,15 +204,15 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Exporte tous les indicateurs bruts du compte sélectionné, ou de chaque compte avec Tous les comptes. Utilise "
      L"la période sélectionnée, plus les 7\u00A0jours précédents en comparaison de semaines. Horodatages UTC\u00A0; "
      L"ID sous forme de texte\u00A0; sans libellés."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all accounts) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{{count} ligne d’indicateur exportée} many{{count} de lignes d’indicateurs exportées} "
-     L"other{{count} lignes d’indicateurs exportées}} (tous les comptes) vers {path}. Libellés omis\u00A0; heures en "
+     L"{rows, plural, one{# ligne d’indicateur exportée} many{# de lignes d’indicateurs exportées} "
+     L"other{# lignes d’indicateurs exportées}} (tous les comptes) vers {path}. Libellés omis\u00A0; heures en "
      L"UTC."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{{count} ligne d’indicateur exportée} many{{count} de lignes d’indicateurs exportées} "
-     L"other{{count} lignes d’indicateurs exportées}} (compte sélectionné) vers {path}. Libellés omis\u00A0; heures "
+     L"{rows, plural, one{# ligne d’indicateur exportée} many{# de lignes d’indicateurs exportées} "
+     L"other{# lignes d’indicateurs exportées}} (compte sélectionné) vers {path}. Libellés omis\u00A0; heures "
      L"en UTC."},
     {L"", L"Free to use, modify and share.", L"Libre d’utilisation, de modification et de partage."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
@@ -903,9 +903,9 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"history-card", L"{title} — details only", L"{title} — détails uniquement"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
-    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
-     L"{rows, plural, one{Exportation de {count} ligne…} many{Exportation de {count} de lignes…} other{Exportation "
-     L"de {count} lignes…}}"},
+    {L"history-export", L"{rows, plural, one{Exporting # rows…} other{Exporting # rows…}}",
+     L"{rows, plural, one{Exportation de # ligne…} many{Exportation de # de lignes…} other{Exportation "
+     L"de # lignes…}}"},
     {L"history-menu", L"About these charts", L"À propos de ces graphiques"},
     {L"history-menu", L"Clear all history…", L"Effacer tout l’historique…"},
     {L"history-menu", L"Open history folder", L"Ouvrir le dossier de l’historique"},

@@ -555,6 +555,35 @@ static void RunHistoryRenders(const std::wstring& directory) {
             });
         }
     }
+    // A regional number format: de-DE's decimal comma in English and German, light at 96 DPI, as the
+    // controller composes the window: the default view with its cards, All meters' USD and credits
+    // axes, and the readout on the chart while comparing.
+    for (std::string_view tag : {"en", "de"}) {
+        I18nLocale locale = TestRegional(std::wstring(tag.begin(), tag.end()), L"de-DE");
+        auto regional = [&](std::shared_ptr<TestChartWindow> window) {
+            window->ops.locale = locale;
+            window->controller.Load();
+            return window;
+        };
+        std::vector<HistoryRenderPart> parts = {
+            real(L"Default view: All accounts, Weekly, 7 days, with its cards", regional(TestChartOf(TestMockupWeek())), 0),
+            real(L"All meters, All accounts: percent, USD and credits axes",
+                 regional(TestChartOf(TestMockupWeek(), [](HistoryController& c) {
+                     c.Command(HistoryUiCommand::View, int(HistoryView::AllMeters));
+                 })),
+                 0),
+            real(L"The readout on the chart: six coincident lines at hour 70, comparing",
+                 regional(TestChartOf(TestMockupWeek(), [](HistoryController& c) { c.Command(HistoryUiCommand::Compare, 1); })),
+                 640),
+        };
+        parts.back().hover = states[states.size() - 1].hover;
+        std::string name = "render-history-i18n-" + std::string(tag) + "-de-DE-light-96.png";
+        Run(name, [&] {
+            RenderHistorySheet(g, wic.get(), directory + L"\\" + std::wstring(name.begin(), name.end()), parts,
+                               RenderThemes()[0].input, 96);
+            CHECK(true);
+        });
+    }
     // The default frame over a stand-in backdrop (light and dark; high contrast never gets one).
     HistoryRenderPart backdrop = defaults;
     backdrop.backdrop = true;

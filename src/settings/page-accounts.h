@@ -378,8 +378,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 if (draft && draft->text) spec.error = SettingsDraftErrorText(locale, *draft);
                 UiCardLayout layout = row(spec);
                 UiAddNumberBox(cardItems, control(SettingsField::AccountCreditsMax), layout.trailing,
-                               draft && draft->text ? draft->raw :
-                                                      SettingsFormatNumber(account.creditsMax, view.status.groupSeparator),
+                               draft && draft->text ? draft->raw : I18nInteger(locale, account.creditsMax),
                                std::move(unit), true, command(SettingsField::AccountCreditsMax));
             }
             {

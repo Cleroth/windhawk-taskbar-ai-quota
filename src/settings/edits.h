@@ -497,16 +497,18 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
     }
 }
 
-// Number text: optional surrounding spaces and sign, digits with optional digit grouping
-// (`separator`; any space character when it is one), groups of three after the first.
-// Empty, malformed and overflowing text fails; out-of-range values clamp.
+// Number text as a number box shows it (I18nInteger) or as typed: optional surrounding spaces and
+// sign, then digits, plain or in the format's digit groups (its separator, any space character
+// where that is one: fr-FR's narrow no-break space typed as a space). Groups follow the format's
+// sizes from the right, the leftmost at most its size (en-US: 1-3 digits, then threes). Empty,
+// malformed and overflowing text fails; out-of-range values clamp.
 struct SettingsParsedNumber {
     bool ok = false;
     int value = 0;
 };
 
 static SettingsParsedNumber SettingsParseNumber(std::wstring_view text, SettingsNumberRange range,
-                                                wchar_t separator) {
+                                                const I18nNumberFormat& format) {
     auto space = [](wchar_t c) { return iswspace(c) || c == 0x00A0 || c == 0x202F; };
     while (!text.empty() && space(text.front())) text.remove_prefix(1);
     while (!text.empty() && space(text.back())) text.remove_suffix(1);
@@ -515,38 +517,38 @@ static SettingsParsedNumber SettingsParseNumber(std::wstring_view text, Settings
         negative = text.front() == L'-';
         text.remove_prefix(1);
     }
-    bool spaceSeparator = space(separator);
+    std::wstring_view separator = format.Group();
+    bool spaceSeparator = separator.size() == 1 && space(separator[0]);
+    // Digits, and each group's length from the left.
     long long value = 0;
-    int digits = 0, group = 0;
-    bool grouped = false;
-    for (wchar_t c : text) {
+    std::vector<size_t> groups{0};
+    for (size_t at = 0; at < text.size();) {
+        wchar_t c = text[at];
         if (c >= L'0' && c <= L'9') {
             value = value * 10 + (c - L'0');
             if (value > INT_MAX) return {};
-            digits++;
-            group++;
+            groups.back()++;
+            at++;
             continue;
         }
-        bool isSeparator = c == separator || (spaceSeparator && space(c));
-        // The first group has 1-3 digits; every later one exactly three.
-        if (!isSeparator || group == 0 || group > 3 || (grouped && group != 3)) return {};
-        grouped = true;
-        group = 0;
+        size_t length = spaceSeparator && space(c)                                   ? 1 :
+                        !separator.empty() && text.substr(at).starts_with(separator) ? separator.size() : 0;
+        if (!length || !groups.back()) return {};
+        groups.push_back(0);
+        at += length;
     }
-    if (!digits || (grouped && group != 3)) return {};
+    if (!groups.back()) return {};
+    // Grouped: counted from the right, each group but the leftmost has its size; the leftmost at
+    // most its size, or any length once the sizes end without repeating.
+    for (size_t k = 0; groups.size() > 1 && k < groups.size(); k++) {
+        size_t length = groups[groups.size() - 1 - k];
+        size_t size = k < format.count             ? format.sizes[k] :
+                      format.repeat && format.count ? format.sizes[format.count - 1] : 0;
+        bool leftmost = k + 1 == groups.size();
+        if (!(size ? (leftmost ? length <= size : length == size) : leftmost)) return {};
+    }
     long long signedValue = negative ? -value : value;
     return {true, int(std::clamp<long long>(signedValue, range.minimum, range.maximum))};
-}
-
-// Digit grouping by threes with `separator`.
-static std::wstring SettingsFormatNumber(int value, wchar_t separator) {
-    std::wstring digits = std::to_wstring(value < 0 ? -(long long)value : (long long)value);
-    std::wstring text;
-    for (size_t i = 0; i < digits.size(); i++) {
-        if (i && (digits.size() - i) % 3 == 0) text += separator;
-        text += digits[i];
-    }
-    return value < 0 ? L"-" + text : text;
 }
 
 // Account fields ---------------------------------------------------------------------------------
@@ -631,7 +633,6 @@ struct SettingsStatus {
     std::vector<SettingsSideTaskbar> sideTaskbars;              // Display order
     SettingsRecording recording = SettingsRecording::Recording;
     std::wstring historyFolder;
-    wchar_t groupSeparator = L',';
     // The primary taskbar's thickness (its height across the screen, its width on a side), in DIPs
     // at its own DPI; 0 if unknown
     double taskbarHeight = 0;
@@ -738,6 +739,7 @@ struct SettingsDraft {
     bool valid = true;   // `raw` parses
     bool failed = false; // Its last save failed; not retried until the user acts on the field
     SettingsDraftError error = SettingsDraftError::None;  // Shown with the control
+    I18nNumberFormat numbers;  // The regional number format a number box's `raw` is in
 };
 
 static std::wstring SettingsDraftErrorText(const I18nLocale& locale, const SettingsDraft& draft) {
@@ -951,13 +953,16 @@ struct SettingsEdits {
         return SettingsDraftError::None;
     }
 
-    // A text box's text (every change). Number text that doesn't parse keeps the last valid
-    // value; a label is checked against the other accounts.
-    void SetText(uint64_t key, SettingsField field, std::wstring text) {
+    // A text box's text (every change). Number text parses in the regional number format the box
+    // showed it in: the frame's (`locale`) as typing starts, kept while the text is its draft's,
+    // so a regional change meanwhile doesn't reject what the box shows. Text that doesn't parse
+    // keeps the last valid value. A label is checked against the other accounts.
+    void SetText(uint64_t key, SettingsField field, std::wstring text, const I18nLocale& locale = {}) {
         std::optional<SettingsNumberRange> range = SettingsFieldRange(field);
         bool free = field == SettingsField::AccountLabel || field == SettingsField::AccountTileText;
         if (!range && !free) return;
         SettingsDraft& draft = Touch(key, field);
+        if (!draft.text) draft.numbers = locale.Numbers();
         draft.text = true;
         draft.raw = std::move(text);
         if (free) {
@@ -965,20 +970,22 @@ struct SettingsEdits {
                           LabelError(key, SettingsTrimLabel(draft.raw)) == SettingsDraftError::None;
             return;
         }
-        SettingsParsedNumber parsed = SettingsParseNumber(draft.raw, *range, baseline.status.groupSeparator);
+        SettingsParsedNumber parsed = SettingsParseNumber(draft.raw, *range, draft.numbers);
         draft.valid = parsed.ok;
         if (parsed.ok) draft.value = parsed.value;
     }
 
-    // Spin buttons and arrow keys: the last valid value stepped, as text. Returns the draft's
-    // revision for the debounced commit (CommitStep); 0 for fields without a range.
-    uint64_t Step(uint64_t key, SettingsField field, int delta) {
+    // Spin buttons and arrow keys: the last valid value stepped, as text in the frame's regional
+    // number format. Returns the draft's revision for the debounced commit (CommitStep); 0 for
+    // fields without a range.
+    uint64_t Step(uint64_t key, SettingsField field, int delta, const I18nLocale& locale = {}) {
         std::optional<SettingsNumberRange> range = SettingsFieldRange(field);
         if (!range) return 0;
         SettingsDraft& draft = Touch(key, field);
         draft.value = std::clamp(draft.value + delta, range->minimum, range->maximum);
         draft.text = true;
-        draft.raw = SettingsFormatNumber(draft.value, baseline.status.groupSeparator);
+        draft.numbers = locale.Numbers();
+        draft.raw = I18nInteger(locale, draft.value);
         draft.valid = true;
         return draft.revision;
     }

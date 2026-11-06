@@ -192,14 +192,14 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Exporta todas las métricas sin procesar de la cuenta seleccionada, o de todas las cuentas en Todas las "
      L"cuentas. Usa el intervalo de fechas seleccionado, más los 7 días anteriores al comparar semanas. Marcas de "
      L"tiempo en UTC; ID de texto; sin etiquetas."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all accounts) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{Se exportó {count} fila de métricas} many{Se exportaron {count} de filas de métricas} "
-     L"other{Se exportaron {count} filas de métricas}} (todas las cuentas) en {path}. Sin etiquetas; horas en UTC."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+     L"{rows, plural, one{Se exportó # fila de métricas} many{Se exportaron # de filas de métricas} "
+     L"other{Se exportaron # filas de métricas}} (todas las cuentas) en {path}. Sin etiquetas; horas en UTC."},
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{Se exportó {count} fila de métricas} many{Se exportaron {count} de filas de métricas} "
-     L"other{Se exportaron {count} filas de métricas}} (cuenta seleccionada) en {path}. Sin etiquetas; horas en UTC."},
+     L"{rows, plural, one{Se exportó # fila de métricas} many{Se exportaron # de filas de métricas} "
+     L"other{Se exportaron # filas de métricas}} (cuenta seleccionada) en {path}. Sin etiquetas; horas en UTC."},
     {L"", L"Free to use, modify and share.", L"Libre para usar, modificar y compartir."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -879,8 +879,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"history-card", L"{title} — details only", L"{title} — solo detalles"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
-    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
-     L"{rows, plural, one{Exportando {count} fila…} many{Exportando {count} de filas…} other{Exportando {count} "
+    {L"history-export", L"{rows, plural, one{Exporting # rows…} other{Exporting # rows…}}",
+     L"{rows, plural, one{Exportando # fila…} many{Exportando # de filas…} other{Exportando # "
      L"filas…}}"},
     {L"history-menu", L"About these charts", L"Acerca de estos gráficos"},
     {L"history-menu", L"Clear all history…", L"Borrar todo el historial…"},

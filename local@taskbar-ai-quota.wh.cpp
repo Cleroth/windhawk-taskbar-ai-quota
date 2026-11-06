@@ -749,13 +749,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Exportiert alle Messgrößen als Rohdaten für das ausgewählte Konto oder, unter „Alle Konten“, für jedes Konto. "
      L"Verwendet den ausgewählten Zeitraum, beim Wochenvergleich zuzüglich der 7 Tage davor. UTC-Zeitstempel; IDs "
      L"als Text; keine Bezeichnungen."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all accounts) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{{count} Messwertzeile} other{{count} Messwertzeilen}} (alle Konten) nach {path} "
+     L"{rows, plural, one{# Messwertzeile} other{# Messwertzeilen}} (alle Konten) nach {path} "
      L"exportiert. Ohne Bezeichnungen; Zeiten in UTC."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{{count} Messwertzeile} other{{count} Messwertzeilen}} (ausgewähltes Konto) nach {path} "
+     L"{rows, plural, one{# Messwertzeile} other{# Messwertzeilen}} (ausgewähltes Konto) nach {path} "
      L"exportiert. Ohne Bezeichnungen; Zeiten in UTC."},
     {L"", L"Free to use, modify and share.", L"Frei nutzbar, veränderbar und weitergebbar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
@@ -1450,8 +1450,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"history-card", L"{title} — details only", L"{title} – nur Details"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
-    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
-     L"{rows, plural, one{{count} Zeile wird exportiert…} other{{count} Zeilen werden exportiert…}}"},
+    {L"history-export", L"{rows, plural, one{Exporting # rows…} other{Exporting # rows…}}",
+     L"{rows, plural, one{# Zeile wird exportiert…} other{# Zeilen werden exportiert…}}"},
     {L"history-menu", L"About these charts", L"Über diese Diagramme"},
     {L"history-menu", L"Clear all history…", L"Gesamten Verlauf löschen…"},
     {L"history-menu", L"Open history folder", L"Verlaufsordner öffnen"},
@@ -1990,14 +1990,14 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Exporta todas las métricas sin procesar de la cuenta seleccionada, o de todas las cuentas en Todas las "
      L"cuentas. Usa el intervalo de fechas seleccionado, más los 7 días anteriores al comparar semanas. Marcas de "
      L"tiempo en UTC; ID de texto; sin etiquetas."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all accounts) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{Se exportó {count} fila de métricas} many{Se exportaron {count} de filas de métricas} "
-     L"other{Se exportaron {count} filas de métricas}} (todas las cuentas) en {path}. Sin etiquetas; horas en UTC."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+     L"{rows, plural, one{Se exportó # fila de métricas} many{Se exportaron # de filas de métricas} "
+     L"other{Se exportaron # filas de métricas}} (todas las cuentas) en {path}. Sin etiquetas; horas en UTC."},
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{Se exportó {count} fila de métricas} many{Se exportaron {count} de filas de métricas} "
-     L"other{Se exportaron {count} filas de métricas}} (cuenta seleccionada) en {path}. Sin etiquetas; horas en UTC."},
+     L"{rows, plural, one{Se exportó # fila de métricas} many{Se exportaron # de filas de métricas} "
+     L"other{Se exportaron # filas de métricas}} (cuenta seleccionada) en {path}. Sin etiquetas; horas en UTC."},
     {L"", L"Free to use, modify and share.", L"Libre para usar, modificar y compartir."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -2677,8 +2677,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"history-card", L"{title} — details only", L"{title} — solo detalles"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
-    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
-     L"{rows, plural, one{Exportando {count} fila…} many{Exportando {count} de filas…} other{Exportando {count} "
+    {L"history-export", L"{rows, plural, one{Exporting # rows…} other{Exporting # rows…}}",
+     L"{rows, plural, one{Exportando # fila…} many{Exportando # de filas…} other{Exportando # "
      L"filas…}}"},
     {L"history-menu", L"About these charts", L"Acerca de estos gráficos"},
     {L"history-menu", L"Clear all history…", L"Borrar todo el historial…"},
@@ -3233,15 +3233,15 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Exporte tous les indicateurs bruts du compte sélectionné, ou de chaque compte avec Tous les comptes. Utilise "
      L"la période sélectionnée, plus les 7\u00A0jours précédents en comparaison de semaines. Horodatages UTC\u00A0; "
      L"ID sous forme de texte\u00A0; sans libellés."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all accounts) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{{count} ligne d’indicateur exportée} many{{count} de lignes d’indicateurs exportées} "
-     L"other{{count} lignes d’indicateurs exportées}} (tous les comptes) vers {path}. Libellés omis\u00A0; heures en "
+     L"{rows, plural, one{# ligne d’indicateur exportée} many{# de lignes d’indicateurs exportées} "
+     L"other{# lignes d’indicateurs exportées}} (tous les comptes) vers {path}. Libellés omis\u00A0; heures en "
      L"UTC."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{{count} ligne d’indicateur exportée} many{{count} de lignes d’indicateurs exportées} "
-     L"other{{count} lignes d’indicateurs exportées}} (compte sélectionné) vers {path}. Libellés omis\u00A0; heures "
+     L"{rows, plural, one{# ligne d’indicateur exportée} many{# de lignes d’indicateurs exportées} "
+     L"other{# lignes d’indicateurs exportées}} (compte sélectionné) vers {path}. Libellés omis\u00A0; heures "
      L"en UTC."},
     {L"", L"Free to use, modify and share.", L"Libre d’utilisation, de modification et de partage."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
@@ -3932,9 +3932,9 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"history-card", L"{title} — details only", L"{title} — détails uniquement"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
-    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
-     L"{rows, plural, one{Exportation de {count} ligne…} many{Exportation de {count} de lignes…} other{Exportation "
-     L"de {count} lignes…}}"},
+    {L"history-export", L"{rows, plural, one{Exporting # rows…} other{Exporting # rows…}}",
+     L"{rows, plural, one{Exportation de # ligne…} many{Exportation de # de lignes…} other{Exportation "
+     L"de # lignes…}}"},
     {L"history-menu", L"About these charts", L"À propos de ces graphiques"},
     {L"history-menu", L"Clear all history…", L"Effacer tout l’historique…"},
     {L"history-menu", L"Open history folder", L"Ouvrir le dossier de l’historique"},
@@ -4448,12 +4448,12 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"date range, plus the preceding 7 days in week comparison. UTC timestamps; text IDs; no labels.",
      L"選択したアカウント (［すべてのアカウント］では全アカウント) の生のメーターをすべてエクスポートします。選択した期間を使い、週の比較中はその前の 7 日間も含めます。タイムスタンプは UTC、ID "
      L"はテキスト、ラベルは含みません。"},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all accounts) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, other{メーター {count} 行}} (すべてのアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+     L"{rows, plural, other{メーター # 行}} (すべてのアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, other{メーター {count} 行}} (選択したアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
+     L"{rows, plural, other{メーター # 行}} (選択したアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
     {L"", L"Free to use, modify and share.", L"自由に使用、変更、共有できます。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -5040,8 +5040,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"history-card", L"{title} — details only", L"{title} — 詳細のみ"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
-    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
-     L"{rows, plural, other{{count} 行をエクスポート中…}}"},
+    {L"history-export", L"{rows, plural, one{Exporting # rows…} other{Exporting # rows…}}",
+     L"{rows, plural, other{# 行をエクスポート中…}}"},
     {L"history-menu", L"About these charts", L"グラフについて"},
     {L"history-menu", L"Clear all history…", L"すべての履歴を消去…"},
     {L"history-menu", L"Open history folder", L"履歴フォルダーを開く"},
@@ -5558,15 +5558,15 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Exporta os dados brutos de todos os medidores da conta selecionada, ou de todas as contas em Todas as contas. "
      L"Usa o período selecionado, mais os 7 dias que o antecedem ao comparar semanas. Data e hora em UTC; IDs em "
      L"texto; sem rótulos."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all accounts) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{{count} linha de medidor exportada} many{{count} de linhas de medidores exportadas} "
-     L"other{{count} linhas de medidores exportadas}} (todas as contas) para {path}. Rótulos omitidos; horários em "
+     L"{rows, plural, one{# linha de medidor exportada} many{# de linhas de medidores exportadas} "
+     L"other{# linhas de medidores exportadas}} (todas as contas) para {path}. Rótulos omitidos; horários em "
      L"UTC."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{{count} linha de medidor exportada} many{{count} de linhas de medidores exportadas} "
-     L"other{{count} linhas de medidores exportadas}} (conta selecionada) para {path}. Rótulos omitidos; horários em "
+     L"{rows, plural, one{# linha de medidor exportada} many{# de linhas de medidores exportadas} "
+     L"other{# linhas de medidores exportadas}} (conta selecionada) para {path}. Rótulos omitidos; horários em "
      L"UTC."},
     {L"", L"Free to use, modify and share.", L"Livre para usar, modificar e compartilhar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
@@ -6230,8 +6230,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"history-card", L"{title} — details only", L"{title} — só detalhes"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
-    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
-     L"{rows, plural, one{Exportando {count} linha…} many{Exportando {count} de linhas…} other{Exportando {count} "
+    {L"history-export", L"{rows, plural, one{Exporting # rows…} other{Exporting # rows…}}",
+     L"{rows, plural, one{Exportando # linha…} many{Exportando # de linhas…} other{Exportando # "
      L"linhas…}}"},
     {L"history-menu", L"About these charts", L"Sobre estes gráficos"},
     {L"history-menu", L"Clear all history…", L"Limpar todo o histórico…"},
@@ -6769,15 +6769,15 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Экспорт всех исходных показателей выбранного аккаунта или, при выборе «Все аккаунты», всех аккаунтов. "
      L"Используется выбранный период, а при сравнении недель — ещё и 7 предшествующих дней. Время в UTC; текстовые "
      L"идентификаторы; без меток."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all accounts) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{Экспортирована {count} строка показателей} few{Экспортированы {count} строки показателей} "
-     L"many{Экспортировано {count} строк показателей} other{Экспортировано {count} строки показателей}} (все "
+     L"{rows, plural, one{Экспортирована # строка показателей} few{Экспортированы # строки показателей} "
+     L"many{Экспортировано # строк показателей} other{Экспортировано # строки показателей}} (все "
      L"аккаунты) в {path}. Метки не включены; время в UTC."},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, one{Экспортирована {count} строка показателей} few{Экспортированы {count} строки показателей} "
-     L"many{Экспортировано {count} строк показателей} other{Экспортировано {count} строки показателей}} (выбранный "
+     L"{rows, plural, one{Экспортирована # строка показателей} few{Экспортированы # строки показателей} "
+     L"many{Экспортировано # строк показателей} other{Экспортировано # строки показателей}} (выбранный "
      L"аккаунт) в {path}. Метки не включены; время в UTC."},
     {L"", L"Free to use, modify and share.", L"Можно свободно использовать, изменять и распространять."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
@@ -7438,9 +7438,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"history-card", L"{title} — details only", L"{title} — только сведения"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
-    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
-     L"{rows, plural, one{Экспорт: {count} строка…} few{Экспорт: {count} строки…} many{Экспорт: {count} строк…} "
-     L"other{Экспорт: {count} строки…}}"},
+    {L"history-export", L"{rows, plural, one{Exporting # rows…} other{Exporting # rows…}}",
+     L"{rows, plural, one{Экспорт: # строка…} few{Экспорт: # строки…} many{Экспорт: # строк…} "
+     L"other{Экспорт: # строки…}}"},
     {L"history-menu", L"About these charts", L"Об этих графиках"},
     {L"history-menu", L"Clear all history…", L"Очистить всю историю…"},
     {L"history-menu", L"Open history folder", L"Открыть папку истории"},
@@ -7936,12 +7936,12 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Export all raw meters for the selected account, or every account under All accounts. Uses the selected "
           L"date range, plus the preceding 7 days in week comparison. UTC timestamps; text IDs; no labels.",
      L"导出所选账户（在“所有账户”下为每个账户）的全部原始指标。使用所选日期范围，周对比时另含之前的 7 天。UTC 时间戳；文本形式的 ID；不含标签。"},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all accounts) to {path}. "
           L"Labels omitted; times UTC.",
-     L"已将 {rows, plural, other{{count} 行指标数据}}（所有账户）导出到 {path}。已省略标签；时间为 UTC。"},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+     L"已将 {rows, plural, other{# 行指标数据}}（所有账户）导出到 {path}。已省略标签；时间为 UTC。"},
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
-     L"已将 {rows, plural, other{{count} 行指标数据}}（所选账户）导出到 {path}。已省略标签；时间为 UTC。"},
+     L"已将 {rows, plural, other{# 行指标数据}}（所选账户）导出到 {path}。已省略标签；时间为 UTC。"},
     {L"", L"Free to use, modify and share.", L"可自由使用、修改和分享。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -8492,8 +8492,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"history-card", L"{title} — details only", L"{title} — 仅详情"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
-    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
-     L"{rows, plural, other{正在导出 {count} 行…}}"},
+    {L"history-export", L"{rows, plural, one{Exporting # rows…} other{Exporting # rows…}}",
+     L"{rows, plural, other{正在导出 # 行…}}"},
     {L"history-menu", L"About these charts", L"关于这些图表"},
     {L"history-menu", L"Clear all history…", L"清除全部历史记录…"},
     {L"history-menu", L"Open history folder", L"打开历史文件夹"},
@@ -8910,22 +8910,44 @@ static constexpr bool I18nTagEquals(std::wstring_view a, std::wstring_view b) {
     return languages.front();
 }
 
+// A regional number format, as Windows' Region settings give it (LOCALE_SDECIMAL,
+// LOCALE_STHOUSAND, LOCALE_SGROUPING), in fixed arrays so the localization context stays cheap to
+// copy. Default: en-US (1,234.5). i18n/numbers.h reads Windows' strings into one and writes
+// numbers in it.
+struct I18nNumberFormat {
+    // Each at most 3 characters, as Windows allows, null-padded
+    std::array<wchar_t, 4> decimal{L'.'};
+    std::array<wchar_t, 4> group{L','};
+    // Digit group sizes from the decimal separator leftwards, `count` of them, the last repeated
+    // when `repeat` (3;2;0: 12,34,56,789); none: no grouping
+    std::array<uint8_t, 8> sizes{3};
+    uint8_t count = 1;
+    bool repeat = true;
+
+    constexpr std::wstring_view Decimal() const { return decimal.data(); }
+    constexpr std::wstring_view Group() const { return group.data(); }
+    constexpr bool operator==(const I18nNumberFormat&) const = default;
+};
+
 // The localization context: one immutable value per frame, notification or dialog that pure code
-// receives through its inputs, never from a global. Regional formats join it later. Default:
-// English.
+// receives through its inputs, never from a global: the language, and the regional number format
+// numbers show in whatever the language. Default: English with en-US numbers.
 class I18nLocale {
 public:
     constexpr I18nLocale() = default;
-    constexpr explicit I18nLocale(const I18nLanguage& language) : language_(&language) {}
+    constexpr explicit I18nLocale(const I18nLanguage& language, const I18nNumberFormat& numbers = {})
+        : language_(&language), numbers_(numbers) {}
 
     constexpr const I18nLanguage& Language() const { return *language_; }
     // DirectWrite's locale and XAML's Language.
     constexpr std::wstring_view LocaleName() const { return language_->localeName; }
+    constexpr const I18nNumberFormat& Numbers() const { return numbers_; }
 
     constexpr bool operator==(const I18nLocale&) const = default;
 
 private:
     const I18nLanguage* language_ = &kI18nLanguages[0];
+    I18nNumberFormat numbers_{};
 };
 
 // src/i18n/pseudo.h
@@ -9027,11 +9049,13 @@ struct I18nRun {
 };
 
 // A named argument: plain text (inserted as is, never parsed), an integer of any type (a plural's
-// selector; decimal digits, '-' when negative, no grouping), or trusted runs that keep their bold
-// and links. It refers to the caller's value, so build it in the call.
+// selector; decimal digits, '-' when negative, no grouping), an integer shown as given text (a
+// plural selects by the number, it and '#' show the text: a regional form, I18nInteger), or
+// trusted runs that keep their bold and links. It refers to the caller's value, so build it in the
+// call.
 struct I18nArg {
     std::wstring_view name;
-    std::wstring_view text{};
+    std::wstring_view text{};  // A number's: empty shows its digits
     unsigned long long magnitude = 0;
     bool negative = false;
     bool isNumber = false;
@@ -9040,7 +9064,8 @@ struct I18nArg {
     I18nArg(std::wstring_view name, std::wstring_view text) : name(name), text(text) {}
     template <class T>
         requires std::is_integral_v<T>
-    I18nArg(std::wstring_view name, T number) : name(name), magnitude((unsigned long long)number), isNumber(true) {
+    I18nArg(std::wstring_view name, T number, std::wstring_view shown = {})
+        : name(name), text(shown), magnitude((unsigned long long)number), isNumber(true) {
         if constexpr (std::is_signed_v<T>) {
             negative = number < 0;
             if (negative) magnitude = 0 - magnitude;
@@ -9077,7 +9102,7 @@ struct I18nFormatSink {
                 for (const I18nRun& run : *arg.runs) {
                     Emit(run.text, bold || run.bold, run.link.empty() ? link : std::wstring_view(run.link));
                 }
-            } else if (arg.isNumber) {
+            } else if (arg.isNumber && arg.text.empty()) {
                 Emit((arg.negative ? L"-" : L"") + std::to_wstring(arg.magnitude), bold, link);
             } else {
                 Emit(arg.text, bold, link);
@@ -9181,6 +9206,110 @@ struct I18nFormatSink {
         rest = I18nRuns(locale, TrCtx(L"list-middle", L"{a}, {b}"), {{L"a", items[i]}, {L"b", rest}});
     }
     return I18nRuns(locale, TrCtx(L"list-start", L"{a}, {b}"), {{L"a", items[0]}, {L"b", rest}});
+}
+
+// src/i18n/numbers.h
+// Numbers in a regional format (I18nLocale::Numbers): Windows' strings read into one, and numbers
+// written in it. Pure. Digits stay ASCII and the minus sign '-'; percent and currency signs,
+// currency codes and K/M/G/T suffixes are the callers' and the same in every format. Text that is
+// read back (CSV, logs, storage, protocol) never comes from here.
+
+// API entry points carry [[maybe_unused]]: a build or test target may use only some of them.
+
+// A format from Windows' LOCALE_SDECIMAL, LOCALE_STHOUSAND and LOCALE_SGROUPING strings. Grouping
+// lists group sizes from the decimal separator leftwards, a last 0 repeating the one before:
+// "3;0" (en-US: 1,234,567), "3;2;0" (hi-IN: 12,34,567), "3" (1234,567), "0" (none). A part that
+// is empty, longer than Windows allows or malformed keeps en-US's.
+[[maybe_unused]] static I18nNumberFormat I18nNumberFormatFrom(std::wstring_view decimal, std::wstring_view group,
+                                                              std::wstring_view grouping) {
+    I18nNumberFormat format;
+    auto copy = [](std::wstring_view text, std::array<wchar_t, 4>& to) {
+        if (text.empty() || text.size() >= to.size()) return;
+        to = {};
+        std::copy(text.begin(), text.end(), to.begin());
+    };
+    copy(decimal, format.decimal);
+    copy(group, format.group);
+    // Single digits between semicolons; a 0 only alone or last after another size.
+    std::array<uint8_t, 8> sizes{};
+    size_t count = 0;
+    bool valid = !grouping.empty();
+    for (size_t at = 0; valid && at <= grouping.size();) {
+        size_t end = std::min(grouping.find(L';', at), grouping.size());
+        std::wstring_view entry = grouping.substr(at, end - at);
+        valid = entry.size() == 1 && entry[0] >= L'0' && entry[0] <= L'9' && count < sizes.size();
+        if (valid) sizes[count++] = uint8_t(entry[0] - L'0');
+        at = end + 1;
+    }
+    bool repeat = valid && count > 1 && sizes[count - 1] == 0;
+    if (repeat) count--;
+    if (valid && count == 1 && sizes[0] == 0) {
+        count = 0;
+        repeat = false;
+    }
+    if (!valid || std::find(sizes.begin(), sizes.begin() + count, uint8_t(0)) != sizes.begin() + count) {
+        return format;
+    }
+    format.sizes = sizes;
+    format.count = uint8_t(count);
+    format.repeat = repeat;
+    return format;
+}
+
+// A number as to_chars (and printf in the C locale) writes it, an optional '-', digits, then
+// optionally '.' and digits, in the locale's format: its decimal separator, and its digit groups
+// when `grouped`.
+[[maybe_unused]] static std::wstring I18nDigits(const I18nLocale& locale, std::string_view ascii, bool grouped) {
+    const I18nNumberFormat& format = locale.Numbers();
+    size_t point = std::min(ascii.find('.'), ascii.size()), first = ascii.starts_with('-') ? 1 : 0;
+    // Whether a group ends `digits` places left of the decimal separator.
+    auto boundary = [&](size_t digits) {
+        size_t at = 0;
+        for (size_t i = 0; i < format.count; i++) {
+            at += format.sizes[i];
+            if (at >= digits) return at == digits;
+        }
+        size_t last = format.count ? format.sizes[format.count - 1] : 0;
+        return format.repeat && last && (digits - at) % last == 0;
+    };
+    std::wstring text;
+    for (size_t i = 0; i < ascii.size(); i++) {
+        if (i == point) {
+            text += format.Decimal();
+            continue;
+        }
+        if (grouped && i > first && i < point && boundary(point - i)) text += format.Group();
+        text += wchar_t(ascii[i]);
+    }
+    return text;
+}
+
+// `value` rounded to `decimals` places, its digits never grouped: 1234.50, de-DE 1234,50.
+[[maybe_unused]] static std::wstring I18nFixed(const I18nLocale& locale, double value, int decimals) {
+    char text[400];
+    auto [end, error] = std::to_chars(text, std::end(text), value, std::chars_format::fixed, decimals);
+    return error == std::errc{} ? I18nDigits(locale, {text, end}, false) : L"?";
+}
+
+// As I18nFixed, without trailing decimal zeros, nor the decimal separator they leave: 12.5, 166.
+[[maybe_unused]] static std::wstring I18nTrimmed(const I18nLocale& locale, double value, int decimals) {
+    char text[400];
+    auto [end, error] = std::to_chars(text, std::end(text), value, std::chars_format::fixed, decimals);
+    if (error != std::errc{}) return L"?";
+    std::string_view printed(text, end);
+    if (printed.find('.') != std::string_view::npos) {
+        printed.remove_suffix(printed.size() - 1 - printed.find_last_not_of('0'));
+        if (printed.ends_with('.')) printed.remove_suffix(1);
+    }
+    return I18nDigits(locale, printed, false);
+}
+
+// A whole number in the format's digit groups: 1,234,567, de-DE 1.234.567, hi-IN 12,34,567.
+template <class T>
+    requires std::is_integral_v<T>
+static std::wstring I18nInteger(const I18nLocale& locale, T value) {
+    char text[24];
+    return I18nDigits(locale, {text, std::to_chars(text, std::end(text), value).ptr}, true);
 }
 
 // src/core/model.h
@@ -10342,7 +10471,8 @@ struct QuotaUiInstance {
     ULONGLONG buildSettingsGeneration = 0;
     bool buildVisualTestMode = false;
     // The language current at build, which the grid's updates, menus and flyouts keep: a grid
-    // built in another one is never reused.
+    // built in another one is never reused. Each update refreshes its regional number format
+    // (UpdateQuotaUi).
     I18nLocale buildLocale;
     BarLayout buildBarLayout = BarLayout::Stacked;
     // Usage graphs built to swap spans on hover, and the account whose charts the last update
@@ -10516,9 +10646,9 @@ static void RefreshQuotaByIdentity(uint64_t identityHash) {
 }
 
 // src/core/language.h
-// The process's current UI language and this Windows user's language preference. Native: pure
-// code never reads these; native code snapshots one I18nLocale per frame, notification or dialog
-// and passes it down (i18n/AGENTS.md).
+// The process's current UI language, this Windows user's language preference and regional number
+// format. Native: pure code never reads these; native code snapshots one I18nLocale per frame,
+// notification or dialog (CurrentLocale) and passes it down (i18n/AGENTS.md).
 
 // The current language: an immutable registry entry (i18n/languages.h) any thread reads without
 // locks; text built from it is cached under its locale. Writers hold g_configEditMutex (mod init
@@ -10575,6 +10705,22 @@ static const I18nLanguage& ResolveLanguage(const std::wstring& tag) {
 
 static void SetCurrentLanguage(const I18nLanguage& language) {
     g_language.store(&language, std::memory_order_release);
+}
+
+// This Windows user's regional number format (their Region settings), read anew each time, so a
+// change shows from the next snapshot; a part Windows can't give stays en-US's.
+static I18nNumberFormat ReadNumberFormat() {
+    wchar_t decimal[8] = {}, group[8] = {}, grouping[16] = {};
+    GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SDECIMAL, decimal, ARRAYSIZE(decimal));
+    GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STHOUSAND, group, ARRAYSIZE(group));
+    GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SGROUPING, grouping, ARRAYSIZE(grouping));
+    return I18nNumberFormatFrom(decimal, group, grouping);
+}
+
+// The localization context of a frame, notification or dialog: the current language with this
+// user's regional number format.
+static I18nLocale CurrentLocale() {
+    return I18nLocale(*g_language.load(std::memory_order_acquire), ReadNumberFormat());
 }
 
 // src/core/helpers.h
@@ -11775,7 +11921,7 @@ struct LoginDialogState {
     // Inputs
     // The window's language: the current one as its sign-in builds it, kept until it closes (its
     // text, the loopback's page).
-    I18nLocale locale{*g_language.load(std::memory_order_acquire)};
+    I18nLocale locale = CurrentLocale();
     std::wstring url;  // The authorize link, or the device flow's verification page.
     // Loopback flow when set, answered on `callbackRoute`; device flow with `poll`; otherwise a
     // code is pasted, masked when `secret`.
@@ -16600,7 +16746,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         // Text, toast and balloon allocate; a failure skips only this notification
                         // (nothing above the fetch loop catches).
                         try {
-                            const I18nLocale locale(*g_language.load(std::memory_order_acquire));
+                            const I18nLocale locale = CurrentLocale();
                             auto [title, body] = ThresholdNotificationText(
                                 locale, publishedAccounts[i].provider, publishedResults[i], w,
                                 (w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs ?
@@ -17723,21 +17869,20 @@ static double RelativeLuminance(uint32_t argb) {
 }
 
 // An extra usage or credits amount on the taskbar: whole credits or dollars to the cent below
-// 1,000, then three significant digits with k or M (1.23k, 62.5k, 111k, $1.5k). The same in every
+// 1,000, then three significant digits with k or M (1.23k, 62.5k, 111k, $1.5k), in the regional
+// decimal separator ($12,34 in de-DE), never grouped. The sign and suffixes are the same in every
 // language, like percentages.
-static std::wstring TaskbarAmountText(double amount, bool dollars) {
-    wchar_t text[32];
+static std::wstring TaskbarAmountText(const I18nLocale& locale, double amount, bool dollars) {
     PCWSTR sign = dollars ? L"$" : L"";  // i18n-en
-    if (amount < (dollars ? 999.995 : 999.5)) {
-        swprintf(text, ARRAYSIZE(text), dollars ? L"$%.2f" : L"%.0f", amount);
-    } else {
-        // Amounts that round up into the next suffix read as 1 of it.
-        bool millions = amount >= 999.5e3;
-        double scaled = std::max(amount / (millions ? 1e6 : 1e3), 1.0);
-        swprintf(text, ARRAYSIZE(text), scaled < 999.5 ? L"%s%.3g%s" : L"%s%.0f%s", sign, scaled,
-                 millions ? L"M" : L"k");  // i18n-en
-    }
-    return text;
+    if (amount < (dollars ? 999.995 : 999.5)) return sign + I18nFixed(locale, amount, dollars ? 2 : 0);
+    // Amounts that round up into the next suffix read as 1 of it; from 1,000 of it, whole.
+    bool millions = amount >= 999.5e3;
+    double scaled = std::max(amount / (millions ? 1e6 : 1e3), 1.0);
+    char text[400];
+    auto [end, error] = scaled < 999.5 ? std::to_chars(text, std::end(text), scaled, std::chars_format::general, 3) :
+                                         std::to_chars(text, std::end(text), scaled, std::chars_format::fixed, 0);
+    std::wstring number = error == std::errc{} ? I18nDigits(locale, {text, end}, false) : L"?";
+    return sign + number + (millions ? L"M" : L"k");  // i18n-en
 }
 
 // A bar fill's highlight: the usage color `lift` lighter in OKLCH lightness with the same hue and
@@ -18932,9 +19077,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 double amount = remainingMode && data.extraLimitAmount >= 0 ?
                                     data.extraLimitAmount - data.extraUsedAmount : data.extraUsedAmount;
                 dollars = account.provider == L"anthropic";
-                meters.sparkExtraText = TaskbarAmountText(std::max(amount, 0.0), dollars);
+                meters.sparkExtraText = TaskbarAmountText(display.locale, std::max(amount, 0.0), dollars);
             } else {
-                meters.sparkExtraText = TaskbarAmountText(data.creditsBalance, false);
+                meters.sparkExtraText = TaskbarAmountText(display.locale, data.creditsBalance, false);
             }
             if (!dollars) meters.sparkExtraKey = QuotaKey(display.locale, account.provider, kExtraUsageBar);
             meters.sparkExtraColor = extra.pct >= 0 || meters.stale ?
@@ -19103,7 +19248,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                     // Dollars for Anthropic, credits otherwise (whole ones on the taskbar).
                     double amount = remainingMode ? data.extraLimitAmount - data.extraUsedAmount :
                                                     data.extraUsedAmount;
-                    m.text = TaskbarAmountText(std::max(amount, 0.0), account.provider == L"anthropic");
+                    m.text = TaskbarAmountText(display.locale, std::max(amount, 0.0),
+                                               account.provider == L"anthropic");
                 } else {
                     wchar_t text[24];
                     swprintf(text, ARRAYSIZE(text), L"%.0f%%", displayed);
@@ -19678,13 +19824,13 @@ static void UpdateHoverSpans(QuotaUiInstance& state) {
 // above all). English leaves the language Explorer's tree passes down, so labels and provider text
 // in the user's own language render as they always have.
 static void SetXamlLanguage(FrameworkElement const& element, I18nLocale const& locale) {
-    if (locale != I18nLocale()) element.Language(winrt::hstring(locale.LocaleName()));
+    if (&locale.Language() != &kI18nLanguages[0]) element.Language(winrt::hstring(locale.LocaleName()));
 }
 
 // A tooltip in the frame's language: a ToolTip of its own carries it; English keeps the plain text
 // value, as SetXamlLanguage leaves it.
 static void SetXamlToolTip(DependencyObject const& element, std::wstring const& text, I18nLocale const& locale) {
-    if (locale == I18nLocale()) {
+    if (&locale.Language() == &kI18nLanguages[0]) {
         ToolTipService::SetToolTip(element, winrt::box_value(text));
         return;
     }
@@ -21580,16 +21726,9 @@ static void UpdateAccountFlyout(
                              (d.creditsUnlimited || d.creditsBalance >= 0 || d.hasCredits);
         // GitHub Copilot's monthly allowance, in its unit, which also names its row: a percentage
         // of a finite allowance, else an unlimited pooled one without. Credits are fractional:
-        // two decimals at most, trailing zeros trimmed.
+        // two decimals at most, trailing zeros trimmed, in the regional decimal separator.
         std::wstring copilotUnit = CopilotUnitName(locale, d.copilotUnit);
-        auto copilotAmount = [](double amount) {
-            wchar_t number[64];
-            swprintf(number, ARRAYSIZE(number), L"%.2f", amount);
-            std::wstring trimmed = number;
-            trimmed.erase(trimmed.find_last_not_of(L'0') + 1);
-            if (trimmed.ends_with(L'.')) trimmed.pop_back();
-            return trimmed;
-        };
+        auto copilotAmount = [&](double amount) { return I18nTrimmed(locale, amount, 2); };
         // Past a finite allowance, or beside a pooled one, the additional usage on a line of its own.
         bool overage = copilot && d.copilotOverage > 0;
         std::wstring overageAmount = overage ? copilotAmount(d.copilotOverage) : L"";
@@ -21641,9 +21780,8 @@ static void UpdateAccountFlyout(
 
             if (r == kFlyoutExtraRow && creditsAmount) {
                 bool balance = !d.creditsUnlimited && d.creditsBalance >= 0;
-                if (balance) swprintf(text, ARRAYSIZE(text), L"%.0f", d.creditsBalance);
                 row.number.Text(d.creditsUnlimited ? I18nText(locale, TrCtx(L"quota-value", L"Unlimited")) :
-                                balance            ? std::wstring(text) :
+                                balance            ? I18nFixed(locale, d.creditsBalance, 0) :
                                                      I18nText(locale, TrCtx(L"quota-value", L"Available")));
                 row.unit.Text(balance ? I18nText(locale, TrCtx(L"quota-unit", L"left")) : L"");
                 row.unit.Foreground(theme.mutedText);
@@ -21861,18 +21999,16 @@ static void UpdateAccountFlyout(
                                    {L"overage", overageAmount}});
             } else if (r == kFlyoutExtraRow && d.extraLimitAmount >= 0) {
                 // Credits state the balance so the text reads the same in both bar modes. Amounts are
-                // whole credits, or US dollars to the cent, in every language.
-                wchar_t limit[ARRAYSIZE(text)];
+                // whole credits, or US dollars to the cent in the regional decimal separator, in
+                // every language; never grouped.
                 if (openAi) {
-                    swprintf(text, ARRAYSIZE(text), L"%.0f", d.extraLimitAmount - d.extraUsedAmount);
-                    swprintf(limit, ARRAYSIZE(limit), L"%.0f", d.extraLimitAmount);
                     amount = I18nText(locale, TrCtx(L"quota-amount", L"{left} left of {limit} credits"),
-                                      {{L"left", text}, {L"limit", limit}});
+                                      {{L"left", I18nFixed(locale, d.extraLimitAmount - d.extraUsedAmount, 0)},
+                                       {L"limit", I18nFixed(locale, d.extraLimitAmount, 0)}});
                 } else {
-                    swprintf(text, ARRAYSIZE(text), L"$%.2f", d.extraUsedAmount);
-                    swprintf(limit, ARRAYSIZE(limit), L"$%.2f", d.extraLimitAmount);
                     amount = I18nText(locale, TrCtx(L"quota-amount", L"{used} of {limit} spent"),
-                                      {{L"used", text}, {L"limit", limit}});
+                                      {{L"used", L"$" + I18nFixed(locale, d.extraUsedAmount, 2)},
+                                       {L"limit", L"$" + I18nFixed(locale, d.extraLimitAmount, 2)}});
                 }
             }
             row.amount.Text(amount);
@@ -22417,8 +22553,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
     try {
         bool visualTestMode = g_visualTestMode.load(std::memory_order_acquire);
         // The grid's language for its lifetime: its updates, menus and flyouts too. A switch
-        // rebuilds it.
-        const I18nLocale locale(*g_language.load(std::memory_order_acquire));
+        // rebuilds it; its updates refresh the regional number format.
+        const I18nLocale locale = CurrentLocale();
         state.buildLocale = locale;
         Settings settings;
         {
@@ -23302,7 +23438,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     }
     std::vector<AccountConfig>& accounts = settings.accounts;
 
-    // In the grid's language, which its reserved widths and labels were built in.
+    // In the grid's language, which its reserved widths and labels were built in, with the
+    // current regional number format: no width measured at build holds a separator, so a change
+    // shows from this update on (the flyout's too).
+    state.buildLocale = I18nLocale(state.buildLocale.Language(), ReadNumberFormat());
     MeterDisplay display = MeterDisplayFor(settings, state.buildLocale, NowUnixMs(), state.rasterizationScale,
                                            state.taskbarHeight, state.sideWidth);
     ULONGLONG now = display.now;
@@ -24495,9 +24634,11 @@ static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARA
         // Brand-colored logos give way to the text color in high contrast: rebuild them.
         StartRetryInject(true);
     } else if (message == WM_SETTINGCHANGE && lParam && !g_unloading &&
-               wcscmp(reinterpret_cast<PCWSTR>(lParam), L"ImmersiveColorSet") == 0) {
-        // Light/dark switch: once the taskbar has handled it, repaint the tiles' theme colors.
-        // Window procedures run on the window's thread, which owns this taskbar's XAML.
+               (wcscmp(reinterpret_cast<PCWSTR>(lParam), L"ImmersiveColorSet") == 0 ||
+                wcscmp(reinterpret_cast<PCWSTR>(lParam), L"intl") == 0)) {
+        // Light/dark switch or a regional format change: once the taskbar has handled it, repaint
+        // the tiles' theme colors and numbers. Window procedures run on the window's thread,
+        // which owns this taskbar's XAML.
         LRESULT result = DefSubclassProc(hWnd, message, wParam, lParam);
         if (!g_unloading) {
             try {
@@ -29030,7 +29171,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
             // A theme change also rebuilds: built content may hold colors the client derived
-            // from the theme.
+            // from the theme. Then the client sees the change (a regional format's: its numbers).
             case WM_SETTINGCHANGE:
                 if (isMain && (wParam == SPI_SETHIGHCONTRAST ||
                                (lParam && wcscmp(reinterpret_cast<PCWSTR>(lParam),
@@ -29038,7 +29179,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     UiHostApplyTheme(host);
                     UiHostRequestRebuild(host, false);
                 }
-                handled = false;
+                handled = isMain && host.client->Message(host, message, wParam, lParam, result);
                 break;
             case WM_THEMECHANGED:
             case WM_SYSCOLORCHANGE:
@@ -31684,16 +31825,18 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
     }
 }
 
-// Number text: optional surrounding spaces and sign, digits with optional digit grouping
-// (`separator`; any space character when it is one), groups of three after the first.
-// Empty, malformed and overflowing text fails; out-of-range values clamp.
+// Number text as a number box shows it (I18nInteger) or as typed: optional surrounding spaces and
+// sign, then digits, plain or in the format's digit groups (its separator, any space character
+// where that is one: fr-FR's narrow no-break space typed as a space). Groups follow the format's
+// sizes from the right, the leftmost at most its size (en-US: 1-3 digits, then threes). Empty,
+// malformed and overflowing text fails; out-of-range values clamp.
 struct SettingsParsedNumber {
     bool ok = false;
     int value = 0;
 };
 
 static SettingsParsedNumber SettingsParseNumber(std::wstring_view text, SettingsNumberRange range,
-                                                wchar_t separator) {
+                                                const I18nNumberFormat& format) {
     auto space = [](wchar_t c) { return iswspace(c) || c == 0x00A0 || c == 0x202F; };
     while (!text.empty() && space(text.front())) text.remove_prefix(1);
     while (!text.empty() && space(text.back())) text.remove_suffix(1);
@@ -31702,38 +31845,38 @@ static SettingsParsedNumber SettingsParseNumber(std::wstring_view text, Settings
         negative = text.front() == L'-';
         text.remove_prefix(1);
     }
-    bool spaceSeparator = space(separator);
+    std::wstring_view separator = format.Group();
+    bool spaceSeparator = separator.size() == 1 && space(separator[0]);
+    // Digits, and each group's length from the left.
     long long value = 0;
-    int digits = 0, group = 0;
-    bool grouped = false;
-    for (wchar_t c : text) {
+    std::vector<size_t> groups{0};
+    for (size_t at = 0; at < text.size();) {
+        wchar_t c = text[at];
         if (c >= L'0' && c <= L'9') {
             value = value * 10 + (c - L'0');
             if (value > INT_MAX) return {};
-            digits++;
-            group++;
+            groups.back()++;
+            at++;
             continue;
         }
-        bool isSeparator = c == separator || (spaceSeparator && space(c));
-        // The first group has 1-3 digits; every later one exactly three.
-        if (!isSeparator || group == 0 || group > 3 || (grouped && group != 3)) return {};
-        grouped = true;
-        group = 0;
+        size_t length = spaceSeparator && space(c)                                   ? 1 :
+                        !separator.empty() && text.substr(at).starts_with(separator) ? separator.size() : 0;
+        if (!length || !groups.back()) return {};
+        groups.push_back(0);
+        at += length;
     }
-    if (!digits || (grouped && group != 3)) return {};
+    if (!groups.back()) return {};
+    // Grouped: counted from the right, each group but the leftmost has its size; the leftmost at
+    // most its size, or any length once the sizes end without repeating.
+    for (size_t k = 0; groups.size() > 1 && k < groups.size(); k++) {
+        size_t length = groups[groups.size() - 1 - k];
+        size_t size = k < format.count             ? format.sizes[k] :
+                      format.repeat && format.count ? format.sizes[format.count - 1] : 0;
+        bool leftmost = k + 1 == groups.size();
+        if (!(size ? (leftmost ? length <= size : length == size) : leftmost)) return {};
+    }
     long long signedValue = negative ? -value : value;
     return {true, int(std::clamp<long long>(signedValue, range.minimum, range.maximum))};
-}
-
-// Digit grouping by threes with `separator`.
-static std::wstring SettingsFormatNumber(int value, wchar_t separator) {
-    std::wstring digits = std::to_wstring(value < 0 ? -(long long)value : (long long)value);
-    std::wstring text;
-    for (size_t i = 0; i < digits.size(); i++) {
-        if (i && (digits.size() - i) % 3 == 0) text += separator;
-        text += digits[i];
-    }
-    return value < 0 ? L"-" + text : text;
 }
 
 // Account fields ---------------------------------------------------------------------------------
@@ -31818,7 +31961,6 @@ struct SettingsStatus {
     std::vector<SettingsSideTaskbar> sideTaskbars;              // Display order
     SettingsRecording recording = SettingsRecording::Recording;
     std::wstring historyFolder;
-    wchar_t groupSeparator = L',';
     // The primary taskbar's thickness (its height across the screen, its width on a side), in DIPs
     // at its own DPI; 0 if unknown
     double taskbarHeight = 0;
@@ -31925,6 +32067,7 @@ struct SettingsDraft {
     bool valid = true;   // `raw` parses
     bool failed = false; // Its last save failed; not retried until the user acts on the field
     SettingsDraftError error = SettingsDraftError::None;  // Shown with the control
+    I18nNumberFormat numbers;  // The regional number format a number box's `raw` is in
 };
 
 static std::wstring SettingsDraftErrorText(const I18nLocale& locale, const SettingsDraft& draft) {
@@ -32138,13 +32281,16 @@ struct SettingsEdits {
         return SettingsDraftError::None;
     }
 
-    // A text box's text (every change). Number text that doesn't parse keeps the last valid
-    // value; a label is checked against the other accounts.
-    void SetText(uint64_t key, SettingsField field, std::wstring text) {
+    // A text box's text (every change). Number text parses in the regional number format the box
+    // showed it in: the frame's (`locale`) as typing starts, kept while the text is its draft's,
+    // so a regional change meanwhile doesn't reject what the box shows. Text that doesn't parse
+    // keeps the last valid value. A label is checked against the other accounts.
+    void SetText(uint64_t key, SettingsField field, std::wstring text, const I18nLocale& locale = {}) {
         std::optional<SettingsNumberRange> range = SettingsFieldRange(field);
         bool free = field == SettingsField::AccountLabel || field == SettingsField::AccountTileText;
         if (!range && !free) return;
         SettingsDraft& draft = Touch(key, field);
+        if (!draft.text) draft.numbers = locale.Numbers();
         draft.text = true;
         draft.raw = std::move(text);
         if (free) {
@@ -32152,20 +32298,22 @@ struct SettingsEdits {
                           LabelError(key, SettingsTrimLabel(draft.raw)) == SettingsDraftError::None;
             return;
         }
-        SettingsParsedNumber parsed = SettingsParseNumber(draft.raw, *range, baseline.status.groupSeparator);
+        SettingsParsedNumber parsed = SettingsParseNumber(draft.raw, *range, draft.numbers);
         draft.valid = parsed.ok;
         if (parsed.ok) draft.value = parsed.value;
     }
 
-    // Spin buttons and arrow keys: the last valid value stepped, as text. Returns the draft's
-    // revision for the debounced commit (CommitStep); 0 for fields without a range.
-    uint64_t Step(uint64_t key, SettingsField field, int delta) {
+    // Spin buttons and arrow keys: the last valid value stepped, as text in the frame's regional
+    // number format. Returns the draft's revision for the debounced commit (CommitStep); 0 for
+    // fields without a range.
+    uint64_t Step(uint64_t key, SettingsField field, int delta, const I18nLocale& locale = {}) {
         std::optional<SettingsNumberRange> range = SettingsFieldRange(field);
         if (!range) return 0;
         SettingsDraft& draft = Touch(key, field);
         draft.value = std::clamp(draft.value + delta, range->minimum, range->maximum);
         draft.text = true;
-        draft.raw = SettingsFormatNumber(draft.value, baseline.status.groupSeparator);
+        draft.numbers = locale.Numbers();
+        draft.raw = I18nInteger(locale, draft.value);
         draft.valid = true;
         return draft.revision;
     }
@@ -32934,11 +33082,6 @@ struct SettingsProductionStore final : SettingsStore {
             status.historyFolder = std::wstring(localAppData) + L"\\TaskbarAIQuota\\" WH_MOD_ID;
         }
         CoTaskMemFree(localAppData);
-        wchar_t separator[8] = {};
-        if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STHOUSAND, separator,
-                            ARRAYSIZE(separator)) > 1) {
-            status.groupSeparator = separator[0];
-        }
         return baseline;
     }
 
@@ -33051,7 +33194,7 @@ struct SettingsViewAccount {
 };
 
 struct SettingsView {
-    I18nLocale locale;                  // The frame's language
+    I18nLocale locale;                  // The frame's language and regional number format
     SettingsUiPage page = SettingsUiPage::Accounts;
     std::wstring version;
     Settings settings;                  // Render projection (SettingsEdits::Projection)
@@ -33151,15 +33294,15 @@ static float SettingsAddDropdownCard(UiGraphics& g, const SettingsView& view,
     return card.card.bottom;
 }
 
-// A number box shows its draft's text while there is one, else the projected value grouped.
+// A number box shows its draft's text while there is one, else the projected value in the
+// regional digit groups.
 static float SettingsAddNumberCard(UiGraphics& g, const SettingsView& view,
                                    std::vector<UiItem>& items, uint32_t& id, float x, float y,
                                    float width, UiCardSpec spec, SettingsField field,
                                    std::wstring unit) {
     const SettingsDraft* draft = SettingsViewDraft(view, field);
-    std::wstring text = draft && draft->text ?
-        draft->raw : SettingsFormatNumber(SettingsFieldValue(view.settings, field),
-                                          view.status.groupSeparator);
+    std::wstring text = draft && draft->text ? draft->raw :
+                                               I18nInteger(view.locale, SettingsFieldValue(view.settings, field));
     spec.trailing = UiNumberBoxSize(g, unit);
     if (draft && draft->text) spec.error = SettingsDraftErrorText(view.locale, *draft);
     UiCardLayout card = UiAddCard(g, items, id, x, y, width, spec);
@@ -33185,7 +33328,7 @@ static float SettingsAddSliderCard(UiGraphics& g, const SettingsView& view,
     box.id = SettingsControlId(field);
     box.kind = UiItemKind::NumberBox;
     box.rect = {slot.left, slot.top, slot.left + 60, slot.bottom};
-    box.text = draft && draft->text ? draft->raw : SettingsFormatNumber(value, view.status.groupSeparator);
+    box.text = draft && draft->text ? draft->raw : I18nInteger(view.locale, value);
     box.align = DWRITE_TEXT_ALIGNMENT_CENTER;
     box.enabled = spec.enabled;
     box.action = SettingsCommand(field);
@@ -35993,8 +36136,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 if (draft && draft->text) spec.error = SettingsDraftErrorText(locale, *draft);
                 UiCardLayout layout = row(spec);
                 UiAddNumberBox(cardItems, control(SettingsField::AccountCreditsMax), layout.trailing,
-                               draft && draft->text ? draft->raw :
-                                                      SettingsFormatNumber(account.creditsMax, view.status.groupSeparator),
+                               draft && draft->text ? draft->raw : I18nInteger(locale, account.creditsMax),
                                std::move(unit), true, command(SettingsField::AccountCreditsMax));
             }
             {
@@ -36382,7 +36524,7 @@ struct SettingsUiClient final : UiHostClient {
 
     // A dialog's language: the current one as it opens, kept until it closes. Windows' own buttons
     // follow the Windows display language.
-    static I18nLocale DialogLocale() { return I18nLocale(*g_language.load(std::memory_order_acquire)); }
+    static I18nLocale DialogLocale() { return CurrentLocale(); }
 
     // The controller's notices, a message box each. Account operations explain their failures;
     // other failed saves get the general message.
@@ -36448,13 +36590,14 @@ struct SettingsUiClient final : UiHostClient {
         UiHostRequestRebuild(host, false);
     }
 
-    // Each frame takes the current language, its text, the toolkit's text formats and the title
-    // all. The preview's scroll stays within what the built strip can scroll, and a new position
-    // starts it from its home. Account cards follow the projection's order, a dragged card its
-    // drag order. The window takes the projected material at once.
+    // Each frame takes the current language and regional number format: its text, numbers, the
+    // toolkit's text formats and the title all, and number boxes parse what they show in it. The
+    // preview's scroll stays within what the built strip can scroll, and a new position starts it
+    // from its home. Account cards follow the projection's order, a dragged card its drag order.
+    // The window takes the projected material at once.
     void Build(UiHost& host, D2D1_SIZE_F client, UiFrame& frame) override {
         // The title first: setting it sends messages, which must never see the view half built.
-        const I18nLocale locale(*g_language.load(std::memory_order_acquire));
+        const I18nLocale locale = CurrentLocale();
         if (titleLocale != locale) {
             SetWindowTextW(host.main, SettingsWindowTitle(locale).c_str());
             titleLocale = locale;
@@ -36807,7 +36950,7 @@ struct SettingsUiClient final : UiHostClient {
                 KillStepTimer(host, field);
                 if (field == SettingsField::PollMinutes) pollCustom = true;
                 if (field == SettingsField::RetentionDays) retentionCustom = true;
-                edits.SetText(action.key, field, std::move(action.text));
+                edits.SetText(action.key, field, std::move(action.text), view.locale);
                 UiHostRequestRebuild(host, false);
                 break;
             case UiActionKind::TextCommit:
@@ -36843,7 +36986,7 @@ struct SettingsUiClient final : UiHostClient {
                 }
                 if (field == SettingsField::PollMinutes) pollCustom = true;
                 if (field == SettingsField::RetentionDays) retentionCustom = true;
-                steps[field] = {action.key, edits.Step(action.key, field, action.value)};
+                steps[field] = {action.key, edits.Step(action.key, field, action.value, view.locale)};
                 SetTimer(host.main, kSettingsStepTimer + UINT_PTR(field), 250, nullptr);
                 UiHostRequestRebuild(host, false);
                 break;
@@ -36937,7 +37080,7 @@ struct SettingsUiClient final : UiHostClient {
         }
     }
 
-    bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM, LRESULT& result) override {
+    bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) override {
         result = 0;
         switch (message) {
             case kSettingsProcessMessage:
@@ -36964,6 +37107,12 @@ struct SettingsUiClient final : UiHostClient {
             case kExitVisualTestMessage:
                 SetVisualTestMode(false);
                 return true;
+            // A regional format change: the next frame shows numbers in the new one.
+            case WM_SETTINGCHANGE:
+                if (lParam && wcscmp(reinterpret_cast<PCWSTR>(lParam), L"intl") == 0) {
+                    UiHostRequestRebuild(host, false);
+                }
+                return false;
             case WM_DISPLAYCHANGE:
                 // The display list changed (the taskbar re-injects on its own).
                 if (modalDepth || (drag.key && host.handleDrag)) {
@@ -37167,7 +37316,7 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
     if (apartmentInitialized && !g_unloading && !g_settingsWindowCancelRequested) {
         try {
             SettingsUiClient client;
-            client.titleLocale = I18nLocale(*g_language.load(std::memory_order_acquire));
+            client.titleLocale = CurrentLocale();
             std::wstring title = SettingsWindowTitle(client.titleLocale);
             UiHostConfig config;
             config.mainClass = kSettingsUiClass;
@@ -37315,13 +37464,6 @@ static std::wstring HistoryNumber(double value) {
 static std::string HistoryCsvId(const char* prefix, uint64_t id) {
     char text[48];
     snprintf(text, sizeof(text), "%s%016llx", prefix, static_cast<unsigned long long>(id));
-    return text;
-}
-
-// Hours with two decimals: `1.50`.
-static std::wstring HistoryHours(double ms) {
-    wchar_t text[40];
-    swprintf(text, ARRAYSIZE(text), L"%.2f", ms / 3600000.0);
     return text;
 }
 
@@ -37532,7 +37674,8 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                                           I18nText(locale, TrCtx(L"quota-name", L"{hours}h"),
                                                    {{L"hours", shortDuration / 3600000}});
                 } else {
-                    std::wstring hours = HistoryHours(double(shortDuration));
+                    // Hours with two decimals in the regional format: `1.50`, de-DE `1,50`.
+                    std::wstring hours = I18nFixed(locale, double(shortDuration) / 3600000.0, 2);
                     label = antigravity ? I18nText(locale, TrCtx(L"quota-name", L"{name} {hours} h"),
                                                    {{L"name", family}, {L"hours", hours}}) :
                                           I18nText(locale, TrCtx(L"hours-value", L"{hours} h"), {{L"hours", hours}});
@@ -37797,7 +37940,7 @@ struct HistoryUiNotice {
 };
 
 struct HistoryUiView {
-    I18nLocale locale;                       // The language its text and formats are in
+    I18nLocale locale;                       // The language and regional number format its text is in
     UiThemeKind theme = UiThemeKind::Dark;   // Built content follows it: value inks, card lines
 
     // Accounts and controls; the view is the current mode's (All accounts or one account)
@@ -37898,7 +38041,8 @@ static std::vector<UiShapePart> HistoryUiLogo(const HistoryUiView& view, uint32_
 
 // Compact display formats (approved with the phase-3 mockups) in the locale's language: each
 // language's own order and abbreviated names (the catalog's), always 24-hour, independent of
-// Windows' regional formats like the CSV. Local times read `Sat 31 Oct 14:31` in English; outside
+// Windows' regional date and time formats like the CSV; numbers below take the locale's regional
+// number format. Local times read `Sat 31 Oct 14:31` in English; outside
 // the current year the year takes the weekday's place, `25 May 2026 23:59` (the readout's
 // mandatory part keeps its width bound); `localTime` converts a Unix ms time with the user's
 // clock and zone. Months come in a date's form, and alone with a year (Russian: мая, май).
@@ -37945,8 +38089,9 @@ static std::wstring HistoryUiTime(const I18nLocale& locale, ULONGLONG ms, ULONGL
 
 // `decimals` places below 10,000 after rounding; past that one decimal with a suffix (12.3K,
 // 1.2M). Rounding carries into the next magnitude: 9999.996 at two places prints 10.0K, 999950
-// prints 1.0M. Journal values stay within 1e12 (1.0T).
-static std::wstring HistoryUiNumber(double value, int decimals) {
+// prints 1.0M. Journal values stay within 1e12 (1.0T). `trim` drops trailing decimal zeros (10K,
+// 0.5). Never grouped; de-DE 9999,99, 12,3K.
+static std::wstring HistoryUiNumber(const I18nLocale& locale, double value, int decimals, bool trim = false) {
     static constexpr PCWSTR kSuffixes[] = {L"", L"K", L"M", L"G", L"T"};
     if (!std::isfinite(value)) return L"\u2014";
     char text[64];
@@ -37955,36 +38100,30 @@ static std::wstring HistoryUiNumber(double value, int decimals) {
                                           std::chars_format::fixed, level ? 1 : decimals);
         if (error != std::errc{}) return L"?";
         std::string_view printed(text, end);
-        size_t digits = std::min(printed.find('.'), printed.size()) - (printed.front() == '-');
+        size_t point = printed.find('.');
+        size_t digits = std::min(point, printed.size()) - (printed.front() == '-');
         if (digits <= (level ? 3u : 4u) || level + 1 == std::size(kSuffixes)) {
-            return std::wstring(printed.begin(), printed.end()) + kSuffixes[level];
+            if (trim && point != std::string_view::npos) {
+                printed.remove_suffix(printed.size() - 1 - printed.find_last_not_of('0'));
+                if (printed.ends_with('.')) printed.remove_suffix(1);
+            }
+            return I18nDigits(locale, printed, false) + kSuffixes[level];
         }
     }
 }
 
-// A count with thousands separators: `12,345`.
-static std::wstring HistoryUiCount(size_t count) {
-    std::wstring text = std::to_wstring(count);
-    for (size_t at = text.size(); at > 3; at -= 3) text.insert(at - 3, 1, L',');
-    return text;
-}
-
-// An export's progress line: `Exporting 12,345 rows…`. Digits are tabular: a count's width
-// bounds every smaller one's in a language whose plural forms are as wide.
+// An export's progress line: `Exporting 12,345 rows…`, the count in the regional digit groups.
+// Digits are tabular: a count's width bounds every smaller one's in a language whose plural forms
+// are as wide.
 static std::wstring HistoryUiProgressText(const I18nLocale& locale, size_t rows) {
-    return I18nText(locale, TrCtx(L"history-export", L"{rows, plural, one{Exporting {count} rows\u2026} "
-                                                     L"other{Exporting {count} rows\u2026}}"),
-                    {{L"rows", rows}, {L"count", HistoryUiCount(rows)}});
+    return I18nText(locale, TrCtx(L"history-export", L"{rows, plural, one{Exporting # rows\u2026} "
+                                                     L"other{Exporting # rows\u2026}}"),
+                    {{L"rows", rows, I18nInteger(locale, rows)}});
 }
 
 // Hours to a tenth without a trailing zero: `166 h`, `0.4 h`.
 static std::wstring HistoryUiHours(const I18nLocale& locale, double ms) {
-    char text[32];
-    auto [end, error] = std::to_chars(text, text + sizeof(text), ms / 3600000.0, std::chars_format::fixed, 1);
-    std::string_view printed = error != std::errc{} ? "?" : std::string_view(text, end);
-    if (printed.ends_with(".0")) printed.remove_suffix(2);
-    return I18nText(locale, TrCtx(L"hours-value", L"{hours} h"),
-                    {{L"hours", std::wstring(printed.begin(), printed.end())}});
+    return I18nText(locale, TrCtx(L"hours-value", L"{hours} h"), {{L"hours", I18nTrimmed(locale, ms / 3600000.0, 1)}});
 }
 
 // A recorded value as the window shows it: in the Remaining bar mode a percentage's share left
@@ -37996,14 +38135,14 @@ static double HistoryUiShown(int meter, double value, bool remaining) {
 
 // A meter's value with its unit: percentages with `percentDecimals` places (cards whole, the
 // readout and shares one), dollars and credits with two. Dollars keep their currency code and
-// percentages their sign in every language.
+// percentages their sign in every language and format.
 static std::wstring HistoryUiValue(const I18nLocale& locale, int meter, double value, int percentDecimals) {
-    if (meter == 6) return L"USD " + HistoryUiNumber(value, 2);
+    if (meter == 6) return L"USD " + HistoryUiNumber(locale, value, 2);
     if (meter == 7) {
         return I18nText(locale, TrCtx(L"credits-amount", L"{amount} credits"),
-                        {{L"amount", HistoryUiNumber(value, 2)}});
+                        {{L"amount", HistoryUiNumber(locale, value, 2)}});
     }
-    return HistoryUiNumber(value, percentDecimals) + L"%";
+    return HistoryUiNumber(locale, value, percentDecimals) + L"%";
 }
 
 // The summary cards of a series set over [from, to), one per series in its order, and its
@@ -38083,7 +38222,8 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
             if (!series.plotted) continue;
             line(I18nText(locale, TrCtx(L"history-card", L"Coverage {hours} ({percent}%)"),
                           {{L"hours", HistoryUiHours(locale, stats.coverageMs)},
-                           {L"percent", HistoryUiNumber(duration > 0 ? 100 * stats.coverageMs / duration : 0, 1)}}));
+                           {L"percent",
+                            HistoryUiNumber(locale, duration > 0 ? 100 * stats.coverageMs / duration : 0, 1)}}));
             if (series.meter < 6) {
                 std::wstring hours = stats.coverageMs ? HistoryUiHours(locale, stats.nearLimitMs) : L"\u2014";
                 line(left ? I18nText(locale, TrCtx(L"history-card", L"Est. \u2264{threshold}%: {hours}"),
@@ -38157,15 +38297,11 @@ struct HistoryChartAxis {
     std::vector<double> values;
 };
 
-// Axis labels: rounded, trailing decimal zeros dropped, abbreviated from 10,000. Dollars keep their
-// currency code and percentages their sign in every language.
+// Axis labels: rounded, trailing decimal zeros dropped, abbreviated from 10,000, in the regional
+// decimal separator. Dollars keep their currency code and percentages their sign in every
+// language and format.
 static std::wstring HistoryChartAxisLabel(const I18nLocale& locale, size_t axis, double value) {
-    std::wstring number = HistoryUiNumber(value, 2);
-    size_t end = std::min(number.find_first_not_of(L"-0123456789."), number.size()), dot = number.find(L'.');
-    if (dot < end) {
-        size_t last = number.find_last_not_of(L'0', end - 1);
-        number.erase(last == dot ? dot : last + 1, end - (last == dot ? dot : last + 1));
-    }
+    std::wstring number = HistoryUiNumber(locale, value, 2, true);
     if (axis == 2) return I18nText(locale, TrCtx(L"chart-axis", L"{value} cr"), {{L"value", number}});
     return number + (axis == 0 ? L"%" : L" USD");
 }
@@ -38492,8 +38628,8 @@ static UiReadoutRow HistoryChartRow(const I18nLocale& locale, std::wstring name,
 }
 
 // The readout of picked points in the locale's language: one row each, in their order, keyed by
-// the recorded samples they name and the language (none: key 0). Its overflow hint names what
-// shows the rest.
+// the recorded samples they name, the language and the decimal separator their values show (none:
+// key 0). Its overflow hint names what shows the rest.
 static UiTooltipContent HistoryChartReadout(const I18nLocale& locale, const HistoryChart& c,
                                             const std::vector<HistoryChartHit>& hits, const UiPalette& p,
                                             bool oneAccount, ULONGLONG now, const HistoryUiLocalTime& localTime) {
@@ -38505,6 +38641,7 @@ static UiTooltipContent HistoryChartReadout(const I18nLocale& locale, const Hist
     };
     mix(c.generation);
     mix(std::hash<std::wstring_view>{}(locale.Language().tag));
+    mix(std::hash<std::wstring_view>{}(locale.Numbers().Decimal()));
     for (const HistoryChartHit& hit : hits) {
         const HistoryUiLine& line = c.lines[hit.line];
         const HistoryRenderPoint& point = c.render[hit.line][size_t(hit.period)].points[hit.point];
@@ -38815,7 +38952,7 @@ struct HistoryOps {
     // Unix ms, and one as the user's local clock and zone (zero on failure).
     virtual ULONGLONG Now() = 0;
     virtual SYSTEMTIME LocalTime(ULONGLONG ms) = 0;
-    // The current language.
+    // The current language and regional number format.
     virtual I18nLocale Locale() = 0;
 
 protected:
@@ -38896,14 +39033,15 @@ static HistoryUiNotice HistoryNoticeText(const I18nLocale& locale, const History
                                                L"unchanged."),
                                     {{L"code", notice.error}}));
         case Exported: {
-            std::wstring count = HistoryUiCount(notice.rows);
+            // The row count in the regional digit groups.
+            std::wstring count = I18nInteger(locale, notice.rows);
             std::wstring text =
-                notice.all ? I18nText(locale, Tr(L"Exported {rows, plural, one{{count} meter rows} other{{count} meter "
-                                                 L"rows}} (all accounts) to {path}. Labels omitted; times UTC."),
-                                      {{L"rows", notice.rows}, {L"count", count}, {L"path", notice.text}}) :
-                             I18nText(locale, Tr(L"Exported {rows, plural, one{{count} meter rows} other{{count} meter "
-                                                 L"rows}} (selected account) to {path}. Labels omitted; times UTC."),
-                                      {{L"rows", notice.rows}, {L"count", count}, {L"path", notice.text}});
+                notice.all ? I18nText(locale, Tr(L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all "
+                                                 L"accounts) to {path}. Labels omitted; times UTC."),
+                                      {{L"rows", notice.rows, count}, {L"path", notice.text}}) :
+                             I18nText(locale, Tr(L"Exported {rows, plural, one{# meter rows} other{# meter rows}} "
+                                                 L"(selected account) to {path}. Labels omitted; times UTC."),
+                                      {{L"rows", notice.rows, count}, {L"path", notice.text}});
             if (notice.compare) {
                 text = I18nText(locale, Tr(L"{exported} Includes both elapsed 7-day periods."), {{L"exported", text}});
             }
@@ -40229,7 +40367,7 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
             UiRun value{L"\u2014", UiRunStyle::Normal, UiInk::Muted};
             if (account.weeklyPct >= 0) {
                 double shown = view.remaining ? std::clamp(100 - account.weeklyPct, 0.0, 100.0) : account.weeklyPct;
-                value.text = HistoryUiNumber(shown, 0) + L"%";
+                value.text = HistoryUiNumber(locale, shown, 0) + L"%";
                 if (!account.stale) {
                     // Light theme: darker variants of the default and colorblind usage colors,
                     // readable on its surface; another color darkens in OKLCH until it reads at
@@ -40780,7 +40918,7 @@ struct HistoryProductionOps final : HistoryOps {
         return UnixMsToLocalSystemTime(ms, &local) ? local : SYSTEMTIME{};
     }
 
-    I18nLocale Locale() override { return I18nLocale(*g_language.load(std::memory_order_acquire)); }
+    I18nLocale Locale() override { return CurrentLocale(); }
 };
 
 // src/history/ui-window.h
@@ -40864,8 +41002,9 @@ struct HistoryUiClient final : UiHostClient {
     // operation runs. A load or refresh that changed the selection (its request, or the account no
     // longer listed) moves focus to the selected entry. Esc closes. An export's write runs once
     // the frame with its progress was published by the command's rebuild: painted first (else it
-    // writes nothing), then repainted as rows are written, the item found again each time.
-    bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM, LRESULT& result) override {
+    // writes nothing), then repainted as rows are written, the item found again each time. A
+    // regional format change composes again like a notification.
+    bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) override {
         result = 0;
         uint64_t selected = controller.selectedId;
         bool rebuild = true;
@@ -40886,6 +41025,9 @@ struct HistoryUiClient final : UiHostClient {
             case kHistoryConsentChangedMessage:
                 controller.Notify();
                 return true;
+            case WM_SETTINGCHANGE:
+                if (lParam && wcscmp(reinterpret_cast<PCWSTR>(lParam), L"intl") == 0) controller.Notify();
+                return false;
             case kHistoryRefreshMessage:
                 rebuild = controller.ProcessRefresh(host.popup.open, PointerOnChart(host));
                 break;
@@ -40968,7 +41110,7 @@ static DWORD WINAPI HistoryUiThreadProc(LPVOID) {
     if (apartmentInitialized && !g_unloading && !g_historyWindowCancelRequested) {
         try {
             HistoryUiClient client;
-            client.titleLocale = I18nLocale(*g_language.load(std::memory_order_acquire));
+            client.titleLocale = CurrentLocale();
             std::wstring title = HistoryWindowTitle(client.titleLocale);
             UiHostConfig config;
             config.mainClass = kHistoryUiClass;

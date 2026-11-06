@@ -9,7 +9,7 @@ import re
 # The localization engine with its catalogs, ahead of everything that may localize.
 I18N = [("fragment", f"i18n/{name}.h") for name in
         ("template", "catalog", "lang-de", "lang-es", "lang-fr", "lang-ja", "lang-pt-BR", "lang-ru", "lang-zh-Hans",
-         "languages", "pseudo", "format")]
+         "languages", "pseudo", "format", "numbers")]
 UI_PURE = [("fragment", f"ui/{name}.h") for name in
            ("tokens", "draw", "svg-path", "rich-text", "items", "paint", "input", "tooltip-layout")]
 # Localized runs as the toolkit's, after both.

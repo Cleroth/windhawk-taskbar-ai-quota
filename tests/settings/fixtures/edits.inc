@@ -185,8 +185,11 @@ static constexpr SettingsField kPoll = SettingsField::PollMinutes;
 static void RunEditTests() {
     Run("parse: spaces, sign, digit grouping; empty, malformed and overflow fail; range clamps", [] {
         SettingsNumberRange days{1, 3650};
+        // en-US groups (threes) with the separator given.
         auto parse = [&](std::wstring_view text, wchar_t separator = L',') {
-            SettingsParsedNumber parsed = SettingsParseNumber(text, days, separator);
+            I18nNumberFormat format;
+            format.group = {separator};
+            SettingsParsedNumber parsed = SettingsParseNumber(text, days, format);
             return parsed.ok ? parsed.value : -999;
         };
         CHECK(parse(L"") == -999);
@@ -214,10 +217,12 @@ static void RunEditTests() {
         CHECK(parse(L"0") == 1);
         CHECK(parse(L"-5") == 1);
         CHECK(parse(L"5000") == 3650);
-        CHECK(SettingsFormatNumber(1440, L',') == L"1,440");
-        CHECK(SettingsFormatNumber(90, L',') == L"90");
-        CHECK(SettingsFormatNumber(1234567, L'.') == L"1.234.567");
-        CHECK(SettingsFormatNumber(0, L',') == L"0");
+        I18nNumberFormat dots;
+        dots.group = {L'.'};
+        CHECK(I18nInteger(I18nLocale(), 1440) == L"1,440");
+        CHECK(I18nInteger(I18nLocale(), 90) == L"90");
+        CHECK(I18nInteger(I18nLocale(kI18nLanguages[0], dots), 1234567) == L"1.234.567");
+        CHECK(I18nInteger(I18nLocale(), 0) == L"0");
     });
 
     Run("assign: desired values, groups back to defaults, numbers clamped", [] {

@@ -93,7 +93,7 @@ def generate(source, output, expected_hash):
     # writer; so is the journal's coordination state (a lock, counters and flags). The journal and
     # helper fragments only contribute named definitions.
     for name in ["template", "catalog", "lang-de", "lang-es", "lang-fr", "lang-ja", "lang-pt-BR", "lang-ru",
-                 "lang-zh-Hans", "languages", "pseudo", "format"]:
+                 "lang-zh-Hans", "languages", "pseudo", "format", "numbers"]:
         emit(f"i18n/{name}.h", fragment(text, f"i18n/{name}.h"))
     emit("core/model.h", fragment(text, "core/model.h"))
     emit("history/types.h", fragment(text, "history/types.h"))

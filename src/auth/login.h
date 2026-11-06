@@ -145,7 +145,7 @@ struct LoginDialogState {
     // Inputs
     // The window's language: the current one as its sign-in builds it, kept until it closes (its
     // text, the loopback's page).
-    I18nLocale locale{*g_language.load(std::memory_order_acquire)};
+    I18nLocale locale = CurrentLocale();
     std::wstring url;  // The authorize link, or the device flow's verification page.
     // Loopback flow when set, answered on `callbackRoute`; device flow with `poll`; otherwise a
     // code is pasted, masked when `secret`.

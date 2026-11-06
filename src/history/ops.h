@@ -223,5 +223,5 @@ struct HistoryProductionOps final : HistoryOps {
         return UnixMsToLocalSystemTime(ms, &local) ? local : SYSTEMTIME{};
     }
 
-    I18nLocale Locale() override { return I18nLocale(*g_language.load(std::memory_order_acquire)); }
+    I18nLocale Locale() override { return CurrentLocale(); }
 };

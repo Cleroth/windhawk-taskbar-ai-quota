@@ -74,7 +74,7 @@ struct HistoryUiNotice {
 };
 
 struct HistoryUiView {
-    I18nLocale locale;                       // The language its text and formats are in
+    I18nLocale locale;                       // The language and regional number format its text is in
     UiThemeKind theme = UiThemeKind::Dark;   // Built content follows it: value inks, card lines
 
     // Accounts and controls; the view is the current mode's (All accounts or one account)
@@ -175,7 +175,8 @@ static std::vector<UiShapePart> HistoryUiLogo(const HistoryUiView& view, uint32_
 
 // Compact display formats (approved with the phase-3 mockups) in the locale's language: each
 // language's own order and abbreviated names (the catalog's), always 24-hour, independent of
-// Windows' regional formats like the CSV. Local times read `Sat 31 Oct 14:31` in English; outside
+// Windows' regional date and time formats like the CSV; numbers below take the locale's regional
+// number format. Local times read `Sat 31 Oct 14:31` in English; outside
 // the current year the year takes the weekday's place, `25 May 2026 23:59` (the readout's
 // mandatory part keeps its width bound); `localTime` converts a Unix ms time with the user's
 // clock and zone. Months come in a date's form, and alone with a year (Russian: мая, май).
@@ -222,8 +223,9 @@ static std::wstring HistoryUiTime(const I18nLocale& locale, ULONGLONG ms, ULONGL
 
 // `decimals` places below 10,000 after rounding; past that one decimal with a suffix (12.3K,
 // 1.2M). Rounding carries into the next magnitude: 9999.996 at two places prints 10.0K, 999950
-// prints 1.0M. Journal values stay within 1e12 (1.0T).
-static std::wstring HistoryUiNumber(double value, int decimals) {
+// prints 1.0M. Journal values stay within 1e12 (1.0T). `trim` drops trailing decimal zeros (10K,
+// 0.5). Never grouped; de-DE 9999,99, 12,3K.
+static std::wstring HistoryUiNumber(const I18nLocale& locale, double value, int decimals, bool trim = false) {
     static constexpr PCWSTR kSuffixes[] = {L"", L"K", L"M", L"G", L"T"};
     if (!std::isfinite(value)) return L"\u2014";
     char text[64];
@@ -232,36 +234,30 @@ static std::wstring HistoryUiNumber(double value, int decimals) {
                                           std::chars_format::fixed, level ? 1 : decimals);
         if (error != std::errc{}) return L"?";
         std::string_view printed(text, end);
-        size_t digits = std::min(printed.find('.'), printed.size()) - (printed.front() == '-');
+        size_t point = printed.find('.');
+        size_t digits = std::min(point, printed.size()) - (printed.front() == '-');
         if (digits <= (level ? 3u : 4u) || level + 1 == std::size(kSuffixes)) {
-            return std::wstring(printed.begin(), printed.end()) + kSuffixes[level];
+            if (trim && point != std::string_view::npos) {
+                printed.remove_suffix(printed.size() - 1 - printed.find_last_not_of('0'));
+                if (printed.ends_with('.')) printed.remove_suffix(1);
+            }
+            return I18nDigits(locale, printed, false) + kSuffixes[level];
         }
     }
 }
 
-// A count with thousands separators: `12,345`.
-static std::wstring HistoryUiCount(size_t count) {
-    std::wstring text = std::to_wstring(count);
-    for (size_t at = text.size(); at > 3; at -= 3) text.insert(at - 3, 1, L',');
-    return text;
-}
-
-// An export's progress line: `Exporting 12,345 rows…`. Digits are tabular: a count's width
-// bounds every smaller one's in a language whose plural forms are as wide.
+// An export's progress line: `Exporting 12,345 rows…`, the count in the regional digit groups.
+// Digits are tabular: a count's width bounds every smaller one's in a language whose plural forms
+// are as wide.
 static std::wstring HistoryUiProgressText(const I18nLocale& locale, size_t rows) {
-    return I18nText(locale, TrCtx(L"history-export", L"{rows, plural, one{Exporting {count} rows\u2026} "
-                                                     L"other{Exporting {count} rows\u2026}}"),
-                    {{L"rows", rows}, {L"count", HistoryUiCount(rows)}});
+    return I18nText(locale, TrCtx(L"history-export", L"{rows, plural, one{Exporting # rows\u2026} "
+                                                     L"other{Exporting # rows\u2026}}"),
+                    {{L"rows", rows, I18nInteger(locale, rows)}});
 }
 
 // Hours to a tenth without a trailing zero: `166 h`, `0.4 h`.
 static std::wstring HistoryUiHours(const I18nLocale& locale, double ms) {
-    char text[32];
-    auto [end, error] = std::to_chars(text, text + sizeof(text), ms / 3600000.0, std::chars_format::fixed, 1);
-    std::string_view printed = error != std::errc{} ? "?" : std::string_view(text, end);
-    if (printed.ends_with(".0")) printed.remove_suffix(2);
-    return I18nText(locale, TrCtx(L"hours-value", L"{hours} h"),
-                    {{L"hours", std::wstring(printed.begin(), printed.end())}});
+    return I18nText(locale, TrCtx(L"hours-value", L"{hours} h"), {{L"hours", I18nTrimmed(locale, ms / 3600000.0, 1)}});
 }
 
 // A recorded value as the window shows it: in the Remaining bar mode a percentage's share left
@@ -273,14 +269,14 @@ static double HistoryUiShown(int meter, double value, bool remaining) {
 
 // A meter's value with its unit: percentages with `percentDecimals` places (cards whole, the
 // readout and shares one), dollars and credits with two. Dollars keep their currency code and
-// percentages their sign in every language.
+// percentages their sign in every language and format.
 static std::wstring HistoryUiValue(const I18nLocale& locale, int meter, double value, int percentDecimals) {
-    if (meter == 6) return L"USD " + HistoryUiNumber(value, 2);
+    if (meter == 6) return L"USD " + HistoryUiNumber(locale, value, 2);
     if (meter == 7) {
         return I18nText(locale, TrCtx(L"credits-amount", L"{amount} credits"),
-                        {{L"amount", HistoryUiNumber(value, 2)}});
+                        {{L"amount", HistoryUiNumber(locale, value, 2)}});
     }
-    return HistoryUiNumber(value, percentDecimals) + L"%";
+    return HistoryUiNumber(locale, value, percentDecimals) + L"%";
 }
 
 // The summary cards of a series set over [from, to), one per series in its order, and its
@@ -360,7 +356,8 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
             if (!series.plotted) continue;
             line(I18nText(locale, TrCtx(L"history-card", L"Coverage {hours} ({percent}%)"),
                           {{L"hours", HistoryUiHours(locale, stats.coverageMs)},
-                           {L"percent", HistoryUiNumber(duration > 0 ? 100 * stats.coverageMs / duration : 0, 1)}}));
+                           {L"percent",
+                            HistoryUiNumber(locale, duration > 0 ? 100 * stats.coverageMs / duration : 0, 1)}}));
             if (series.meter < 6) {
                 std::wstring hours = stats.coverageMs ? HistoryUiHours(locale, stats.nearLimitMs) : L"\u2014";
                 line(left ? I18nText(locale, TrCtx(L"history-card", L"Est. \u2264{threshold}%: {hours}"),

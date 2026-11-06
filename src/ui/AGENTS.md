@@ -86,7 +86,8 @@ a taskbar thread. Mod-wide rules: [../AGENTS.md](../AGENTS.md).
 - Interactive controls keep fixed item ids across rebuilds: focus and EDITs follow ids.
 - `WM_KEYDOWN` that neither surface uses (no focus move, scroll, activation, popup, drag or
   control key) goes to `UiHostClient::Message` before default handling: window shortcuts (F5,
-  Esc) live in the client. The activation request reaches the client after the host closed the
+  Esc) live in the client. So does `WM_SETTINGCHANGE`, after the host's theme handling (clients
+  recompose on a regional format change, `intl`). The activation request reaches the client after the host closed the
   popup and brought the window (or its modal) back.
 - Navigation pane (`UiFrame::nav`, `navPane`, `navHeight`; surface `Nav`): main-surface items in
   main coordinates at offset 0, clipped to the pane, with its own pixel-aligned scroll and thin

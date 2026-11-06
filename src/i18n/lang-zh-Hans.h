@@ -147,12 +147,12 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Export all raw meters for the selected account, or every account under All accounts. Uses the selected "
           L"date range, plus the preceding 7 days in week comparison. UTC timestamps; text IDs; no labels.",
      L"导出所选账户（在“所有账户”下为每个账户）的全部原始指标。使用所选日期范围，周对比时另含之前的 7 天。UTC 时间戳；文本形式的 ID；不含标签。"},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all accounts) to {path}. "
           L"Labels omitted; times UTC.",
-     L"已将 {rows, plural, other{{count} 行指标数据}}（所有账户）导出到 {path}。已省略标签；时间为 UTC。"},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+     L"已将 {rows, plural, other{# 行指标数据}}（所有账户）导出到 {path}。已省略标签；时间为 UTC。"},
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
-     L"已将 {rows, plural, other{{count} 行指标数据}}（所选账户）导出到 {path}。已省略标签；时间为 UTC。"},
+     L"已将 {rows, plural, other{# 行指标数据}}（所选账户）导出到 {path}。已省略标签；时间为 UTC。"},
     {L"", L"Free to use, modify and share.", L"可自由使用、修改和分享。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -703,8 +703,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"history-card", L"{title} — details only", L"{title} — 仅详情"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
-    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
-     L"{rows, plural, other{正在导出 {count} 行…}}"},
+    {L"history-export", L"{rows, plural, one{Exporting # rows…} other{Exporting # rows…}}",
+     L"{rows, plural, other{正在导出 # 行…}}"},
     {L"history-menu", L"About these charts", L"关于这些图表"},
     {L"history-menu", L"Clear all history…", L"清除全部历史记录…"},
     {L"history-menu", L"Open history folder", L"打开历史文件夹"},

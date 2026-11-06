@@ -296,6 +296,24 @@
         state.selected = 1;
         CHECK(Series(Build(state), 1, 4).legendTitle == L"Claude/GPT " + antigravityDurations[d]);
     });
+    Run("duration labels in a regional format: a window's hours take its decimal separator (de-DE) in English and "
+        "German", [&] {
+        auto state = Model({1, 3});
+        for (size_t account = 0; account < 2; ++account) for (size_t i = 0; i < 2; ++i) {
+            auto& sample = AddRow(state, account, baseTime + 1000 + i*60000, {{0, 10}, {4, 20}});
+            sample.meters[0].durationMs = sample.meters[4].durationMs = 90*60000;
+        }
+        state.view = HistoryView::ShortTerm;
+        const I18nNumberFormat deDE = I18nNumberFormatFrom(L",", L".", L"3;0");
+        state.locale = I18nLocale(kI18nLanguages[0], deDE);
+        auto built = Build(state);
+        CHECK(Series(built, 0, 0).hoverTitle == state.accounts[0].label + L" · 1,50 h used (%)");
+        CHECK(Series(built, 1, 4).legendTitle == state.accounts[1].label + L" · Claude/GPT 1,50 h");
+        state.locale = I18nLocale(*I18nLanguageByTag(L"de"), deDE);
+        built = Build(state);
+        CHECK(Series(built, 0, 0).legendTitle == state.accounts[0].label + L" · 1,50 Std.");
+        CHECK(Series(built, 1, 4).legendTitle == state.accounts[1].label + L" · Claude/GPT 1,50 Std.");
+    });
     Run("remaining mode: titles name percentages left; legends, dollars, credits and statistics unchanged", [] {
         auto state = Model(); AllLanes(state);
         state.view = HistoryView::AllMeters;

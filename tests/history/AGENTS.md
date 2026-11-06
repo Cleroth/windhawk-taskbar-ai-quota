@@ -84,7 +84,7 @@ evidence is a fresh successful run, not a result from an older source hash.
 - `fixtures/model.inc` tests the history model (`history/series.h`) through its explicit inputs.
   `fixtures/csv.inc` tests the CSV writer (`history/csv.h`, whole) with frozen scopes:
   hand-derived bytes, 64 KiB pieces, cancellation, a failing sink, and the model's titles in
-  another language beside the CSV's unchanged English IDs and units.
+  another language (and de-DE's number format) beside the CSV's unchanged English bytes.
 - Fixtures are split by domain under `fixtures/`. Add independent expected behavior, not
   Python/C++ copies of production decision rules or source-text call-count audits.
 - Preserve synthetic continuity coverage for clock rollback, gaps, real resets, idle rolling

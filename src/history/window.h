@@ -16,7 +16,7 @@ static DWORD WINAPI HistoryUiThreadProc(LPVOID) {
     if (apartmentInitialized && !g_unloading && !g_historyWindowCancelRequested) {
         try {
             HistoryUiClient client;
-            client.titleLocale = I18nLocale(*g_language.load(std::memory_order_acquire));
+            client.titleLocale = CurrentLocale();
             std::wstring title = HistoryWindowTitle(client.titleLocale);
             UiHostConfig config;
             config.mainClass = kHistoryUiClass;

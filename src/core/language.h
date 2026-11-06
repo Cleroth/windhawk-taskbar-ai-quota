@@ -1,6 +1,6 @@
-// The process's current UI language and this Windows user's language preference. Native: pure
-// code never reads these; native code snapshots one I18nLocale per frame, notification or dialog
-// and passes it down (i18n/AGENTS.md).
+// The process's current UI language, this Windows user's language preference and regional number
+// format. Native: pure code never reads these; native code snapshots one I18nLocale per frame,
+// notification or dialog (CurrentLocale) and passes it down (i18n/AGENTS.md).
 
 // The current language: an immutable registry entry (i18n/languages.h) any thread reads without
 // locks; text built from it is cached under its locale. Writers hold g_configEditMutex (mod init
@@ -57,4 +57,20 @@ static const I18nLanguage& ResolveLanguage(const std::wstring& tag) {
 
 static void SetCurrentLanguage(const I18nLanguage& language) {
     g_language.store(&language, std::memory_order_release);
+}
+
+// This Windows user's regional number format (their Region settings), read anew each time, so a
+// change shows from the next snapshot; a part Windows can't give stays en-US's.
+static I18nNumberFormat ReadNumberFormat() {
+    wchar_t decimal[8] = {}, group[8] = {}, grouping[16] = {};
+    GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SDECIMAL, decimal, ARRAYSIZE(decimal));
+    GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STHOUSAND, group, ARRAYSIZE(group));
+    GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SGROUPING, grouping, ARRAYSIZE(grouping));
+    return I18nNumberFormatFrom(decimal, group, grouping);
+}
+
+// The localization context of a frame, notification or dialog: the current language with this
+// user's regional number format.
+static I18nLocale CurrentLocale() {
+    return I18nLocale(*g_language.load(std::memory_order_acquire), ReadNumberFormat());
 }

@@ -1154,6 +1154,32 @@ static void RunRenders(const std::wstring& directory) {
                 });
             }
         }
+        // A regional number format: the Display page whole under de-DE's decimal comma, in English and
+        // German, the bars' text always shown with amounts on the extra usage bars, so the preview
+        // strip shows CC 2's dollars in it.
+        for (std::string_view tag : {"en", "de"}) {
+            std::wstring wide(tag.begin(), tag.end());
+            I18nLocale locale = TestRegional(wide, L"de-DE");
+            std::string name = "render-i18n-display-" + std::string(tag) + "-de-DE-light-96.png";
+            Run(name, [&] {
+                SettingsView view = TestView(SettingsUiPage::Display);
+                view.locale = locale;
+                view.settings.language = wide;
+                view.settings.showExtraBarAmounts = true;
+                view.settings.percentTextVisibility = PercentTextVisibility::Always;
+                g.locale = locale.LocaleName();
+                UiFrame frame;
+                SettingsUiBuildFrame(g, view, client, frame);
+                D2D1_SIZE_F whole{client.width, std::max(client.height, frame.viewport.top + frame.contentHeight)};
+                frame = {};
+                SettingsUiBuildFrame(g, view, whole, frame);
+                UiPaintState state;
+                state.focus = {uint32_t(int(SettingsUiPage::Display) + 1)};
+                RenderFrame(g, wic.get(), path(name), frame, view, whole, 96, RenderThemes()[0].input, state, 0, false);
+                g.locale = L"en-US";
+                CHECK(true);
+            });
+        }
     }
     CoUninitialize();
 }

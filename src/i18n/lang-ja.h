@@ -160,12 +160,12 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"date range, plus the preceding 7 days in week comparison. UTC timestamps; text IDs; no labels.",
      L"選択したアカウント (［すべてのアカウント］では全アカウント) の生のメーターをすべてエクスポートします。選択した期間を使い、週の比較中はその前の 7 日間も含めます。タイムスタンプは UTC、ID "
      L"はテキスト、ラベルは含みません。"},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (all accounts) to {path}. "
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (all accounts) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, other{メーター {count} 行}} (すべてのアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
-    {L"", L"Exported {rows, plural, one{{count} meter rows} other{{count} meter rows}} (selected account) to {path}. "
+     L"{rows, plural, other{メーター # 行}} (すべてのアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
+    {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
-     L"{rows, plural, other{メーター {count} 行}} (選択したアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
+     L"{rows, plural, other{メーター # 行}} (選択したアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
     {L"", L"Free to use, modify and share.", L"自由に使用、変更、共有できます。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -752,8 +752,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"history-card", L"{title} — details only", L"{title} — 詳細のみ"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
-    {L"history-export", L"{rows, plural, one{Exporting {count} rows…} other{Exporting {count} rows…}}",
-     L"{rows, plural, other{{count} 行をエクスポート中…}}"},
+    {L"history-export", L"{rows, plural, one{Exporting # rows…} other{Exporting # rows…}}",
+     L"{rows, plural, other{# 行をエクスポート中…}}"},
     {L"history-menu", L"About these charts", L"グラフについて"},
     {L"history-menu", L"Clear all history…", L"すべての履歴を消去…"},
     {L"history-menu", L"Open history folder", L"履歴フォルダーを開く"},

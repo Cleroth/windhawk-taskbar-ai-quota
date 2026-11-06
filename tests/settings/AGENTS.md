@@ -84,7 +84,13 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   log rendering, threshold notifications' titles, bodies and toast XML (`fetch/notifications.h`'s
   pure `ThresholdNotificationText` and `ThresholdToastXml`, extracted by name with
   `ProviderDisplayName`), the sign-in window's templates, an outage's incident and Argon's current
-  limit. `fixtures/controls.inc`: the
+  limit. `fixtures/i18n-numbers.inc`: regional number formats from Windows' strings
+  (`support.inc`'s `TestNumbers`: de-DE, fr-FR, ru-RU, hi-IN, de-CH, grouping off, one group): the
+  format read, fixed, trimmed and grouped numbers, integer arguments shown as regional text in
+  plurals, the taskbar's amounts, the details flyout's amount templates, and number boxes (format
+  and parse round trips, typed variants, the controller, a draft across a regional change, the
+  History page's box).
+  `fixtures/controls.inc`: the
   toolkit controls the history window builds on (segment geometry, hits and keys, ellipsis
   trimming, the navigation pane's stops, scrollbar and scroll-into-view, the leading switch,
   status pills, info bar severities with a button). `fixtures/tooltip.inc`: the readout layout
@@ -160,7 +166,8 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   zh-Hans and the pseudo-locale (`render-i18n-<page>-<tag>-light-96/144`; Layout, with a side
   taskbar's note, and Display at 96 only), with a preview strip
   sheet of the taskbar's localized text (keys, the headline's countdown, chart and matrix keys;
-  `render-i18n-preview-sheet-<tag>-light-96/144`). `render-backdrop-*`
+  `render-i18n-preview-sheet-<tag>-light-96/144`), and the Display page under de-DE's number
+  format in English and German (`render-i18n-display-<en|de>-de-DE-light-96`). `render-backdrop-*`
   (Accounts, Layout, Display) and
   `render-history-backdrop-*` (light and dark, 144 DPI) draw the windows over a stand-in backdrop
   with grayscale text, as the host does when DWM draws one. Client-drawn previews use the
@@ -221,7 +228,9 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   re-labeled, a modal keeping its language; an export's save dialog title, notice and progress
   in Russian with their plurals, its notice re-labeled by a switch; Delete history's dialog and
   notices in Russian with the journal's reason; a dialog keeping the language it opened in; the
-  readout's rows in Chinese), `fixtures/i18n-journal.inc` (the journal's coded errors per
+  readout's rows in Chinese; regional formats: values, hours, axis labels and cards in de-DE,
+  export counts in each region's groups, the large-export estimate ungrouped, a regional change
+  recomposing the window), `fixtures/i18n-journal.inc` (the journal's coded errors per
   language, the storage bar and a failed Clear's notice with its reason in the window's
   language) and
   `fixtures/history-chart.inc` (the chart through the controller on synthetic journals in the
@@ -248,7 +257,8 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   buttons'); also in zh-Hans and the pseudo-locale, light at 96 and 144 DPI
   (`render-history-tooltips-<tag>-light-*`), with `render-history-i18n-<tag>-light-*`: the
   default view, the 30-day and All retained ticks and a readout on the chart as the controller
-  composes them in that language.
+  composes them in that language; `render-history-i18n-<en|de>-de-DE-light-96`: the default view
+  with its cards, All meters' axes and a readout under de-DE's number format.
 - `host-compile`, `probe-compile`, `host-probe`: the toolkit with its native host
   (`ui/system-theme.h`, `surface.h`, `window-icon.h`, `popup.h`, `text-box.h`, `host.h`,
   `color-dialog.h`), the history window's dialog scope (`history/modal.h`) and a stub client with

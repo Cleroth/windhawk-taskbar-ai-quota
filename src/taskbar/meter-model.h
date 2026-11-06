@@ -192,21 +192,20 @@ static double RelativeLuminance(uint32_t argb) {
 }
 
 // An extra usage or credits amount on the taskbar: whole credits or dollars to the cent below
-// 1,000, then three significant digits with k or M (1.23k, 62.5k, 111k, $1.5k). The same in every
+// 1,000, then three significant digits with k or M (1.23k, 62.5k, 111k, $1.5k), in the regional
+// decimal separator ($12,34 in de-DE), never grouped. The sign and suffixes are the same in every
 // language, like percentages.
-static std::wstring TaskbarAmountText(double amount, bool dollars) {
-    wchar_t text[32];
+static std::wstring TaskbarAmountText(const I18nLocale& locale, double amount, bool dollars) {
     PCWSTR sign = dollars ? L"$" : L"";  // i18n-en
-    if (amount < (dollars ? 999.995 : 999.5)) {
-        swprintf(text, ARRAYSIZE(text), dollars ? L"$%.2f" : L"%.0f", amount);
-    } else {
-        // Amounts that round up into the next suffix read as 1 of it.
-        bool millions = amount >= 999.5e3;
-        double scaled = std::max(amount / (millions ? 1e6 : 1e3), 1.0);
-        swprintf(text, ARRAYSIZE(text), scaled < 999.5 ? L"%s%.3g%s" : L"%s%.0f%s", sign, scaled,
-                 millions ? L"M" : L"k");  // i18n-en
-    }
-    return text;
+    if (amount < (dollars ? 999.995 : 999.5)) return sign + I18nFixed(locale, amount, dollars ? 2 : 0);
+    // Amounts that round up into the next suffix read as 1 of it; from 1,000 of it, whole.
+    bool millions = amount >= 999.5e3;
+    double scaled = std::max(amount / (millions ? 1e6 : 1e3), 1.0);
+    char text[400];
+    auto [end, error] = scaled < 999.5 ? std::to_chars(text, std::end(text), scaled, std::chars_format::general, 3) :
+                                         std::to_chars(text, std::end(text), scaled, std::chars_format::fixed, 0);
+    std::wstring number = error == std::errc{} ? I18nDigits(locale, {text, end}, false) : L"?";
+    return sign + number + (millions ? L"M" : L"k");  // i18n-en
 }
 
 // A bar fill's highlight: the usage color `lift` lighter in OKLCH lightness with the same hue and
@@ -1401,9 +1400,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 double amount = remainingMode && data.extraLimitAmount >= 0 ?
                                     data.extraLimitAmount - data.extraUsedAmount : data.extraUsedAmount;
                 dollars = account.provider == L"anthropic";
-                meters.sparkExtraText = TaskbarAmountText(std::max(amount, 0.0), dollars);
+                meters.sparkExtraText = TaskbarAmountText(display.locale, std::max(amount, 0.0), dollars);
             } else {
-                meters.sparkExtraText = TaskbarAmountText(data.creditsBalance, false);
+                meters.sparkExtraText = TaskbarAmountText(display.locale, data.creditsBalance, false);
             }
             if (!dollars) meters.sparkExtraKey = QuotaKey(display.locale, account.provider, kExtraUsageBar);
             meters.sparkExtraColor = extra.pct >= 0 || meters.stale ?
@@ -1572,7 +1571,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                     // Dollars for Anthropic, credits otherwise (whole ones on the taskbar).
                     double amount = remainingMode ? data.extraLimitAmount - data.extraUsedAmount :
                                                     data.extraUsedAmount;
-                    m.text = TaskbarAmountText(std::max(amount, 0.0), account.provider == L"anthropic");
+                    m.text = TaskbarAmountText(display.locale, std::max(amount, 0.0),
+                                               account.provider == L"anthropic");
                 } else {
                     wchar_t text[24];
                     swprintf(text, ARRAYSIZE(text), L"%.0f%%", displayed);

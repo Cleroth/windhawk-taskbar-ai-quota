@@ -56,11 +56,13 @@ struct I18nRun {
 };
 
 // A named argument: plain text (inserted as is, never parsed), an integer of any type (a plural's
-// selector; decimal digits, '-' when negative, no grouping), or trusted runs that keep their bold
-// and links. It refers to the caller's value, so build it in the call.
+// selector; decimal digits, '-' when negative, no grouping), an integer shown as given text (a
+// plural selects by the number, it and '#' show the text: a regional form, I18nInteger), or
+// trusted runs that keep their bold and links. It refers to the caller's value, so build it in the
+// call.
 struct I18nArg {
     std::wstring_view name;
-    std::wstring_view text{};
+    std::wstring_view text{};  // A number's: empty shows its digits
     unsigned long long magnitude = 0;
     bool negative = false;
     bool isNumber = false;
@@ -69,7 +71,8 @@ struct I18nArg {
     I18nArg(std::wstring_view name, std::wstring_view text) : name(name), text(text) {}
     template <class T>
         requires std::is_integral_v<T>
-    I18nArg(std::wstring_view name, T number) : name(name), magnitude((unsigned long long)number), isNumber(true) {
+    I18nArg(std::wstring_view name, T number, std::wstring_view shown = {})
+        : name(name), text(shown), magnitude((unsigned long long)number), isNumber(true) {
         if constexpr (std::is_signed_v<T>) {
             negative = number < 0;
             if (negative) magnitude = 0 - magnitude;
@@ -106,7 +109,7 @@ struct I18nFormatSink {
                 for (const I18nRun& run : *arg.runs) {
                     Emit(run.text, bold || run.bold, run.link.empty() ? link : std::wstring_view(run.link));
                 }
-            } else if (arg.isNumber) {
+            } else if (arg.isNumber && arg.text.empty()) {
                 Emit((arg.negative ? L"-" : L"") + std::to_wstring(arg.magnitude), bold, link);
             } else {
                 Emit(arg.text, bold, link);

@@ -879,7 +879,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 break;
             }
             // A theme change also rebuilds: built content may hold colors the client derived
-            // from the theme.
+            // from the theme. Then the client sees the change (a regional format's: its numbers).
             case WM_SETTINGCHANGE:
                 if (isMain && (wParam == SPI_SETHIGHCONTRAST ||
                                (lParam && wcscmp(reinterpret_cast<PCWSTR>(lParam),
@@ -887,7 +887,7 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                     UiHostApplyTheme(host);
                     UiHostRequestRebuild(host, false);
                 }
-                handled = false;
+                handled = isMain && host.client->Message(host, message, wParam, lParam, result);
                 break;
             case WM_THEMECHANGED:
             case WM_SYSCOLORCHANGE:
