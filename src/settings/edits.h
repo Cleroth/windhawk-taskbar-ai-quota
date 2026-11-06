@@ -61,6 +61,10 @@ enum class SettingsField : uint8_t {
     LabelPosition,    // A LabelPosition
     LabelFontSize,
     LabelGap,
+    PercentTextVisibility,          // A PercentTextVisibility, on stacked bars
+    VerticalPercentTextVisibility,  // A PercentTextVisibility, on vertical bars
+    PercentTextAlignment,           // A PercentTextAlignment
+    ShowExtraBarAmounts,
     ShowBarLabels,    // Quota keys
     PercentFontSize,  // Bar text size
     ShowPaceTicks,
@@ -72,9 +76,6 @@ enum class SettingsField : uint8_t {
     // Display
     Material,               // A Material
     BarMode,                // A BarMode
-    PercentTextVisibility,  // A PercentTextVisibility
-    PercentTextAlignment,   // A PercentTextAlignment
-    ShowExtraBarAmounts,
     UsagePalette,           // A UsagePalette
     // The Custom palette's colors by band, consecutive (0xBBGGRR)
     UsageColorBelowYellow,
@@ -199,14 +200,15 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::BadgeOffsetX,    SettingsField::BadgeOffsetY,
                     SettingsField::LabelPosition,
                     SettingsField::LabelFontSize,   SettingsField::LabelGap,
+                    SettingsField::PercentTextVisibility, SettingsField::VerticalPercentTextVisibility,
+                    SettingsField::PercentTextAlignment, SettingsField::ShowExtraBarAmounts,
                     SettingsField::ShowBarLabels,   SettingsField::PercentFontSize,
                     SettingsField::ShowPaceTicks,   SettingsField::PaceTickStyle,
                     SettingsField::PaceTickColor,   SettingsField::Placement,
                     SettingsField::AccountMargin,   SettingsField::RightMargin};
         case SettingsField::ResetDisplay:
             return {SettingsField::Material,            SettingsField::BarMode,
-                    SettingsField::PercentTextVisibility, SettingsField::PercentTextAlignment,
-                    SettingsField::ShowExtraBarAmounts, SettingsField::UsagePalette,
+                    SettingsField::UsagePalette,
                     SettingsField::UsageColorBelowYellow, SettingsField::UsageColorYellow,
                     SettingsField::UsageColorOrange,    SettingsField::UsageColorRed,
                     SettingsField::YellowThreshold,     SettingsField::OrangeThreshold,
@@ -280,6 +282,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::Material: return int(s.material);
         case SettingsField::BarMode: return int(s.barMode);
         case SettingsField::PercentTextVisibility: return int(s.percentTextVisibility);
+        case SettingsField::VerticalPercentTextVisibility: return int(s.verticalPercentTextVisibility);
         case SettingsField::PercentTextAlignment: return int(s.percentTextAlignment);
         case SettingsField::ShowExtraBarAmounts: return s.showExtraBarAmounts;
         case SettingsField::UsagePalette: return int(s.usagePalette);
@@ -403,8 +406,10 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.barMode = BarMode(std::clamp(value, int(BarMode::Used), int(BarMode::Remaining)));
             break;
         case SettingsField::PercentTextVisibility:
-            s.percentTextVisibility = PercentTextVisibility(std::clamp(
-                value, int(PercentTextVisibility::Never), int(PercentTextVisibility::Always)));
+        case SettingsField::VerticalPercentTextVisibility:
+            (field == SettingsField::PercentTextVisibility ? s.percentTextVisibility : s.verticalPercentTextVisibility) =
+                PercentTextVisibility(
+                    std::clamp(value, int(PercentTextVisibility::Never), int(PercentTextVisibility::Always)));
             break;
         case SettingsField::PercentTextAlignment:
             s.percentTextAlignment = PercentTextAlignment(std::clamp(
@@ -430,9 +435,6 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::ResetDisplay:
             s.material = defaults.material;
             s.barMode = defaults.barMode;
-            s.percentTextVisibility = defaults.percentTextVisibility;
-            s.percentTextAlignment = defaults.percentTextAlignment;
-            s.showExtraBarAmounts = defaults.showExtraBarAmounts;
             s.usagePalette = defaults.usagePalette;
             s.customUsageColors = defaults.customUsageColors;
             s.yellowThreshold = defaults.yellowThreshold;
@@ -476,6 +478,10 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.labelPosition = defaults.labelPosition;
             s.labelFontSize = defaults.labelFontSize;
             s.labelGap = defaults.labelGap;
+            s.percentTextVisibility = defaults.percentTextVisibility;
+            s.verticalPercentTextVisibility = defaults.verticalPercentTextVisibility;
+            s.percentTextAlignment = defaults.percentTextAlignment;
+            s.showExtraBarAmounts = defaults.showExtraBarAmounts;
             s.showBarLabels = defaults.showBarLabels;
             s.percentFontSize = defaults.percentFontSize;
             s.showPaceTicks = defaults.showPaceTicks;

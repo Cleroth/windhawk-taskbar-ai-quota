@@ -308,9 +308,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Percentage alignment", L"Ausrichtung des Prozenttexts"},
     {L"", L"Percentage on each bar: never, on hover, or always.",
      L"Prozentwert auf jedem Balken: nie, beim Daraufzeigen oder immer."},
+    {L"", L"Percentage on each bar: never, on hover, or always; vertical bars keep their own. Wider than a thin bar, "
+          L"it overlaps the bars beside it.",
+     L"Prozentwert auf jedem Balken: nie, beim Daraufzeigen oder immer; vertikale Balken haben eine eigene "
+     L"Einstellung. Da er breiter als ein schmaler Balken ist, überlappt er die benachbarten Balken."},
     {L"", L"Percentage text", L"Prozenttext"},
-    {L"", L"Percentage text and quota keys. Percentage text is set in Display.",
-     L"Prozenttext und Kontingentkürzel. Der Prozenttext wird unter „Darstellung“ eingestellt."},
+    {L"", L"Percentage text and quota keys, in pixels.", L"Prozenttext und Kontingentkürzel, in Pixeln."},
     {L"", L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
@@ -402,13 +405,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Details beim Daraufzeigen anzeigen, alle 10 Minuten abfragen, ausgeblendete Konten nicht abfragen, "
      L"Schwellenwert-Benachrichtigungen bei Rot."},
     {L"", L"Reset Display to defaults", L"Darstellung auf Standard zurücksetzen"},
-    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
-          L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
-          L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
-     L"Darstellung auf die Standardwerte zurücksetzen?\n\nAcryl-Material, Balkenmodus „Verbraucht“, Prozenttext beim "
-     L"Daraufzeigen mit adaptiver Ausrichtung, keine Beträge, die Standardpalette (eigene Farben werden ebenfalls "
-     L"zurückgesetzt) mit Gelb ab 50%, Orange ab 75% und Rot ab 90%, veraltete Daten markiert, zusätzliche "
-     L"OpenAI-Ratenlimits ausgeblendet."},
+    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
+          L"reset too) with yellow from 50%, orange from 75% and red from 90%, stale data marked, additional OpenAI "
+          L"rate limits hidden.",
+     L"Darstellung auf die Standardwerte zurücksetzen?\n\nAcryl-Material, Balkenmodus „Verbraucht“, die "
+     L"Standardpalette (eigene Farben werden ebenfalls zurückgesetzt) mit Gelb ab 50%, Orange ab 75% und Rot ab 90%, "
+     L"veraltete Daten markiert, zusätzliche OpenAI-Ratenlimits ausgeblendet."},
     {L"", L"Reset History to defaults", L"Verlauf auf Standard zurücksetzen"},
     {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
           L"the usage history window opens on 7 days. Saved history stays.",
@@ -417,10 +419,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Der gespeicherte Verlauf bleibt erhalten."},
     {L"", L"Reset Layout to defaults", L"Layout auf Standard zurücksetzen"},
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
-          L"Accounts are not changed.",
+          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
+          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
+          L"changed.",
      L"Layout auf die Standardwerte zurücksetzen?\n\nGestapelte Balken 100\u00A0x\u00A08\u00A0px mit Bezeichnungen links, Ringe mit "
-     L"32\u00A0px, Logos und Nummern-Badges in der Textfarbe der Taskleiste, hellgraue Tempomarkierungen als Caret und die "
+     L"32\u00A0px, Logos und Nummern-Badges in der Textfarbe der Taskleiste, Prozenttext beim Daraufzeigen (nie auf "
+     L"vertikalen Balken) mit adaptiver Ausrichtung, keine Beträge, hellgraue Tempomarkierungen als Caret und die "
      L"Standardabstände. Konten werden nicht geändert."},
     {L"", L"Reset countdown", L"Reset-Countdown"},
     {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "
@@ -459,6 +463,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Show on", L"Anzeigen auf"},
     {L"", L"Show percentage text on hover or always to change this.",
      L"Lassen Sie den Prozenttext beim Daraufzeigen oder immer anzeigen, um dies zu ändern."},
+    {L"", L"Show percentage text or turn on Quota keys to change this.",
+     L"Lassen Sie den Prozenttext anzeigen oder schalten Sie „Kontingentkürzel“ ein, um dies zu ändern."},
     {L"", L"Show provider outages", L"Anbieterausfälle anzeigen"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -477,8 +483,6 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Space on each side of every account.", L"Abstand auf beiden Seiten jedes Kontos."},
     {L"", L"Square size", L"Größe des Quadrats"},
     {L"", L"Square thickness", L"Stärke des Quadrats"},
-    {L"", L"Stacked and Vertical bars only. Current tile style: {style}.",
-     L"Nur „Gestapelte Balken“ und „Vertikale Balken“. Aktueller Kachelstil: {style}."},
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
@@ -611,9 +615,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Ticks mark how much of each quota window has elapsed, to compare with its usage.",
      L"Markierungen zeigen, wie viel vom Zeitfenster jedes Kontingents verstrichen ist, zum Vergleich mit der "
      L"tatsächlichen Nutzung."},
-    {L"", L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. Accounts are not "
+    {L"", L"Tile style, bar style, sizes, identity, bar text, pace markers, position and spacing. Accounts are not "
           L"changed.",
-     L"Kachelstil, Balkenstil, Größen, Identität und Text, Tempomarkierungen, Position und Abstände. Konten werden "
+     L"Kachelstil, Balkenstil, Größen, Identität, Balkentext, Tempomarkierungen, Position und Abstände. Konten werden "
      L"nicht geändert."},
     {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
      L"Zeit bis zum Reset dieses Kontingents unter der Zahl, statt der Balken der einzelnen Kontingente."},
@@ -623,8 +627,6 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"oder Pull Requests willkommen."},
     {L"", L"Turn off Reset countdown to change this.", L"Schalten Sie „Reset-Countdown“ aus, um dies zu ändern."},
     {L"", L"Turn on Pace markers to change this.", L"Schalten Sie „Tempomarkierungen“ ein, um dies zu ändern."},
-    {L"", L"Turn on Quota keys, or percentage text in Display, to change this.",
-     L"Schalten Sie „Kontingentkürzel“ oder den Prozenttext unter „Darstellung“ ein, um dies zu ändern."},
     {L"", L"Turn on Record usage history to change this.",
      L"Schalten Sie „Nutzungsverlauf aufzeichnen“ ein, um dies zu ändern."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
@@ -1126,6 +1128,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"settings-page", L"Layout", L"Layout"},
     {L"settings-section", L"Alerts", L"Warnungen"},
     {L"settings-section", L"Appearance", L"Erscheinungsbild"},
+    {L"settings-section", L"Bar text", L"Balkentext"},
     {L"settings-section", L"Bars", L"Balken"},
     {L"settings-section", L"Credits and license", L"Mitwirkende und Lizenz"},
     {L"settings-section", L"Current position", L"Aktuelle Position"},
@@ -1134,7 +1137,6 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"settings-section", L"Gauge", L"Bogenanzeige"},
     {L"settings-section", L"Headline", L"Hauptwert"},
     {L"settings-section", L"Identity", L"Identität"},
-    {L"settings-section", L"Identity and text", L"Identität und Text"},
     {L"settings-section", L"Language", L"Sprache"},
     {L"settings-section", L"Links", L"Links"},
     {L"settings-section", L"Matrix", L"Matrix"},

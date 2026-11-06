@@ -335,13 +335,13 @@ struct SettingsUiClient final : UiHostClient {
                                    L"accounts, threshold notifications at red.") :
                             field == SettingsField::ResetLayout ?
                                 Tr(L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, "
-                                   L"32 px rings, logos and number badges in the taskbar\u2019s text color, light "
+                                   L"32 px rings, logos and number badges in the taskbar\u2019s text color, percentage "
+                                   L"text on hover (never on vertical bars) with adaptive alignment, no amounts, light "
                                    L"grey caret pace markers and the default spacing. Accounts are not changed.") :
                             field == SettingsField::ResetDisplay ?
-                                Tr(L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage "
-                                   L"text on hover with adaptive alignment, no amounts, the default palette (custom "
-                                   L"colors reset too) with yellow from 50%, orange from 75% and red from 90%, stale "
-                                   L"data marked, additional OpenAI rate limits hidden.") :
+                                Tr(L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default "
+                                   L"palette (custom colors reset too) with yellow from 50%, orange from 75% and red "
+                                   L"from 90%, stale data marked, additional OpenAI rate limits hidden.") :
                                 Tr(L"Reset History to its defaults?\n\nRecording turns on for this Windows user, "
                                    L"history is kept forever and the usage history window opens on 7 days. Saved "
                                    L"history stays."));

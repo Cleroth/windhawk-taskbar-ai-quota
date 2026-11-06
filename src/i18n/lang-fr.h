@@ -307,9 +307,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Percentage alignment", L"Alignement du pourcentage"},
     {L"", L"Percentage on each bar: never, on hover, or always.",
      L"Pourcentage sur chaque barre\u202F: jamais, au survol ou toujours."},
+    {L"", L"Percentage on each bar: never, on hover, or always; vertical bars keep their own. Wider than a thin bar, "
+          L"it overlaps the bars beside it.",
+     L"Pourcentage sur chaque barre\u202F: jamais, au survol ou toujours\u202F; les barres verticales ont leur propre "
+     L"réglage. Plus large qu’une barre fine, il chevauche les barres voisines."},
     {L"", L"Percentage text", L"Texte de pourcentage"},
-    {L"", L"Percentage text and quota keys. Percentage text is set in Display.",
-     L"Texte de pourcentage et codes de quota. Le texte de pourcentage se règle dans Affichage."},
+    {L"", L"Percentage text and quota keys, in pixels.", L"Texte de pourcentage et codes de quota, en pixels."},
     {L"", L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
@@ -400,13 +403,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"au survol, interrogation toutes les 10\u00A0minutes, comptes masqués non interrogés, notifications de seuil au "
      L"rouge."},
     {L"", L"Reset Display to defaults", L"Réinitialiser la page Affichage"},
-    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
-          L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
-          L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
-     L"Réinitialiser la page Affichage\u202F?\n\nMatériau acrylique, mode de barre Utilisé, texte de pourcentage au survol "
-     L"avec alignement adaptatif, aucun montant, la palette par défaut (couleurs personnalisées réinitialisées aussi) "
-     L"avec jaune à partir de 50%, orange à partir de 75% et rouge à partir de 90%, données obsolètes signalées, "
-     L"limites de débit OpenAI supplémentaires masquées."},
+    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
+          L"reset too) with yellow from 50%, orange from 75% and red from 90%, stale data marked, additional OpenAI "
+          L"rate limits hidden.",
+     L"Réinitialiser la page Affichage\u202F?\n\nMatériau acrylique, mode de barre Utilisé, la palette par défaut "
+     L"(couleurs personnalisées réinitialisées aussi) avec jaune à partir de 50%, orange à partir de 75% et rouge à "
+     L"partir de 90%, données obsolètes signalées, limites de débit OpenAI supplémentaires masquées."},
     {L"", L"Reset History to defaults", L"Réinitialiser la page Historique"},
     {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
           L"the usage history window opens on 7 days. Saved history stays.",
@@ -415,10 +417,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"est conservé."},
     {L"", L"Reset Layout to defaults", L"Réinitialiser la page Disposition"},
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
-          L"Accounts are not changed.",
+          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
+          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
+          L"changed.",
      L"Réinitialiser la page Disposition\u202F?\n\nBarres empilées de 100\u00A0×\u00A08\u00A0px avec libellés à gauche, anneaux de 32\u00A0px, "
-     L"logos et badges numérotés dans la couleur du texte de la barre des tâches, repères de rythme en chevron gris "
+     L"logos et badges numérotés dans la couleur du texte de la barre des tâches, texte de pourcentage au survol "
+     L"(jamais sur les barres verticales) avec alignement adaptatif, aucun montant, repères de rythme en chevron gris "
      L"clair et l’espacement par défaut. Les comptes ne sont pas modifiés."},
     {L"", L"Reset countdown", L"Compte à rebours"},
     {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "
@@ -457,6 +461,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Show on", L"Afficher sur"},
     {L"", L"Show percentage text on hover or always to change this.",
      L"Affichez le texte de pourcentage au survol ou toujours pour modifier ce paramètre."},
+    {L"", L"Show percentage text or turn on Quota keys to change this.",
+     L"Affichez le texte de pourcentage ou activez Codes de quota pour modifier ce paramètre."},
     {L"", L"Show provider outages", L"Afficher les pannes des fournisseurs"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -475,8 +481,6 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Space on each side of every account.", L"Espace de part et d’autre de chaque compte."},
     {L"", L"Square size", L"Taille du carré"},
     {L"", L"Square thickness", L"Épaisseur du carré"},
-    {L"", L"Stacked and Vertical bars only. Current tile style: {style}.",
-     L"Barres empilées et Barres verticales uniquement. Style de vignette actuel\u202F: {style}."},
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
@@ -605,10 +609,10 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Les seuils restent dans l’ordre\u202F: jaune, orange, rouge. C’est aussi le niveau des notifications de seuil."},
     {L"", L"Ticks mark how much of each quota window has elapsed, to compare with its usage.",
      L"Des repères marquent la part écoulée de la fenêtre de chaque quota, à comparer avec son utilisation."},
-    {L"", L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. Accounts are not "
+    {L"", L"Tile style, bar style, sizes, identity, bar text, pace markers, position and spacing. Accounts are not "
           L"changed.",
-     L"Style de vignette, style de barre, tailles, identité et texte, repères de rythme, position et espacement. Les "
-     L"comptes ne sont pas modifiés."},
+     L"Style de vignette, style de barre, tailles, identité, texte des barres, repères de rythme, position et "
+     L"espacement. Les comptes ne sont pas modifiés."},
     {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
      L"Le temps restant avant la réinitialisation de ce quota, sous le nombre, au lieu de la barre de chaque quota."},
     {L"", L"Translations are machine-made. Corrections are welcome as <link id=\"issues\">GitHub issues</link> or "
@@ -617,8 +621,6 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"id=\"issues\">issues GitHub</link> ou de pull requests."},
     {L"", L"Turn off Reset countdown to change this.", L"Désactivez Compte à rebours pour modifier ce paramètre."},
     {L"", L"Turn on Pace markers to change this.", L"Activez Repères de rythme pour modifier ce paramètre."},
-    {L"", L"Turn on Quota keys, or percentage text in Display, to change this.",
-     L"Activez Codes de quota, ou le texte de pourcentage dans Affichage, pour modifier ce paramètre."},
     {L"", L"Turn on Record usage history to change this.",
      L"Activez Enregistrer l’historique d’utilisation pour modifier ce paramètre."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
@@ -1124,6 +1126,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"settings-page", L"Layout", L"Disposition"},
     {L"settings-section", L"Alerts", L"Alertes"},
     {L"settings-section", L"Appearance", L"Apparence"},
+    {L"settings-section", L"Bar text", L"Texte des barres"},
     {L"settings-section", L"Bars", L"Barres"},
     {L"settings-section", L"Credits and license", L"Crédits et licence"},
     {L"settings-section", L"Current position", L"Position actuelle"},
@@ -1132,7 +1135,6 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"settings-section", L"Gauge", L"Jauge"},
     {L"settings-section", L"Headline", L"Chiffre clé"},
     {L"settings-section", L"Identity", L"Identité"},
-    {L"settings-section", L"Identity and text", L"Identité et texte"},
     {L"settings-section", L"Language", L"Langue"},
     {L"settings-section", L"Links", L"Liens"},
     {L"settings-section", L"Matrix", L"Matrice"},

@@ -1,5 +1,5 @@
-// Settings > Display: the material of the details flyout and the windows, what the meters show,
-// their usage colors and thresholds, the stale and outage marks and the OpenAI details (approved mockup
+// Settings > Display: the material of the details flyout and the windows, the bar mode, the
+// meters' usage colors and thresholds, the stale and outage marks and the OpenAI details (approved mockup
 // display.png, Appearance aside). The preview card is in the shell's pinned header
 // (settings/preview.h). Pure builder.
 
@@ -8,7 +8,6 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
                                     uint32_t& id, float x, float y, float width) {
     const Settings& s = view.settings;
     const I18nLocale& locale = view.locale;
-    const int style = std::clamp(int(s.barLayout), 0, int(std::size(kSettingsTileStyles)) - 1);
     auto text = [&](I18nKey k) { return I18nText(locale, k); };
     auto section = [&](float top, I18nKey k) { return UiAddSection(items, id, x, top, width, text(k)); };
 
@@ -34,8 +33,7 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
                                     int(s.material));
     }
 
-    // Values: the bar mode applies to every style. Percentage text is the bars' own; its
-    // alignment and the amounts that replace it need it shown.
+    // Values: the bar mode, for every style.
     y = section(y + 20, TrCtx(L"settings-section", L"Values"));
     {
         UiCardSpec spec;
@@ -46,47 +44,6 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
                                     {{text(TrCtx(L"bar-mode", L"Used")), int(BarMode::Used)},
                                      {text(TrCtx(L"bar-mode", L"Remaining")), int(BarMode::Remaining)}},
                                     int(s.barMode));
-    }
-    const bool bars = !IsTileLayout(BarLayout(style));
-    const bool shown = bars && s.percentTextVisibility != PercentTextVisibility::Never;
-    const std::wstring barsOnly = I18nText(locale, Tr(L"Stacked and Vertical bars only. Current tile style: {style}."),
-                                           {{L"style", text(kSettingsTileStyles[style])}});
-    {
-        UiCardSpec spec;
-        spec.title = text(Tr(L"Percentage text"));
-        spec.description = {{text(Tr(L"Percentage on each bar: never, on hover, or always."))}};
-        spec.enabled = bars;
-        if (!bars) spec.reason = barsOnly;
-        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentTextVisibility,
-                                    200,
-                                    {{text(TrCtx(L"percent-text", L"Never show")), int(PercentTextVisibility::Never)},
-                                     {text(TrCtx(L"percent-text", L"Show on hover")), int(PercentTextVisibility::Hover)},
-                                     {text(TrCtx(L"percent-text", L"Always show")), int(PercentTextVisibility::Always)}},
-                                    int(s.percentTextVisibility));
-    }
-    const std::wstring textOff = text(Tr(L"Show percentage text on hover or always to change this."));
-    {
-        UiCardSpec spec;
-        spec.title = text(Tr(L"Percentage alignment"));
-        spec.description = {{text(Tr(L"Adaptive: right side, moving left once the bar reaches the yellow threshold."))}};
-        spec.enabled = shown;
-        if (!shown) spec.reason = bars ? textOff : barsOnly;
-        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentTextAlignment,
-                                    200,
-                                    {{text(TrCtx(L"percent-alignment", L"Adaptive")), int(PercentTextAlignment::Adaptive)},
-                                     {text(TrCtx(L"percent-alignment", L"Left")), int(PercentTextAlignment::Left)},
-                                     {text(TrCtx(L"percent-alignment", L"Center")), int(PercentTextAlignment::Center)},
-                                     {text(TrCtx(L"percent-alignment", L"Right")), int(PercentTextAlignment::Right)}},
-                                    int(s.percentTextAlignment));
-    }
-    {
-        UiCardSpec spec;
-        spec.title = text(Tr(L"Amounts on extra usage and credits"));
-        spec.description = {{text(Tr(L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub "
-                                     L"Copilot AI credits: spent in Used mode, left in Remaining mode."))}};
-        spec.enabled = shown;
-        if (!shown) spec.reason = bars ? textOff : barsOnly;
-        y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowExtraBarAmounts);
     }
 
     // Usage colors: the palette, and Custom's color per band, each offering the band's default and

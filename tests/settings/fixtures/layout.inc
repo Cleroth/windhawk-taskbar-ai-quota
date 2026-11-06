@@ -140,6 +140,8 @@ static void RunLayoutTests() {
             {SettingsField::BadgeSize, 12}, {SettingsField::BadgeColor, 0x654321},
             {SettingsField::BadgeOffsetX, -5}, {SettingsField::BadgeOffsetY, 7},
             {SettingsField::LabelPosition, 2}, {SettingsField::LabelFontSize, 14}, {SettingsField::LabelGap, 7},
+            {SettingsField::PercentTextVisibility, 2}, {SettingsField::VerticalPercentTextVisibility, 1},
+            {SettingsField::PercentTextAlignment, 3}, {SettingsField::ShowExtraBarAmounts, 1},
             {SettingsField::ShowBarLabels, 1}, {SettingsField::PercentFontSize, 10}, {SettingsField::ShowPaceTicks, 0},
             {SettingsField::PaceTickStyle, 2}, {SettingsField::PaceTickColor, 0x123456},
             {SettingsField::Placement, 5},
@@ -152,6 +154,9 @@ static void RunLayoutTests() {
               s.labelPosition == LabelPosition::Top && s.headlineCountdown &&
               s.paceTickStyle == PaceTickStyle::Notch && s.paceTickColor == 0x123456 && s.badgeColor == 0x654321 &&
               s.placement == TaskbarPlacement::LeftSide &&
+              s.percentTextVisibility == PercentTextVisibility::Always &&
+              s.verticalPercentTextVisibility == PercentTextVisibility::Hover &&
+              s.percentTextAlignment == PercentTextAlignment::Right && s.showExtraBarAmounts &&
               s.logoBrands.claude && s.logoBrands.gemini && s.sparklineHeight == 65 &&
               s.sparklineExtra == SparklineExtra::Percent && s.sparklineTextSize == 12 && !s.sparklineElapsed &&
               !s.sparklineNowLine && s.sparklineNowCaret && s.sparklineRing && s.sparklineReadingScale == 150 &&
@@ -177,6 +182,9 @@ static void RunLayoutTests() {
             {SettingsField::HeadlineBarLength, 0, 4}, {SettingsField::HeadlineBarLength, 999, 60},
             {SettingsField::HeadlineBarThickness, 1, 2}, {SettingsField::HeadlineBarThickness, 11, 10},
             {SettingsField::LabelFontSize, 100, 24},  {SettingsField::PercentFontSize, 1, 6},
+            {SettingsField::PercentTextVisibility, 9, 2}, {SettingsField::PercentTextVisibility, -3, 0},
+            {SettingsField::VerticalPercentTextVisibility, 9, 2}, {SettingsField::VerticalPercentTextVisibility, -3, 0},
+            {SettingsField::PercentTextAlignment, 9, 3},
             {SettingsField::BarGap, -1, 0},           {SettingsField::AccountMargin, 501, 500},
             {SettingsField::BarLayout, 12, 9},        {SettingsField::BarLayout, -1, 0},
             {SettingsField::BarLayout, 8, 8},         {SettingsField::SparklineWidth, 10, 24},
@@ -206,7 +214,7 @@ static void RunLayoutTests() {
         }
     });
 
-    Run("layout reset: the forty-two Layout fields back to defaults, nothing else", [] {
+    Run("layout reset: the forty-six Layout fields back to defaults, nothing else", [] {
         Settings changed;
         changed.barLayout = BarLayout::LogoHeadline;
         changed.barStyle = BarStyle::Rail;
@@ -241,6 +249,10 @@ static void RunLayoutTests() {
         changed.labelPosition = LabelPosition::Bottom;
         changed.labelFontSize = 15;
         changed.labelGap = 9;
+        changed.percentTextVisibility = PercentTextVisibility::Always;
+        changed.verticalPercentTextVisibility = PercentTextVisibility::Hover;
+        changed.percentTextAlignment = PercentTextAlignment::Center;
+        changed.showExtraBarAmounts = true;
         changed.showBarLabels = true;
         changed.percentFontSize = 12;
         changed.showPaceTicks = false;
@@ -254,7 +266,6 @@ static void RunLayoutTests() {
         changed.pollMinutes = 30;
         changed.historyRetentionDays = 900;
         changed.yellowThreshold = 40;
-        changed.percentTextVisibility = PercentTextVisibility::Always;
         changed.showDetailsOnHover = false;
         // The identity is the account's: the Layout reset keeps it.
         changed.accounts.push_back(Account());
@@ -294,6 +305,10 @@ static void RunLayoutTests() {
         expected.labelPosition = defaults.labelPosition;
         expected.labelFontSize = defaults.labelFontSize;
         expected.labelGap = defaults.labelGap;
+        expected.percentTextVisibility = defaults.percentTextVisibility;
+        expected.verticalPercentTextVisibility = defaults.verticalPercentTextVisibility;
+        expected.percentTextAlignment = defaults.percentTextAlignment;
+        expected.showExtraBarAmounts = defaults.showExtraBarAmounts;
         expected.showBarLabels = defaults.showBarLabels;
         expected.percentFontSize = defaults.percentFontSize;
         expected.showPaceTicks = defaults.showPaceTicks;
@@ -306,12 +321,13 @@ static void RunLayoutTests() {
         SettingsAssign(reset, SettingsField::ResetLayout, 0);
         CHECK(reset == expected);
         CHECK(reset.barLayout == BarLayout::Sparkline && reset.placement == TaskbarPlacement::BeforeIcons &&
-              reset.verticalBarLength == 32);
+              reset.verticalBarLength == 32 && reset.percentTextVisibility == PercentTextVisibility::Hover &&
+              reset.verticalPercentTextVisibility == PercentTextVisibility::Never);
         CHECK(reset.sparklineHeight == 80 && reset.sparklineExtra == SparklineExtra::Amount && reset.sparklineTextSize == 8 &&
               reset.sparklineElapsed && reset.sparklineNowLine && !reset.sparklineNowCaret && reset.sparklineRing &&
               reset.sparklineReadingScale == 100 && reset.sparklineOutline && reset.sparklineSpan == SparklineSpan::Window &&
               reset.sparklineHoverSpan == SparklineSpan::Hours24);
-        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 42);
+        CHECK(SettingsGroupFields(SettingsField::ResetLayout).size() == 46);
         // Each group field is one the reset restores.
         for (SettingsField field : SettingsGroupFields(SettingsField::ResetLayout)) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
@@ -445,6 +461,14 @@ static void RunLayoutTests() {
         CHECK(always.size() == 10 && always[0].hover == -1);
         s.percentTextVisibility = PercentTextVisibility::Never;
         CHECK(percents(Strip(s)).empty());
+        // Vertical bars keep their own, never by default, whatever the shared choice.
+        s.barLayout = BarLayout::Vertical;
+        s.percentTextVisibility = PercentTextVisibility::Always;
+        CHECK(percents(Strip(s)).empty());
+        s.verticalPercentTextVisibility = PercentTextVisibility::Hover;
+        s.percentTextVisibility = PercentTextVisibility::Never;
+        std::vector<SettingsPreviewOp> vertical = percents(Strip(s));
+        CHECK(vertical.size() == 10 && vertical.front().hover == 0 && vertical.back().hover == 3);
         // Left labels: the box's padding (the 3 DIP account margin) into it, the label (OAI's with
         // its sample outage glyph after it), the label gap, then the 100 DIP bars, the padding
         // before its end.
@@ -2221,7 +2245,7 @@ static void RunLayoutTests() {
         large.labelFontSize = large.percentFontSize = 24;
         large.barGap = large.labelGap = large.accountMargin = large.rightMargin = 500;
         large.showBarLabels = true;
-        large.percentTextVisibility = PercentTextVisibility::Always;
+        large.percentTextVisibility = large.verticalPercentTextVisibility = PercentTextVisibility::Always;
         large.headlineFontSize = 24;
         large.headlineBarLength = 60;
         large.headlineBarThickness = 10;
@@ -2601,8 +2625,8 @@ static void RunLayoutTests() {
         CHECK(Control(frame, SettingsField::BarThickness, 1).action.value == 8);
         CHECK(Control(frame, SettingsField::BarGap).text == L"2" &&
               Control(frame, SettingsField::BarGap, 3).runs[0].text == L"px");
-        // The identity is per account: the Identity and text section's first card goes to
-        // Accounts, before Identity position; then Label font size and Identity gap.
+        // The identity is per account: the Identity section's first card goes to Accounts, before
+        // Identity position; then Label font size and Identity gap.
         const UiItem& identity = Control(frame, SettingsField::BarLayout, 10);
         CHECK(identity.kind == UiItemKind::Card && identity.action.kind == UiActionKind::Navigate &&
               identity.action.value == int(SettingsUiPage::Accounts));
@@ -2619,7 +2643,7 @@ static void RunLayoutTests() {
         CHECK(position.rect.bottom < Control(frame, SettingsField::LabelFontSize, 1).rect.top &&
               Control(frame, SettingsField::LabelFontSize, 1).rect.bottom < Control(frame, SettingsField::LabelGap).rect.top);
         CHECK(Control(frame, SettingsField::LabelFontSize, 1).enabled);
-        // Then the logo and badge sliders, before Quota keys.
+        // Then the logo and badge sliders, before the Bar text section.
         const UiItem& logoSize = Control(frame, SettingsField::LogoScale, 1);
         const UiItem& badgeSize = Control(frame, SettingsField::BadgeSize, 1);
         const UiItem& badgeX = Control(frame, SettingsField::BadgeOffsetX, 1);
@@ -2658,12 +2682,32 @@ static void RunLayoutTests() {
               geminiLogo.rect.bottom < badgeSize.rect.top);
         CHECK(Control(frame, SettingsField::LabelGap).rect.bottom < logoSize.rect.top && logoSize.rect.bottom < badgeSize.rect.top &&
               badgeSize.rect.bottom < badgeDefault.rect.top && badgeDefault.rect.bottom < badgeX.rect.top &&
-              badgeX.rect.bottom < badgeY.rect.top && badgeY.rect.bottom < Control(frame, SettingsField::ShowBarLabels).rect.top);
+              badgeX.rect.bottom < badgeY.rect.top &&
+              badgeY.rect.bottom < Control(frame, SettingsField::PercentTextVisibility).rect.top);
         CHECK(HasText(frame, L"Logo size") && HasText(frame, L"Badge size") && HasText(frame, L"Badge horizontal offset") &&
               HasText(frame, L"Badge vertical offset") && HasText(frame, L"Percent of the standard size; rings keep it inside the hole.") &&
               HasText(frame, L"Badge color") && HasText(frame, L"White, the default, follows the taskbar\u2019s text color"));
+        // Bar text: the percentage text, its alignment and amounts, then Quota keys and the text
+        // size.
+        const UiItem& percent = Control(frame, SettingsField::PercentTextVisibility);
+        CHECK(percent.kind == UiItemKind::Dropdown && percent.text == L"Show on hover" && percent.enabled &&
+              percent.options.size() == 3 && percent.options[0].text == L"Never show" &&
+              percent.options[2].text == L"Always show");
+        CHECK(TextCount(frame, L"Percentage on each bar: never, on hover, or always.") == 1 &&
+              !HasText(frame, L"vertical bars keep their own"));
+        CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::VerticalPercentTextVisibility)));
+        const UiItem& alignment = Control(frame, SettingsField::PercentTextAlignment);
+        CHECK(alignment.text == L"Adaptive" && alignment.enabled && alignment.options.size() == 4);
+        const UiItem& amounts = Control(frame, SettingsField::ShowExtraBarAmounts);
+        CHECK(amounts.kind == UiItemKind::Toggle && !amounts.selected && amounts.enabled && amounts.action.value == 1);
+        CHECK(percent.rect.bottom < alignment.rect.top && alignment.rect.bottom < amounts.rect.top &&
+              amounts.rect.bottom < Control(frame, SettingsField::ShowBarLabels).rect.top &&
+              Control(frame, SettingsField::ShowBarLabels).rect.bottom <
+                  Control(frame, SettingsField::PercentFontSize, 1).rect.top);
         CHECK(!Control(frame, SettingsField::ShowBarLabels).selected);
-        CHECK(Control(frame, SettingsField::PercentFontSize, 1).action.value == 9);
+        CHECK(Control(frame, SettingsField::PercentFontSize, 1).action.value == 9 &&
+              Control(frame, SettingsField::PercentFontSize, 1).enabled &&
+              HasText(frame, L"Percentage text and quota keys, in pixels."));
         CHECK(Control(frame, SettingsField::ShowPaceTicks).selected);
         CHECK(Control(frame, SettingsField::PaceTickStyle).text == L"Caret");
         for (uint32_t i = 1; i <= 5; i++) {
@@ -2678,11 +2722,12 @@ static void RunLayoutTests() {
         CHECK(Control(frame, SettingsField::ResetLayout).text == L"Reset");
         CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::RingSize, 1)) &&
               !UiFindItem(frame, SettingsControlId(SettingsField::HeadlineBarLength, 1)));
-        for (PCWSTR text : {L"Tile style", L"Bars", L"Identity and text", L"Pace markers", L"Placement", L"Spacing",
+        for (PCWSTR text : {L"Tile style", L"Bars", L"Identity", L"Bar text", L"Pace markers", L"Placement", L"Spacing",
                             L"Ticks mark how much", L"Reset Layout to defaults",
-                            L"sizes, identity and text, pace markers, position and spacing"}) {
+                            L"sizes, identity, bar text, pace markers, position and spacing"}) {
             CHECK(HasText(frame, text));
         }
+        CHECK(!HasText(frame, L"Identity and text"));
         // Gallery cards, sliders, swatches are tab stops; the preview strip isn't.
         std::vector<UiFocusStop> stops = UiFocusStops(frame);
         auto stop = [&](uint32_t id) {
@@ -2709,6 +2754,28 @@ static void RunLayoutTests() {
               !HasText(frame, L"Pixels along each bar."));
         CHECK(Control(frame, SettingsField::BarStyle).rect.bottom < vertical.rect.top &&
               vertical.rect.bottom < Control(frame, SettingsField::BarThickness, 1).rect.top);
+        // And their own percentage text, never by default: its alignment, amounts and the text
+        // size (quota keys off) disable.
+        const UiItem& verticalPercent = Control(frame, SettingsField::VerticalPercentTextVisibility);
+        CHECK(verticalPercent.kind == UiItemKind::Dropdown && verticalPercent.text == L"Never show" &&
+              verticalPercent.enabled && verticalPercent.options.size() == 3);
+        CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::PercentTextVisibility)));
+        CHECK(TextCount(frame, L"Percentage on each bar: never, on hover, or always; vertical bars keep their own. Wider "
+                               L"than a thin bar, it overlaps the bars beside it.") == 1);
+        CHECK(!Control(frame, SettingsField::PercentTextAlignment).enabled &&
+              !Control(frame, SettingsField::ShowExtraBarAmounts).enabled &&
+              !Control(frame, SettingsField::PercentFontSize, 1).enabled);
+        CHECK(TextCount(frame, L"Show percentage text on hover or always to change this.") == 2 &&
+              TextCount(frame, L"Show percentage text or turn on Quota keys to change this.") == 1);
+        // Shown on hover there, they enable; the shared choice doesn't count.
+        view.settings.verticalPercentTextVisibility = PercentTextVisibility::Hover;
+        view.settings.percentTextVisibility = PercentTextVisibility::Never;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(Control(frame, SettingsField::VerticalPercentTextVisibility).text == L"Show on hover" &&
+              Control(frame, SettingsField::PercentTextAlignment).enabled &&
+              Control(frame, SettingsField::ShowExtraBarAmounts).enabled &&
+              Control(frame, SettingsField::PercentFontSize, 1).enabled);
     });
 
     Run("layout page: ring and headline sections", [] {
@@ -2798,8 +2865,11 @@ static void RunLayoutTests() {
               !Control(frame, SettingsField::BadgeColor, 1).enabled && !Control(frame, SettingsField::BadgeColorCustom).enabled);
         CHECK(HasText(frame, L"Choose an identity position to change this.") &&
               !HasText(frame, L"Choose a label position"));
-        CHECK(!Control(frame, SettingsField::PercentFontSize, 1).enabled);
-        CHECK(HasText(frame, L"Turn on Quota keys, or percentage text in Display, to change this."));
+        CHECK(!Control(frame, SettingsField::PercentFontSize, 1).enabled &&
+              !Control(frame, SettingsField::PercentTextAlignment).enabled &&
+              !Control(frame, SettingsField::ShowExtraBarAmounts).enabled);
+        CHECK(TextCount(frame, L"Show percentage text or turn on Quota keys to change this.") == 1 &&
+              TextCount(frame, L"Show percentage text on hover or always to change this.") == 2);
         CHECK(!Control(frame, SettingsField::PaceTickStyle).enabled && !Control(frame, SettingsField::PaceTickColorCustom).enabled);
         CHECK(HasText(frame, L"Turn on Pace markers to change this."));
         // A custom color shows as a sixth, chosen swatch.

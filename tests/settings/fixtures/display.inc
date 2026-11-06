@@ -1,6 +1,7 @@
 // Display page: its fields and reset group, threshold ordering in the projection and after a
-// save, the page builder per tile style, its pinned preview, and what the Display settings change
-// in the preview strip (settings/preview.h). Synthetic inputs, hand-derived expectations.
+// save, the page builder per tile style, its pinned preview, and what the Display settings (and
+// Layout's bar text) change in the preview strip (settings/preview.h). Synthetic inputs,
+// hand-derived expectations.
 
 static constexpr SettingsField kYellow = SettingsField::YellowThreshold;
 static constexpr SettingsField kOrange = SettingsField::OrangeThreshold;
@@ -31,11 +32,6 @@ static std::vector<const UiItem*> Dots(const UiFrame& frame) {
 static constexpr SettingsField kUsageColors[] = {SettingsField::UsageColorBelowYellow, SettingsField::UsageColorYellow,
                                                  SettingsField::UsageColorOrange, SettingsField::UsageColorRed};
 
-static int TextCount(const UiFrame& frame, std::wstring_view text) {
-    return int(std::count_if(frame.content.begin(), frame.content.end(),
-                             [&](const UiItem& item) { return UiRunsText(item.runs) == text; }));
-}
-
 // The strip's percentage and amount texts (drawn at 0.9 opacity), in column and quota order.
 static std::vector<SettingsPreviewOp> Values(const SettingsPreviewStrip& strip) {
     std::vector<SettingsPreviewOp> values;
@@ -50,8 +46,7 @@ static void RunDisplayPageTests() {
         Settings s;
         const std::pair<SettingsField, int> values[] = {
             {SettingsField::Material, 3},         {SettingsField::BarMode, 1},
-            {SettingsField::PercentTextVisibility, 2}, {SettingsField::PercentTextAlignment, 3},
-            {SettingsField::ShowExtraBarAmounts, 1}, {SettingsField::UsagePalette, 2},
+            {SettingsField::UsagePalette, 2},
             {SettingsField::UsageColorBelowYellow, 0x102030}, {SettingsField::UsageColorRed, 0xFFFFFF},
             {kYellow, 30}, {kOrange, 60}, {kRed, 80},
             {SettingsField::ShowStaleWarning, 0}, {SettingsField::ShowProviderOutages, 0},
@@ -61,8 +56,6 @@ static void RunDisplayPageTests() {
             CHECK(SettingsFieldValue(s, field) == value);
         }
         CHECK(s.material == Material::TintedWallpaper && s.barMode == BarMode::Remaining &&
-              s.percentTextVisibility == PercentTextVisibility::Always &&
-              s.percentTextAlignment == PercentTextAlignment::Right && s.showExtraBarAmounts &&
               s.usagePalette == UsagePalette::Custom && !s.showStaleWarning && !s.showProviderOutages &&
               s.showOpenAiExtraLimits);
         // Each color field sets its band's custom color only.
@@ -71,8 +64,6 @@ static void RunDisplayPageTests() {
         const std::tuple<SettingsField, int, int> clamps[] = {
             {kYellow, -5, 0}, {kRed, 101, 100}, {kOrange, 99999, 100},
             {SettingsField::BarMode, 7, 1}, {SettingsField::BarMode, -1, 0},
-            {SettingsField::PercentTextVisibility, 9, 2}, {SettingsField::PercentTextVisibility, -3, 0},
-            {SettingsField::PercentTextAlignment, 9, 3},
             {SettingsField::Material, 5, 4}, {SettingsField::Material, INT_MAX, 4},
             {SettingsField::Material, -1, 0}, {SettingsField::Material, INT_MIN, 0},
             {SettingsField::UsagePalette, 3, 2}, {SettingsField::UsagePalette, -1, 0},
@@ -101,15 +92,12 @@ static void RunDisplayPageTests() {
               !SettingsFieldRange(SettingsField::UsagePalette) && !SettingsFieldRange(SettingsField::UsageColorRed));
     });
 
-    Run("display reset: the sixteen Display fields back to defaults; every scalar setting in one page reset", [] {
+    Run("display reset: the thirteen Display fields back to defaults; every scalar setting in one page reset", [] {
         const Settings defaults;
         Settings changed;
         // Any material but the default.
         changed.material = defaults.material == Material::Solid ? Material::Mica : Material::Solid;
         changed.barMode = BarMode::Remaining;
-        changed.percentTextVisibility = PercentTextVisibility::Always;
-        changed.percentTextAlignment = PercentTextAlignment::Center;
-        changed.showExtraBarAmounts = true;
         changed.usagePalette = UsagePalette::Custom;
         changed.customUsageColors = {0x010203, 0x040506, 0x070809, 0x0A0B0C};
         changed.yellowThreshold = 20;
@@ -118,17 +106,17 @@ static void RunDisplayPageTests() {
         changed.showStaleWarning = false;
         changed.showProviderOutages = false;
         changed.showOpenAiExtraLimits = true;
-        // Other pages' fields stay.
+        // Other pages' fields stay, the bar text's included.
         changed.barLength = 220;
+        changed.percentTextVisibility = PercentTextVisibility::Always;
+        changed.percentTextAlignment = PercentTextAlignment::Center;
+        changed.showExtraBarAmounts = true;
         changed.pollMinutes = 30;
         changed.historyRetentionDays = 900;
         changed.accounts.push_back(Account());
         Settings expected = changed;
         expected.material = defaults.material;
         expected.barMode = defaults.barMode;
-        expected.percentTextVisibility = defaults.percentTextVisibility;
-        expected.percentTextAlignment = defaults.percentTextAlignment;
-        expected.showExtraBarAmounts = defaults.showExtraBarAmounts;
         expected.usagePalette = UsagePalette::Default;
         expected.customUsageColors = kDefaultUsageColors;
         expected.yellowThreshold = defaults.yellowThreshold;
@@ -141,13 +129,13 @@ static void RunDisplayPageTests() {
         SettingsAssign(reset, SettingsField::ResetDisplay, 0);
         CHECK(reset == expected);
         std::vector<SettingsField> display = SettingsGroupFields(SettingsField::ResetDisplay);
-        CHECK(display.size() == 16 && display[0] == SettingsField::Material);
+        CHECK(display.size() == 13 && display[0] == SettingsField::Material);
         for (SettingsField field : display) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
             CHECK(SettingsFieldValue(changed, field) != SettingsFieldValue(defaults, field));
         }
 
-        // All 68 scalar settings changed: the four page resets restore every one, and no field
+        // All 69 scalar settings changed: the four page resets restore every one, and no field
         // belongs to two groups (Show on holds the monitor mode and number; Keep history and its
         // custom days both set the retention).
         Settings every = changed;
@@ -191,6 +179,7 @@ static void RunDisplayPageTests() {
         every.labelPosition = LabelPosition::Bottom;
         every.labelFontSize = 15;
         every.labelGap = 9;
+        every.verticalPercentTextVisibility = PercentTextVisibility::Always;
         every.showBarLabels = true;
         every.percentFontSize = 12;
         every.showPaceTicks = false;
@@ -212,7 +201,7 @@ static void RunDisplayPageTests() {
         fresh.accounts = every.accounts;
         CHECK(restored == fresh);
         std::sort(seen.begin(), seen.end());
-        CHECK(seen.size() == 68 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+        CHECK(seen.size() == 69 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     });
 
     Run("projection: thresholds stay ordered while typing; out-of-range and bad text", [] {
@@ -327,13 +316,6 @@ static void RunDisplayPageTests() {
         CHECK(mode.kind == UiItemKind::Dropdown && mode.text == L"Used" && mode.options.size() == 2 && mode.enabled);
         CHECK(mode.options[1].text == L"Remaining" && mode.options[1].value == int(BarMode::Remaining));
         CHECK_NEAR(mode.rect.right - mode.rect.left, 200);
-        const UiItem& percent = Control(frame, SettingsField::PercentTextVisibility);
-        CHECK(percent.text == L"Show on hover" && percent.enabled && percent.options.size() == 3 &&
-              percent.options[0].text == L"Never show" && percent.options[2].text == L"Always show");
-        const UiItem& alignment = Control(frame, SettingsField::PercentTextAlignment);
-        CHECK(alignment.text == L"Adaptive" && alignment.enabled && alignment.options.size() == 4);
-        const UiItem& amounts = Control(frame, SettingsField::ShowExtraBarAmounts);
-        CHECK(amounts.kind == UiItemKind::Toggle && !amounts.selected && amounts.enabled && amounts.action.value == 1);
         const UiItem& palette = Control(frame, SettingsField::UsagePalette);
         CHECK(palette.kind == UiItemKind::Dropdown && palette.text == L"Default" && palette.enabled &&
               palette.action.value == 0 && palette.options.size() == 3);
@@ -540,39 +522,19 @@ static void RunDisplayPageTests() {
         CHECK(top(frame, L"Values") > values);
     });
 
-    Run("display page: bar-only rows disable for tile styles; hidden text disables alignment and amounts", [] {
+    Run("display page: every style's rows enabled; the bar text is Layout's", [] {
         SettingsView view = TestView(SettingsUiPage::Display);
-        for (BarLayout layout : {BarLayout::Sparkline, BarLayout::SegmentedRing, BarLayout::ConcentricRings}) {
-            const int style = int(layout);
+        for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical, BarLayout::Sparkline, BarLayout::SegmentedRing}) {
             view.settings.barLayout = layout;
             UiFrame frame = DisplayFrame(view);
-            CHECK(Control(frame, SettingsField::BarMode).enabled);
-            for (SettingsField field : {SettingsField::PercentTextVisibility, SettingsField::PercentTextAlignment,
-                                        SettingsField::ShowExtraBarAmounts}) {
-                CHECK(!Control(frame, field).enabled);
+            CHECK(Control(frame, SettingsField::BarMode).enabled && Control(frame, kYellow, 1).enabled &&
+                  Control(frame, SettingsField::UsagePalette).enabled);
+            for (SettingsField field : {SettingsField::PercentTextVisibility, SettingsField::VerticalPercentTextVisibility,
+                                        SettingsField::PercentTextAlignment, SettingsField::ShowExtraBarAmounts}) {
+                CHECK(!UiFindItem(frame, SettingsControlId(field)));
             }
-            std::wstring reason = L"Stacked and Vertical bars only. Current tile style: " +
-                                  std::wstring(kSettingsTileStyles[style].English()) + L".";
-            CHECK(TextCount(frame, reason) == 3);
-            CHECK(Control(frame, kYellow, 1).enabled && Control(frame, SettingsField::UsagePalette).enabled);
+            CHECK(!HasText(frame, L"Percentage text") && !HasText(frame, L"Show percentage text"));
         }
-        view.settings.barLayout = BarLayout::SegmentedRing;
-        CHECK(TextCount(DisplayFrame(view), L"Stacked and Vertical bars only. Current tile style: Segmented ring.") == 3);
-
-        view.settings.barLayout = BarLayout::Vertical;
-        UiFrame frame = DisplayFrame(view);
-        CHECK(Control(frame, SettingsField::PercentTextAlignment).enabled &&
-              Control(frame, SettingsField::ShowExtraBarAmounts).enabled);
-
-        view.settings.barLayout = BarLayout::Stacked;
-        view.settings.percentTextVisibility = PercentTextVisibility::Never;
-        frame = DisplayFrame(view);
-        CHECK(Control(frame, SettingsField::PercentTextVisibility).enabled &&
-              Control(frame, SettingsField::PercentTextVisibility).text == L"Never show");
-        CHECK(!Control(frame, SettingsField::PercentTextAlignment).enabled &&
-              !Control(frame, SettingsField::ShowExtraBarAmounts).enabled);
-        CHECK(TextCount(frame, L"Show percentage text on hover or always to change this.") == 2);
-        CHECK(!HasText(frame, L"Stacked and Vertical bars only"));
     });
 
     Run("display header: the preview pinned under the title as on Layout, unpinned when short", [] {
@@ -653,7 +615,7 @@ static void RunDisplayPageTests() {
         Settings ring;
         ring.barLayout = BarLayout::SegmentedRing;
         size_t ops = Strip(ring).ops.size();
-        ring.percentTextVisibility = PercentTextVisibility::Always;
+        ring.percentTextVisibility = ring.verticalPercentTextVisibility = PercentTextVisibility::Always;
         ring.showExtraBarAmounts = true;
         CHECK(Strip(ring).ops.size() == ops && Values(Strip(ring)).empty());
     });

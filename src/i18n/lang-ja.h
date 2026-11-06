@@ -243,9 +243,11 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"タイルの高さに対するパーセント。グラフは使用量 0%～100% (［残量］モードでは残り) を表します。"},
     {L"", L"Percentage alignment", L"パーセントの配置"},
     {L"", L"Percentage on each bar: never, on hover, or always.", L"各バーのパーセント: 表示しない、ホバー時に表示、常に表示。"},
+    {L"", L"Percentage on each bar: never, on hover, or always; vertical bars keep their own. Wider than a thin bar, "
+          L"it overlaps the bars beside it.",
+     L"各バーのパーセント: 表示しない、ホバー時に表示、常に表示。縦バーには専用の設定があります。細いバーより幅が広いため、隣のバーに重なります。"},
     {L"", L"Percentage text", L"パーセント表示"},
-    {L"", L"Percentage text and quota keys. Percentage text is set in Display.",
-     L"パーセント表示とクォータ キー。パーセント表示は［表示］ページで設定します。"},
+    {L"", L"Percentage text and quota keys, in pixels.", L"パーセント表示とクォータ キーの文字サイズ (ピクセル単位)。"},
     {L"", L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
@@ -317,20 +319,21 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"動作を既定値にリセットしますか？\n\n言語は自動、メイン ディスプレイのみに表示、ホバー時に詳細を表示、10 "
      L"分ごとにポーリング、非表示のアカウントはポーリングしない、しきい値の通知は赤。"},
     {L"", L"Reset Display to defaults", L"表示を既定値にリセット"},
-    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
-          L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
-          L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
-     L"表示を既定値にリセットしますか？\n\nアクリル素材、［使用量］バー モード、ホバー時のパーセント表示 (配置は自動)、金額なし、既定のパレット (カスタム色もリセット)、しきい値は黄色 50%・オレンジ 75%・赤 90%、古いデータに印を付ける、OpenAI の追加のレート制限は非表示。"},
+    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
+          L"reset too) with yellow from 50%, orange from 75% and red from 90%, stale data marked, additional OpenAI "
+          L"rate limits hidden.",
+     L"表示を既定値にリセットしますか？\n\nアクリル素材、［使用量］バー モード、既定のパレット (カスタム色もリセット)、しきい値は黄色 50%・オレンジ 75%・赤 90%、古いデータに印を付ける、OpenAI の追加のレート制限は非表示。"},
     {L"", L"Reset History to defaults", L"履歴を既定値にリセット"},
     {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
           L"the usage history window opens on 7 days. Saved history stays.",
      L"履歴を既定値にリセットしますか？\n\nこの Windows ユーザーの記録がオンになり、履歴は無期限に保持され、使用履歴ウィンドウは 7 日で開きます。保存済みの履歴は残ります。"},
     {L"", L"Reset Layout to defaults", L"レイアウトを既定値にリセット"},
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
-          L"Accounts are not changed.",
-     L"レイアウトを既定値にリセットしますか？\n\n100 x 8 px の積み上げバーと左側のラベル、32 px のリング、タスク バーの文字色のロゴと番号バッジ、薄い灰色のキャレット型ペース "
-     L"マーカー、既定の間隔。アカウントは変更されません。"},
+          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
+          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
+          L"changed.",
+     L"レイアウトを既定値にリセットしますか？\n\n100 x 8 px の積み上げバーと左側のラベル、32 px のリング、タスク バーの文字色のロゴと番号バッジ、ホバー時のパーセント表示 (縦バーでは非表示、配置は自動)、金額なし、"
+     L"薄い灰色のキャレット型ペース マーカー、既定の間隔。アカウントは変更されません。"},
     {L"", L"Reset countdown", L"リセットまでの残り時間"},
     {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "
           L"remain under their IDs until expiry or Clear, unless their history was deleted with them; select one to "
@@ -360,6 +363,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Show details on hover", L"ホバー時に詳細を表示"},
     {L"", L"Show on", L"表示先"},
     {L"", L"Show percentage text on hover or always to change this.", L"変更するには、パーセント表示を［ホバー時に表示］か［常に表示］にしてください。"},
+    {L"", L"Show percentage text or turn on Quota keys to change this.",
+     L"変更するには、パーセント表示をオンにするか、［クォータ キー］をオンにしてください。"},
     {L"", L"Show provider outages", L"プロバイダーの障害を表示"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -376,7 +381,6 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Space on each side of every account.", L"各アカウントの両側のスペース。"},
     {L"", L"Square size", L"四角形のサイズ"},
     {L"", L"Square thickness", L"四角形の太さ"},
-    {L"", L"Stacked and Vertical bars only. Current tile style: {style}.", L"［積み上げバー］と［縦バー］のみ。現在のタイル スタイル: {style}。"},
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
@@ -471,9 +475,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"しきい値は黄色、オレンジ、赤の順に保たれます。しきい値の通知にもこの値を使います。"},
     {L"", L"Ticks mark how much of each quota window has elapsed, to compare with its usage.",
      L"各クォータの期間がどれだけ経過したかを目盛りで示し、使用量と比べられるようにします。"},
-    {L"", L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. Accounts are not "
+    {L"", L"Tile style, bar style, sizes, identity, bar text, pace markers, position and spacing. Accounts are not "
           L"changed.",
-     L"タイル スタイル、バーのスタイル、サイズ、識別表示とテキスト、ペース マーカー、位置、間隔。アカウントは変更されません。"},
+     L"タイル スタイル、バーのスタイル、サイズ、識別表示、バーのテキスト、ペース マーカー、位置、間隔。アカウントは変更されません。"},
     {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
      L"各クォータのバーの代わりに、そのクォータのリセットまでの時間を数値の下に表示します。"},
     {L"", L"Translations are machine-made. Corrections are welcome as <link id=\"issues\">GitHub issues</link> or "
@@ -481,8 +485,6 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"翻訳は機械翻訳です。修正は <link id=\"issues\">GitHub の Issue</link> またはプル リクエストでお寄せください。"},
     {L"", L"Turn off Reset countdown to change this.", L"変更するには、［リセットまでの残り時間］をオフにしてください。"},
     {L"", L"Turn on Pace markers to change this.", L"変更するには、［ペース マーカー］をオンにしてください。"},
-    {L"", L"Turn on Quota keys, or percentage text in Display, to change this.",
-     L"変更するには、［クォータ キー］か、［表示］ページのパーセント表示をオンにしてください。"},
     {L"", L"Turn on Record usage history to change this.", L"変更するには、［使用履歴を記録］をオンにしてください。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"利用できないクォータは自動的に非表示になります。少なくとも 1 つは選択されたままです。"},
@@ -944,6 +946,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"settings-page", L"Layout", L"レイアウト"},
     {L"settings-section", L"Alerts", L"アラート"},
     {L"settings-section", L"Appearance", L"外観"},
+    {L"settings-section", L"Bar text", L"バーのテキスト"},
     {L"settings-section", L"Bars", L"バー"},
     {L"settings-section", L"Credits and license", L"クレジットとライセンス"},
     {L"settings-section", L"Current position", L"現在位置"},
@@ -952,7 +955,6 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"settings-section", L"Gauge", L"ゲージ"},
     {L"settings-section", L"Headline", L"ヘッドライン"},
     {L"settings-section", L"Identity", L"識別表示"},
-    {L"settings-section", L"Identity and text", L"識別表示とテキスト"},
     {L"settings-section", L"Language", L"言語"},
     {L"settings-section", L"Links", L"リンク"},
     {L"settings-section", L"Matrix", L"マトリックス"},

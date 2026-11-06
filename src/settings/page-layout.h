@@ -1,5 +1,5 @@
-// Settings > Layout: the tile style gallery and the position, then the chosen style's sizes, identity
-// and text, pace markers and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview
+// Settings > Layout: the tile style gallery and the position, then the chosen style's sizes, identity,
+// bar text, pace markers and spacing (approved mockups layout-v2.png, layout-v2-bars.png). The preview
 // card is in the shell's pinned header (settings/preview.h). Pure builder.
 
 // By BarLayout; also the Display page's name for the current style.
@@ -235,10 +235,9 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, pixels);
         }
 
-        // Identity and text: the link to each account's identity, where it sits; the Label form's
-        // size, the gap and the logo cards need a position. Then quota keys, and the bar text size
-        // for them or percentage text.
-        y = section(y + 20, TrCtx(L"settings-section", L"Identity and text"));
+        // Identity: the link to each account's identity, where it sits; the Label form's size, the
+        // gap and the logo cards need a position.
+        y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
         bool placed = s.labelPosition != LabelPosition::Hidden;
         y = identityCard(y);
         {
@@ -270,6 +269,51 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelGap, pixels);
         }
         y = logoCards(y + 3, placed);
+
+        // Bar text: the percentage text (vertical bars' own), its alignment and the amounts that
+        // replace it, which need it shown; then quota keys, and the text size for either.
+        y = section(y + 20, TrCtx(L"settings-section", L"Bar text"));
+        const bool vertical = layout == BarLayout::Vertical;
+        const bool percentShown = PercentTextVisibilityFor(s) != PercentTextVisibility::Never;
+        {
+            UiCardSpec spec;
+            spec.title = text(Tr(L"Percentage text"));
+            spec.description = {{text(vertical ? Tr(L"Percentage on each bar: never, on hover, or always; vertical bars "
+                                                    L"keep their own. Wider than a thin bar, it overlaps the bars beside "
+                                                    L"it.") :
+                                                 Tr(L"Percentage on each bar: never, on hover, or always."))}};
+            y = SettingsAddDropdownCard(
+                g, view, items, id, x, y, width, spec,
+                vertical ? SettingsField::VerticalPercentTextVisibility : SettingsField::PercentTextVisibility, 200,
+                {{text(TrCtx(L"percent-text", L"Never show")), int(PercentTextVisibility::Never)},
+                 {text(TrCtx(L"percent-text", L"Show on hover")), int(PercentTextVisibility::Hover)},
+                 {text(TrCtx(L"percent-text", L"Always show")), int(PercentTextVisibility::Always)}},
+                int(PercentTextVisibilityFor(s)));
+        }
+        const std::wstring textOff = text(Tr(L"Show percentage text on hover or always to change this."));
+        {
+            UiCardSpec spec;
+            spec.title = text(Tr(L"Percentage alignment"));
+            spec.description = {{text(Tr(L"Adaptive: right side, moving left once the bar reaches the yellow threshold."))}};
+            spec.enabled = percentShown;
+            if (!percentShown) spec.reason = textOff;
+            y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentTextAlignment,
+                                        200,
+                                        {{text(TrCtx(L"percent-alignment", L"Adaptive")), int(PercentTextAlignment::Adaptive)},
+                                         {text(TrCtx(L"percent-alignment", L"Left")), int(PercentTextAlignment::Left)},
+                                         {text(TrCtx(L"percent-alignment", L"Center")), int(PercentTextAlignment::Center)},
+                                         {text(TrCtx(L"percent-alignment", L"Right")), int(PercentTextAlignment::Right)}},
+                                        int(s.percentTextAlignment));
+        }
+        {
+            UiCardSpec spec;
+            spec.title = text(Tr(L"Amounts on extra usage and credits"));
+            spec.description = {{text(Tr(L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub "
+                                         L"Copilot AI credits: spent in Used mode, left in Remaining mode."))}};
+            spec.enabled = percentShown;
+            if (!percentShown) spec.reason = textOff;
+            y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowExtraBarAmounts);
+        }
         {
             UiCardSpec spec;
             spec.title = text(Tr(L"Quota keys"));
@@ -280,12 +324,12 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowBarLabels);
         }
         {
-            bool shown = s.showBarLabels || s.percentTextVisibility != PercentTextVisibility::Never;
+            bool shown = s.showBarLabels || percentShown;
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar text size"));
-            spec.description = {{text(Tr(L"Percentage text and quota keys. Percentage text is set in Display."))}};
+            spec.description = {{text(Tr(L"Percentage text and quota keys, in pixels."))}};
             spec.enabled = shown;
-            if (!shown) spec.reason = text(Tr(L"Turn on Quota keys, or percentage text in Display, to change this."));
+            if (!shown) spec.reason = text(Tr(L"Show percentage text or turn on Quota keys to change this."));
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentFontSize);
         }
     } else if (IsFaceTile(layout)) {
@@ -552,7 +596,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
 
     UiCardSpec reset;
     reset.title = text(Tr(L"Reset Layout to defaults"));
-    reset.description = {{text(Tr(L"Tile style, bar style, sizes, identity and text, pace markers, position and "
+    reset.description = {{text(Tr(L"Tile style, bar style, sizes, identity, bar text, pace markers, position and "
                                   L"spacing. Accounts are not changed."))}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset, SettingsField::ResetLayout,
                                  text(TrCtx(L"button", L"Reset")));

@@ -251,7 +251,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                         ap.pacePx[w] = m.pacePx;
                     }
 
-                    if (settings.percentTextVisibility != PercentTextVisibility::Never) {
+                    if (PercentTextVisibilityFor(settings) != PercentTextVisibility::Never) {
                         PercentTextAlignment appliedAlignment = m.textAlignment;
                         if ((int)appliedAlignment != ap.percentAlignments[w]) {
                             if (ui.percents[w]) {

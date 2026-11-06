@@ -152,6 +152,10 @@ static bool NormalizeSettings(Settings* s) {
         s->percentTextVisibility > PercentTextVisibility::Always) {
         s->percentTextVisibility = PercentTextVisibility::Hover;
     }
+    if (s->verticalPercentTextVisibility < PercentTextVisibility::Never ||
+        s->verticalPercentTextVisibility > PercentTextVisibility::Always) {
+        s->verticalPercentTextVisibility = PercentTextVisibility::Never;
+    }
     if (s->material < Material::Acrylic || s->material > Material::Solid) s->material = Settings().material;
     if (s->notificationLevel < NotificationLevel::Off || s->notificationLevel > NotificationLevel::Red) {
         s->notificationLevel = NotificationLevel::Red;
@@ -289,9 +293,12 @@ static std::wstring SerializeSettings(const Settings& s) {
                                 s.placement == TaskbarPlacement::LeftSide ? L"leftSide" :
                                 s.placement == TaskbarPlacement::RightOfStart ? L"rightOfStart" : L"beforeIcons");
         setNumber(L"rightMargin", s.rightMargin);
-        setString(L"percentTextVisibility",
-                  s.percentTextVisibility == PercentTextVisibility::Never ? L"never" :
-                  s.percentTextVisibility == PercentTextVisibility::Always ? L"always" : L"hover");
+        auto visibilityName = [](PercentTextVisibility visibility) {
+            return visibility == PercentTextVisibility::Never ? L"never" :
+                   visibility == PercentTextVisibility::Always ? L"always" : L"hover";
+        };
+        setString(L"percentTextVisibility", visibilityName(s.percentTextVisibility));
+        setString(L"verticalPercentTextVisibility", visibilityName(s.verticalPercentTextVisibility));
         setString(L"percentTextAlignment",
                   s.percentTextAlignment == PercentTextAlignment::Left ? L"left" :
                   s.percentTextAlignment == PercentTextAlignment::Center ? L"center" :
@@ -537,6 +544,15 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                                           PercentTextVisibility::Always :
                                           PercentTextVisibility::Never;
         }
+        // Settings saved before vertical bars had percentage text of their own keep the shared
+        // one on vertical bars.
+        std::wstring verticalPercentText = GetStr(root, L"verticalPercentTextVisibility");
+        s.verticalPercentTextVisibility =
+            !root.HasKey(L"verticalPercentTextVisibility") ?
+                (s.barLayout == BarLayout::Vertical ? s.percentTextVisibility : PercentTextVisibility::Never) :
+            verticalPercentText == L"always" ? PercentTextVisibility::Always :
+            verticalPercentText == L"hover"  ? PercentTextVisibility::Hover :
+                                               PercentTextVisibility::Never;
         std::wstring percentTextAlignment = GetStr(root, L"percentTextAlignment");
         s.percentTextAlignment = percentTextAlignment == L"left" ? PercentTextAlignment::Left :
                                  percentTextAlignment == L"center" ? PercentTextAlignment::Center :
@@ -767,6 +783,7 @@ static bool LoadLegacySettings(Settings* out) {
     s.rightMargin = getInt(L"rightMargin", 4);
     s.percentTextVisibility = getBool(L"showPercentText", false) ?
                                   PercentTextVisibility::Always : PercentTextVisibility::Never;
+    if (s.barLayout == BarLayout::Vertical) s.verticalPercentTextVisibility = s.percentTextVisibility;
     s.showOpenAiExtraLimits = getBool(L"showCodexSparkInTooltip", false);
     s.yellowThreshold = getInt(L"yellowThreshold", 50);
     s.orangeThreshold = getInt(L"orangeThreshold", 75);

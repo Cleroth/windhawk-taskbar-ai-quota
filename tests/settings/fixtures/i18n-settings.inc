@@ -521,30 +521,17 @@ static void RunI18nSettingsTests() {
                    L"zeigt sie nebeneinander in einer unteren Taskleiste.");
     });
 
-    Run("display page: the bar-only reason names the current tile style by its gallery caption, in Russian and "
-        "Japanese; the preview card's title, switch label and note in Japanese", [] {
-        SettingsView view = TestView(SettingsUiPage::Display);
+    Run("layout page: the segmented ring's gallery caption in Russian; display page: the preview card's title, "
+        "switch label and note in Japanese", [] {
+        SettingsView view = TestView(SettingsUiPage::Layout);
         view.locale = TestLocale(L"ru");
         view.settings.barLayout = BarLayout::SegmentedRing;
-        // Только для стилей «Полосы стопкой» и «Вертикальные полосы». Текущий стиль плитки: «Сегментное кольцо».
-        CHECK(TextCount(DisplayFrame(view),
-                        L"\u0422\u043E\u043B\u044C\u043A\u043E \u0434\u043B\u044F \u0441\u0442\u0438\u043B\u0435\u0439 "
-                        L"\u00AB\u041F\u043E\u043B\u043E\u0441\u044B \u0441\u0442\u043E\u043F\u043A\u043E\u0439\u00BB "
-                        L"\u0438 \u00AB\u0412\u0435\u0440\u0442\u0438\u043A\u0430\u043B\u044C\u043D\u044B\u0435 "
-                        L"\u043F\u043E\u043B\u043E\u0441\u044B\u00BB. \u0422\u0435\u043A\u0443\u0449\u0438\u0439 "
-                        L"\u0441\u0442\u0438\u043B\u044C \u043F\u043B\u0438\u0442\u043A\u0438: \u00AB\u0421\u0435\u0433"
-                        L"\u043C\u0435\u043D\u0442\u043D\u043E\u0435 \u043A\u043E\u043B\u044C\u0446\u043E\u00BB.") == 3);
-        view.page = SettingsUiPage::Layout;
         CHECK(Control(DisplayFrame(view), SettingsField::BarLayout, int(BarLayout::SegmentedRing)).text ==
               L"\u0421\u0435\u0433\u043C\u0435\u043D\u0442\u043D\u043E\u0435 \u043A\u043E\u043B\u044C\u0446\u043E");
         view.page = SettingsUiPage::Display;
         view.locale = TestLocale(L"ja");
         view.settings.barLayout = BarLayout::Sparkline;
         UiFrame frame = DisplayFrame(view);
-        // ［積み上げバー］と［縦バー］のみ。現在のタイル スタイル: 使用量グラフ。
-        CHECK(TextCount(frame, L"\uFF3B\u7A4D\u307F\u4E0A\u3052\u30D0\u30FC\uFF3D\u3068\uFF3B\u7E26\u30D0\u30FC\uFF3D"
-                               L"\u306E\u307F\u3002\u73FE\u5728\u306E\u30BF\u30A4\u30EB \u30B9\u30BF\u30A4\u30EB: "
-                               L"\u4F7F\u7528\u91CF\u30B0\u30E9\u30D5\u3002") == 3);
         // プレビュー, タスク バーに表示, サンプル アカウント (設定の変更を反映)
         const UiItem* title = nullptr;
         for (const UiItem& item : frame.main) {

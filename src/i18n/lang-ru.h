@@ -294,9 +294,13 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Percentage alignment", L"Выравнивание процентов"},
     {L"", L"Percentage on each bar: never, on hover, or always.",
      L"Процент на каждой полосе: никогда, при наведении или всегда."},
+    {L"", L"Percentage on each bar: never, on hover, or always; vertical bars keep their own. Wider than a thin bar, "
+          L"it overlaps the bars beside it.",
+     L"Процент на каждой полосе: никогда, при наведении или всегда; у вертикальных полос своя настройка. Он шире "
+     L"тонкой полосы, поэтому перекрывает соседние полосы."},
     {L"", L"Percentage text", L"Текст процентов"},
-    {L"", L"Percentage text and quota keys. Percentage text is set in Display.",
-     L"Текст процентов и обозначения квот. Текст процентов настраивается в разделе «Отображение»."},
+    {L"", L"Percentage text and quota keys, in pixels.",
+     L"Размер текста процентов и обозначений квот, в пикселях."},
     {L"", L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
@@ -381,13 +385,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"сведения при наведении, опрос каждые 10 минут, скрытые аккаунты не опрашиваются, уведомления о пороге на "
      L"красном уровне."},
     {L"", L"Reset Display to defaults", L"Сбросить «Отображение» к значениям по умолчанию"},
-    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
-          L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
-          L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
-     L"Сбросить «Отображение» к значениям по умолчанию?\n\nМатериал «Акрил», режим полос «Использовано», текст "
-     L"процентов при наведении с адаптивным выравниванием, без сумм, палитра по умолчанию (свои цвета тоже "
-     L"сбрасываются) с жёлтым от 50%, оранжевым от 75% и красным от 90%, устаревшие данные помечаются, дополнительные "
-     L"лимиты запросов OpenAI скрыты."},
+    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
+          L"reset too) with yellow from 50%, orange from 75% and red from 90%, stale data marked, additional OpenAI "
+          L"rate limits hidden.",
+     L"Сбросить «Отображение» к значениям по умолчанию?\n\nМатериал «Акрил», режим полос «Использовано», палитра по "
+     L"умолчанию (свои цвета тоже сбрасываются) с жёлтым от 50%, оранжевым от 75% и красным от 90%, устаревшие данные "
+     L"помечаются, дополнительные лимиты запросов OpenAI скрыты."},
     {L"", L"Reset History to defaults", L"Сбросить «История» к значениям по умолчанию"},
     {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
           L"the usage history window opens on 7 days. Saved history stays.",
@@ -395,11 +398,13 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"хранится бессрочно, а окно истории использования открывается с периодом 7 дней. Сохранённая история остаётся."},
     {L"", L"Reset Layout to defaults", L"Сбросить «Макет» к значениям по умолчанию"},
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
-          L"Accounts are not changed.",
+          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
+          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
+          L"changed.",
      L"Сбросить «Макет» к значениям по умолчанию?\n\nПолосы стопкой 100\u00A0×\u00A08\u00A0пикс. с подписями слева, кольца 32\u00A0пикс., "
-     L"логотипы и номера цветом текста панели задач, светло-серые метки темпа в виде курсора и интервалы по умолчанию. "
-     L"Аккаунты не изменяются."},
+     L"логотипы и номера цветом текста панели задач, текст процентов при наведении (на вертикальных полосах — "
+     L"никогда) с адаптивным выравниванием, без сумм, светло-серые метки темпа в виде курсора и интервалы по "
+     L"умолчанию. Аккаунты не изменяются."},
     {L"", L"Reset countdown", L"Отсчёт до сброса"},
     {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "
           L"remain under their IDs until expiry or Clear, unless their history was deleted with them; select one to "
@@ -437,6 +442,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Show on", L"Показывать на"},
     {L"", L"Show percentage text on hover or always to change this.",
      L"Чтобы изменить, выберите показ текста процентов при наведении или всегда."},
+    {L"", L"Show percentage text or turn on Quota keys to change this.",
+     L"Чтобы изменить, включите показ текста процентов или «Обозначения квот»."},
     {L"", L"Show provider outages", L"Показывать сбои поставщиков"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -455,8 +462,6 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Space on each side of every account.", L"Отступ с каждой стороны каждого аккаунта."},
     {L"", L"Square size", L"Размер квадрата"},
     {L"", L"Square thickness", L"Толщина квадрата"},
-    {L"", L"Stacked and Vertical bars only. Current tile style: {style}.",
-     L"Только для стилей «Полосы стопкой» и «Вертикальные полосы». Текущий стиль плитки: «{style}»."},
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
@@ -578,10 +583,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Пороги всегда идут по порядку: жёлтый, оранжевый, красный. Это также уровень уведомлений о пороге."},
     {L"", L"Ticks mark how much of each quota window has elapsed, to compare with its usage.",
      L"Метки показывают, какая часть окна каждой квоты прошла, — для сравнения с её использованием."},
-    {L"", L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. Accounts are not "
+    {L"", L"Tile style, bar style, sizes, identity, bar text, pace markers, position and spacing. Accounts are not "
           L"changed.",
-     L"Стиль плитки, стиль полос, размеры, идентификация и текст, метки темпа, положение и интервалы. Аккаунты не "
-     L"изменяются."},
+     L"Стиль плитки, стиль полос, размеры, идентификация, текст на полосах, метки темпа, положение и интервалы. "
+     L"Аккаунты не изменяются."},
     {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
      L"Время до сброса этой квоты под числом вместо полос каждой квоты."},
     {L"", L"Translations are machine-made. Corrections are welcome as <link id=\"issues\">GitHub issues</link> or "
@@ -590,8 +595,6 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"GitHub</link> или pull requests."},
     {L"", L"Turn off Reset countdown to change this.", L"Чтобы изменить, выключите «Отсчёт до сброса»."},
     {L"", L"Turn on Pace markers to change this.", L"Чтобы изменить, включите «Метки темпа»."},
-    {L"", L"Turn on Quota keys, or percentage text in Display, to change this.",
-     L"Чтобы изменить, включите «Обозначения квот» или текст процентов в разделе «Отображение»."},
     {L"", L"Turn on Record usage history to change this.",
      L"Чтобы изменить, включите «Записывать историю использования»."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
@@ -1085,6 +1088,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"settings-page", L"Layout", L"Макет"},
     {L"settings-section", L"Alerts", L"Оповещения"},
     {L"settings-section", L"Appearance", L"Внешний вид"},
+    {L"settings-section", L"Bar text", L"Текст на полосах"},
     {L"settings-section", L"Bars", L"Полосы"},
     {L"settings-section", L"Credits and license", L"Благодарности и лицензия"},
     {L"settings-section", L"Current position", L"Текущий момент"},
@@ -1093,7 +1097,6 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"settings-section", L"Gauge", L"Шкала"},
     {L"settings-section", L"Headline", L"Главный процент"},
     {L"settings-section", L"Identity", L"Идентификация"},
-    {L"settings-section", L"Identity and text", L"Идентификация и текст"},
     {L"settings-section", L"Language", L"Язык"},
     {L"settings-section", L"Links", L"Ссылки"},
     {L"settings-section", L"Matrix", L"Матрица"},

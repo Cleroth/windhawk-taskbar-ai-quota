@@ -233,8 +233,11 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"占磁贴高度的百分比，对应已用 0% 至 100%（“剩余量”模式下为剩余）。"},
     {L"", L"Percentage alignment", L"百分比对齐"},
     {L"", L"Percentage on each bar: never, on hover, or always.", L"每个条形上的百分比：从不、悬停时或始终显示。"},
+    {L"", L"Percentage on each bar: never, on hover, or always; vertical bars keep their own. Wider than a thin bar, "
+          L"it overlaps the bars beside it.",
+     L"每个条形上的百分比：从不、悬停时或始终显示；垂直条形有单独的设置。百分比文本比细条形宽，会与相邻条形重叠。"},
     {L"", L"Percentage text", L"百分比文本"},
-    {L"", L"Percentage text and quota keys. Percentage text is set in Display.", L"百分比文本和配额简称。百分比文本在“显示”中设置。"},
+    {L"", L"Percentage text and quota keys, in pixels.", L"百分比文本和配额简称的文字大小（像素）。"},
     {L"", L"Percentages use the left axis; the shaded band marks your red threshold. In the Remaining bar mode "
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
@@ -301,10 +304,10 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"要将“行为”重置为默认值吗？\n\n自动选择语言、仅在主显示器上显示、悬停时显示详情、每 10 "
      L"分钟轮询一次、不轮询隐藏的账户、在红色阈值时通知。"},
     {L"", L"Reset Display to defaults", L"将“显示”重置为默认值"},
-    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, percentage text on hover with adaptive "
-          L"alignment, no amounts, the default palette (custom colors reset too) with yellow from 50%, orange from "
-          L"75% and red from 90%, stale data marked, additional OpenAI rate limits hidden.",
-     L"要将“显示”重置为默认值吗？\n\n亚克力材质、已用量条形模式、悬停时显示百分比文本并自适应对齐、不显示金额、默认调色板（自定义颜色也会重置），50% 起为黄色、75% 起为橙色、90% 起为红色，标记过时数据，隐藏其他 "
+    {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
+          L"reset too) with yellow from 50%, orange from 75% and red from 90%, stale data marked, additional OpenAI "
+          L"rate limits hidden.",
+     L"要将“显示”重置为默认值吗？\n\n亚克力材质、已用量条形模式、默认调色板（自定义颜色也会重置），50% 起为黄色、75% 起为橙色、90% 起为红色，标记过时数据，隐藏其他 "
      L"OpenAI 速率限制。"},
     {L"", L"Reset History to defaults", L"将“历史”重置为默认值"},
     {L"", L"Reset History to its defaults?\n\nRecording turns on for this Windows user, history is kept forever and "
@@ -312,9 +315,11 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"要将“历史”重置为默认值吗？\n\n将为此 Windows 用户开启记录，永久保留历史，使用历史窗口打开时显示 7 天。已保存的历史会保留。"},
     {L"", L"Reset Layout to defaults", L"将“布局”重置为默认值"},
     {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, light grey caret pace markers and the default spacing. "
-          L"Accounts are not changed.",
-     L"要将“布局”重置为默认值吗？\n\n100 x 8 px 堆叠条形且标签在左侧、32 px 圆环、采用任务栏文字颜色的徽标和编号徽章、浅灰色插入符号式节奏标记以及默认间距。账户不会更改。"},
+          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
+          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
+          L"changed.",
+     L"要将“布局”重置为默认值吗？\n\n100 x 8 px 堆叠条形且标签在左侧、32 px 圆环、采用任务栏文字颜色的徽标和编号徽章、悬停时显示百分比文本（垂直条形上从不显示）并自适应对齐、不显示金额、"
+     L"浅灰色插入符号式节奏标记以及默认间距。账户不会更改。"},
     {L"", L"Reset countdown", L"重置倒计时"},
     {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "
           L"remain under their IDs until expiry or Clear, unless their history was deleted with them; select one to "
@@ -342,6 +347,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Show details on hover", L"悬停时显示详情"},
     {L"", L"Show on", L"显示于"},
     {L"", L"Show percentage text on hover or always to change this.", L"将“百分比文本”设为“悬停时显示”或“始终显示”后即可更改。"},
+    {L"", L"Show percentage text or turn on Quota keys to change this.", L"显示百分比文本或开启“配额简称”后即可更改。"},
     {L"", L"Show provider outages", L"显示提供商故障"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -356,7 +362,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Space on each side of every account.", L"每个账户两侧的间距。"},
     {L"", L"Square size", L"方块大小"},
     {L"", L"Square thickness", L"方块粗细"},
-    {L"", L"Stacked and Vertical bars only. Current tile style: {style}.", L"仅适用于“堆叠条形”和“垂直条形”。当前磁贴样式：{style}。"},
     {L"", L"Stop keeping history forever?\n\nHistory will be kept for {days, plural, one{# day} other{# days}} and "
           L"limited to 250,000 samples (about 60 MB) again. Older samples, and the oldest beyond that limit, will be "
           L"deleted permanently, for every Windows user.",
@@ -449,9 +454,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"阈值始终保持顺序：黄色、橙色、红色。也是阈值通知的触发级别。"},
     {L"", L"Ticks mark how much of each quota window has elapsed, to compare with its usage.",
      L"刻度标示每个配额时段已过去的比例，便于与其用量对比。"},
-    {L"", L"Tile style, bar style, sizes, identity and text, pace markers, position and spacing. Accounts are not "
+    {L"", L"Tile style, bar style, sizes, identity, bar text, pace markers, position and spacing. Accounts are not "
           L"changed.",
-     L"磁贴样式、条形样式、尺寸、标识和文字、节奏标记、位置和间距。账户不会更改。"},
+     L"磁贴样式、条形样式、尺寸、标识、条形文字、节奏标记、位置和间距。账户不会更改。"},
     {L"", L"Time until that quota resets under the number, instead of each quota’s bar.",
      L"在数字下方显示该配额距重置的剩余时间，取代各配额的条形。"},
     {L"", L"Translations are machine-made. Corrections are welcome as <link id=\"issues\">GitHub issues</link> or "
@@ -459,7 +464,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"翻译由机器生成。欢迎通过 <link id=\"issues\">GitHub 议题</link>或拉取请求提交更正。"},
     {L"", L"Turn off Reset countdown to change this.", L"关闭“重置倒计时”后即可更改。"},
     {L"", L"Turn on Pace markers to change this.", L"开启“节奏标记”后即可更改。"},
-    {L"", L"Turn on Quota keys, or percentage text in Display, to change this.", L"开启“配额简称”或“显示”中的百分比文本后即可更改。"},
     {L"", L"Turn on Record usage history to change this.", L"开启“记录使用历史”后即可更改。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.", L"不可用的配额会自动隐藏。至少保留一个选中。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -912,6 +916,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"settings-page", L"Layout", L"布局"},
     {L"settings-section", L"Alerts", L"提醒"},
     {L"settings-section", L"Appearance", L"外观"},
+    {L"settings-section", L"Bar text", L"条形文字"},
     {L"settings-section", L"Bars", L"条形"},
     {L"settings-section", L"Credits and license", L"致谢与许可证"},
     {L"settings-section", L"Current position", L"当前位置"},
@@ -920,7 +925,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"settings-section", L"Gauge", L"仪表"},
     {L"settings-section", L"Headline", L"主数字"},
     {L"settings-section", L"Identity", L"标识"},
-    {L"settings-section", L"Identity and text", L"标识和文字"},
     {L"settings-section", L"Language", L"语言"},
     {L"settings-section", L"Links", L"链接"},
     {L"settings-section", L"Matrix", L"矩阵"},

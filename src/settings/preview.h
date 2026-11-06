@@ -503,7 +503,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     label(ops, q.key, textStyle, itemLeft,
                           itemTop + (itemHeight - measure(q.key, textStyle).height) / 2 - 0.5f, keyColumn - 3, DWRITE_TEXT_ALIGNMENT_TRAILING, text, 0.8f);
                 }
-                if (settings.percentTextVisibility != PercentTextVisibility::Never && !q.text.empty()) {
+                const PercentTextVisibility percentText = PercentTextVisibilityFor(settings);
+                if (percentText != PercentTextVisibility::Never && !q.text.empty()) {
                     // As wide as the bar (vertical: at least four characters), aligned per the
                     // meter, nudged up a DIP; hover-only text shows while the column is hovered.
                     float boxWidth = vertical ? std::max(float(th), textSize * 4) : float(len);
@@ -517,7 +518,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                     label(ops, q.text, textStyle, left + float(q.textOffset),
                           ty + (trackHeight - measure(q.text, textStyle).height) / 2 - 1, boxWidth, align,
                           q.darkText ? 0xFF000000 : 0xFFFFFFFF, 0.9f, false,
-                          settings.percentTextVisibility == PercentTextVisibility::Hover ? column : -1);
+                          percentText == PercentTextVisibility::Hover ? column : -1);
                 }
                 k++;
             }

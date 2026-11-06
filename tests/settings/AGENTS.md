@@ -69,8 +69,8 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   login and focus order), the History page in Russian (retention and time span plurals, the
   custom box's unit, the status color inside the line), the settings notices' codes (every
   English text, a kept history's reason in German), draft errors re-read per frame language, the
-  Layout page's per-display placement notes in German, the bar-only reason naming the current tile
-  style (Russian, Japanese) with the preview card's text, the Layout page in Russian (time span
+  Layout page's per-display placement notes in German, a gallery caption (Russian) and the preview
+  card's text (Japanese), the Layout page in Russian (time span
   plurals, the pixel unit, the quota keys' description, the usage graph's section) and the
   threshold notifications' level as whole texts on the Display page in Chinese.
   `fixtures/i18n-layout.inc`: the settings window in every language and the pseudo-locale: a
@@ -150,13 +150,14 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   the theme-aware pace color, overflow, extreme settings; the mock taskbar's pieces (Start, apps,
   chevron, network, clock and bell, Show desktop) and every Position's slot order, overflow,
   scroll range and home, with hover matching paint), the
-  Layout page per tile style, its Position dropdown and fallback note, and the pinned/unpinned
+  Layout page per tile style (the bars' Bar text: vertical bars' own percentage text and the rows
+  that need it), its Position dropdown and fallback note, and the pinned/unpinned
   preview header. `fixtures/display.inc`: the
   Display fields and reset group (with every scalar setting in exactly one page reset), the
   Material dropdown's saves and its transparency and Tinted wallpaper notes, the usage palette
   and Custom's color cards (swatches, Custom... per band, dots, wording, dark text), threshold
   ordering in the projection and after a save (the test store's `normalize` hook), the Display
-  page per tile style and what its settings change in the preview strip.
+  page per tile style and what its settings (and the bar text) change in the preview strip.
 - `extract-status`, `status-compile`, `status`: `fetch/status-feeds.h` (with `core/model.h`, the
   JSON accessors, `Utf8ToWide`, `ParseIso8601Ms` and its epoch constant) in its own executable
   (`fixtures/status-main.inc`, `fixtures/status.inc`, header `status.hpp`), given
@@ -172,8 +173,8 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   cards), Behavior, History, Layout (every tile style; stacked and ring at every DPI) and Display
   (segmented ring, as its mockup) at 96/144/192 DPI in light, dark and high contrast (Aquatic
   colors), plus interaction-state sheets (`render-states-*`, `render-controls-*`,
-  `render-history-off-*`, `render-layout-states-*`, `render-layout-identity-*` (the Identity and
-  text section with its link to Accounts), `render-layout-badge-*` (the logo and badge cards, a
+  `render-history-off-*`, `render-layout-states-*`, `render-layout-identity-*` (the Identity
+  section with its link to Accounts), `render-layout-badge-*` (the logo and badge cards, a
   badge color swatch focused), `render-display-states-*`,
   `render-accounts-states-*`, `render-accounts-drag-*` with brand-colored logos), Accounts as its mockups
   (`render-accounts-expanded-*`, `render-accounts-add-*` with the menu painted where the host

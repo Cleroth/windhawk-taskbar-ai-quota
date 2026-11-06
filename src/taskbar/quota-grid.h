@@ -69,7 +69,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         int rightMargin = settings.rightMargin;
         bool showBarLabels = settings.showBarLabels;
         bool showDetailsOnHover = settings.showDetailsOnHover;
-        PercentTextVisibility percentTextVisibility = settings.percentTextVisibility;
+        PercentTextVisibility percentTextVisibility = PercentTextVisibilityFor(settings);
         PercentTextAlignment percentTextAlignment = settings.percentTextAlignment;
         LabelPosition labelPosition = BarIdentityPositionFor(settings.labelPosition, display);
         state.accountRefs.clear();

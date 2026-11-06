@@ -128,7 +128,9 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         double taskbar = 48;
         float scroll = 0;
     };
-    auto always = [](Settings& s) { s.percentTextVisibility = PercentTextVisibility::Always; };
+    auto always = [](Settings& s) {
+        s.percentTextVisibility = s.verticalPercentTextVisibility = PercentTextVisibility::Always;
+    };
     auto thresholds = [](Settings& s, int yellow, int orange, int red) {
         s.yellowThreshold = yellow;
         s.orangeThreshold = orange;
@@ -755,7 +757,7 @@ static void RunRenders(const std::wstring& directory) {
                         CHECK(UiFindItem(frame, SettingsControlId(SettingsField::PreviewScroll)));
                     });
                 }
-                // Display with the segmented ring, as the mockup: its bar-only rows disabled.
+                // Display with the segmented ring, as the mockup, without the bar text (Layout's).
                 std::string display = std::string("render-display-") + theme.name + "-" + std::to_string(dpi) + ".png";
                 Run(display, [&] {
                     SettingsView view = LayoutView(BarLayout::SegmentedRing, dpi);
@@ -765,16 +767,15 @@ static void RunRenders(const std::wstring& directory) {
                     UiPaintState state;
                     state.focus = {3};
                     RenderFrame(g, wic.get(), path(display), frame, view, client, dpi, theme.input, state, 0, false);
-                    CHECK(!Control(frame, SettingsField::PercentTextVisibility).enabled);
+                    CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::PercentTextVisibility)));
                 });
             }
 
             // Display at the mockup's full height (1000 x 1298 window, 40 DIP caption): the
             // segmented ring as in the mockup; stacked bars with percentages always, remaining
             // mode and the colorblind palette; then the states sheet: Tinted wallpaper with
-            // transparency effects off (both material notes), percentage text off (its dependent
-            // rows disabled), an unordered red threshold typed (box editing, slider and preview
-            // ordered), a hovered toggle.
+            // transparency effects off (both material notes), an unordered red threshold typed (box
+            // editing, slider and preview ordered), a hovered toggle.
             std::string full = std::string("render-display-full-") + theme.name + "-144.png";
             Run(full, [&] {
                 const D2D1_SIZE_F tall{1000, 1258};
@@ -820,7 +821,6 @@ static void RunRenders(const std::wstring& directory) {
 
                 TestStore store;
                 store.settings.barLayout = BarLayout::Stacked;
-                store.settings.percentTextVisibility = PercentTextVisibility::Never;
                 store.settings.material = Material::TintedWallpaper;
                 SettingsEdits edits(store);
                 edits.Reload();
@@ -988,7 +988,7 @@ static void RunRenders(const std::wstring& directory) {
                 RenderFrame(g, wic.get(), path(barStates), frame, view, client, 144, theme.input, state, end, true,
                             false);
 
-                // Scrolled to the Identity and text section, its link to Accounts hovered.
+                // Scrolled to the Identity section, its link to Accounts hovered.
                 const UiItem& identity = *UiFindItem(frame, SettingsControlId(SettingsField::BarLayout, 10));
                 state = {};
                 state.hot = {identity.id};
@@ -1239,14 +1239,14 @@ static void RunRenders(const std::wstring& directory) {
                     {I18nLayoutView(BarLayout::Stacked), SettingsControlId(SettingsField::GeminiLogoBrand)},
                     {I18nLayoutView(BarLayout::Stacked), SettingsControlId(SettingsField::BarStyle)},
                     {I18nLayoutView(BarLayout::Stacked), SettingsControlId(SettingsField::LabelPosition)},
+                    {I18nLayoutView(BarLayout::Stacked), SettingsControlId(SettingsField::PercentTextVisibility)},
+                    {I18nLayoutView(BarLayout::Stacked), SettingsControlId(SettingsField::PercentTextAlignment)},
                     {I18nLayoutView(BarLayout::Stacked), SettingsControlId(SettingsField::PaceTickStyle)},
                     {spark, SettingsControlId(SettingsField::SparklineExtra)},
                     {spark, SettingsControlId(SettingsField::SparklineSpan)},
                     {spark, SettingsControlId(SettingsField::SparklineHoverSpan)},
                     {TestView(SettingsUiPage::Display), SettingsControlId(SettingsField::Material)},
                     {TestView(SettingsUiPage::Display), SettingsControlId(SettingsField::BarMode)},
-                    {TestView(SettingsUiPage::Display), SettingsControlId(SettingsField::PercentTextVisibility)},
-                    {TestView(SettingsUiPage::Display), SettingsControlId(SettingsField::PercentTextAlignment)},
                     {TestView(SettingsUiPage::Display), SettingsControlId(SettingsField::UsagePalette)},
                     {TestView(SettingsUiPage::Behavior), SettingsControlId(SettingsField::Language)},
                     {TestView(SettingsUiPage::Behavior), SettingsControlId(SettingsField::ShowOn)},

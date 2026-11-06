@@ -286,6 +286,8 @@ struct Settings {
     COLORREF paceTickColor = kDefaultPaceTickColor;
     bool showBarLabels = false;
     PercentTextVisibility percentTextVisibility = PercentTextVisibility::Hover;
+    // Vertical bars' own: their text is wider than a bar, so it overlaps the bars beside it.
+    PercentTextVisibility verticalPercentTextVisibility = PercentTextVisibility::Never;
     PercentTextAlignment percentTextAlignment = PercentTextAlignment::Adaptive;
     // Extra-usage/credits bars show the amount ($ or credits) instead of a percentage.
     bool showExtraBarAmounts = false;
@@ -303,6 +305,11 @@ struct Settings {
 
     bool operator==(const Settings&) const = default;
 };
+
+// The tile style's percentage text: vertical bars keep their own.
+static PercentTextVisibility PercentTextVisibilityFor(const Settings& s) {
+    return s.barLayout == BarLayout::Vertical ? s.verticalPercentTextVisibility : s.percentTextVisibility;
+}
 
 static constexpr ULONGLONG kFiveHourWindowMs = 5ULL * 60 * 60 * 1000;
 static constexpr ULONGLONG kWeeklyWindowMs = 7ULL * 24 * 60 * 60 * 1000;

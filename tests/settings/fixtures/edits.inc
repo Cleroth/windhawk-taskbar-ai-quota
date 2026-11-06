@@ -544,6 +544,11 @@ static bool HasText(const UiFrame& frame, std::wstring_view text) {
     });
 }
 
+static int TextCount(const UiFrame& frame, std::wstring_view text) {
+    return int(std::count_if(frame.content.begin(), frame.content.end(),
+                             [&](const UiItem& item) { return UiRunsText(item.runs) == text; }));
+}
+
 static void RunPageTests() {
     Run("behavior page: controls follow the projection; displays; custom interval", [] {
         UiGraphics& g = TestGraphics();
