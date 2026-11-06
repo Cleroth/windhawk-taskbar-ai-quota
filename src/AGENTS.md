@@ -260,6 +260,10 @@ access token without refresh or expiry and sent only to its usage endpoint.
   JSON in `settings_v1`; Windhawk settings are legacy import data only. Preserve
   `LoadLegacySettings`: migration relies on `Wh_Get*Setting` reading persisted legacy keys
   without a current settings block.
+- Windhawk's storage returns a failed read as a missing value. `SaveOwnedSettings` is the only
+  writer of `settings_v1`: it never replaces settings a load couldn't read unless that was allowed
+  or confirmed, and after a load that found none it looks again first. Startup saves only
+  imported legacy settings, and publishes accounts only once they are saved.
 - Keep a new setting in sync across `Settings`, JSON serialization/deserialization,
   normalization, the settings window (its `SettingsField` value, assignment, range and page
   reset in `settings/edits.h`, its page builder) and the

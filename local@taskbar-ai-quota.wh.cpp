@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.18.1
+// @version         2.18.2
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -32412,15 +32412,64 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
 // storage reads long values back.
 static std::atomic<bool> g_settingsLongValuesRead{false};
 
-// Portable Windhawk's INI storage reads a value back truncated near 32,767 characters, so a longer
-// one would never load whole: it fails before writing, unless a long one already loaded here.
+// Set when the load found no stored settings and nothing has been saved since. Windhawk's storage
+// reads a failed read as a missing value, so the first save looks again before writing.
+static std::atomic<bool> g_settingsMissingAtLoad{false};
+
+// Whether stored settings can be seen now: the value or its length sentinel.
+static bool StoredSettingsFound() {
+    if (Wh_GetIntValue(kSettingsLengthStorageKey, 0) > 0) return true;
+    std::vector<wchar_t> buf(65536);
+    return Wh_GetStringValue(kSettingsStorageKey, buf.data(), buf.size()) && buf[0];
+}
+
+// Before the first save after a load that found no stored settings: absence counts only while no
+// settings show, the storage reads back a value just written to it (this process's probe, deleted
+// after) and still no settings show. Otherwise that load may have failed to read them: they become
+// a load error (kept until a confirmed replacement) and the save doesn't go ahead. A best-effort
+// check: a read failure between these reads and the write can't be told apart. Callers hold
+// g_configEditMutex (or run at init).
+static bool StoredSettingsStillMissing() {
+    if (!g_settingsMissingAtLoad) return true;
+    bool found = StoredSettingsFound(), readable = false;
+    if (!found) {
+        wchar_t probe[48], written[24], read[24] = {};
+        swprintf(probe, std::size(probe), L"settings_v1_probe_%lu", GetCurrentProcessId());
+        swprintf(written, std::size(written), L"%llu", (unsigned long long)GetTickCount64());
+        readable = Wh_SetStringValue(probe, written) && Wh_GetStringValue(probe, read, std::size(read)) &&
+                   wcscmp(read, written) == 0;
+        Wh_DeleteValue(probe);
+        found = StoredSettingsFound();
+    }
+    if (readable && !found) return true;
+    g_settingsMissingAtLoad = false;
+    g_settingsLoadError = true;
+    g_settingsLoadBackup = false;
+    g_settingsReplaceAllowed = false;
+    if (found) {
+        Wh_Log(L"Stored settings appeared after a load that found none; kept until replacing them is confirmed");
+    } else {
+        Wh_Log(L"Settings storage doesn't read back; stored settings are kept until replacing them is confirmed");
+    }
+    return false;
+}
+
+// Never replaces stored settings a load couldn't read unless that was allowed (each load's
+// recovery). Portable Windhawk's INI storage reads a value back truncated near 32,767 characters,
+// so a longer one would never load whole: it fails before writing, unless a long one already
+// loaded here.
 static bool SaveOwnedSettings(const Settings& settings) {
+    if (!StoredSettingsStillMissing() || (g_settingsLoadError && !g_settingsReplaceAllowed)) {
+        Wh_Log(L"Settings not saved: the stored settings couldn't be read and replacing them isn't confirmed");
+        return false;
+    }
     std::wstring json = SerializeSettings(settings);
     if (json.empty() || json.size() >= (g_settingsLongValuesRead.load() ? 65535u : 32767u)) {
         Wh_Log(L"Settings save failed: serialization or size limit");
         return false;
     }
     if (!Wh_SetStringValue(kSettingsStorageKey, json.c_str())) return false;
+    g_settingsMissingAtLoad = false;
     if (!Wh_SetIntValue(kSettingsLengthStorageKey, (int)json.size())) {
         Wh_Log(L"Settings length sentinel save failed");
     }
@@ -32729,6 +32778,8 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
     sharedPrevious.language = s.language;
     // Stored settings the load couldn't read: the first shared save replaces them only once that
     // is allowed (each load's recovery), and per-user-only edits save nothing shared until then.
+    // Settings a load found missing that are there now count as unread (StoredSettingsStillMissing).
+    if (s != sharedPrevious || g_historyIdsPendingSave) StoredSettingsStillMissing();
     const bool loadError = g_settingsLoadError, replaceAllowed = g_settingsReplaceAllowed;
     const bool saveShared = s != sharedPrevious || g_historyIdsPendingSave || (loadError && replaceAllowed);
     if (saveShared && loadError && !replaceAllowed) {
@@ -32736,7 +32787,11 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
         if (replaceBlocked) *replaceBlocked = true;
         return SettingsApplyResult::Failed;
     }
-    if (saveShared && !SaveOwnedSettings(s)) return SettingsApplyResult::Failed;
+    if (saveShared && !SaveOwnedSettings(s)) {
+        // Its own look again may just have found the stored settings.
+        if (replaceBlocked) *replaceBlocked = g_settingsLoadError && !g_settingsReplaceAllowed;
+        return SettingsApplyResult::Failed;
+    }
     // Save shared changes first, consent last: a failed save before it must never grant consent.
     // Per-user-only edits leave shared JSON untouched; a failed write takes back what this call
     // saved. Preference writes take no history locks; each waits at most 2 s for the per-user
@@ -32790,22 +32845,41 @@ static void LoadSettings() {
     g_settingsLoadError = false;
     g_settingsLoadBackup = false;
     g_settingsReplaceAllowed = false;
+    g_settingsMissingAtLoad = false;
     g_historyIdsPendingSave = false;
     bool historyIdsChanged = false, backedUp = false, readWhole = false;
     OwnedSettingsLoadResult loadResult = LoadOwnedSettings(&s, &historyIdsChanged, &backedUp, &readWhole);
+    // A failed read looks like missing settings: look twice more before taking them as missing.
+    for (DWORD delayMs : {50, 150}) {
+        if (loadResult != OwnedSettingsLoadResult::Missing) break;
+        Sleep(delayMs);
+        loadResult = LoadOwnedSettings(&s, &historyIdsChanged, &backedUp, &readWhole);
+    }
     if (loadResult == OwnedSettingsLoadResult::Missing) {
+        // Defaults need no save: the first edit saves, after looking again. Imported legacy
+        // settings are saved now, also after looking again (SaveOwnedSettings); settings seen then
+        // turn this load into a load error with defaults.
+        g_settingsMissingAtLoad = true;
         bool imported = LoadLegacySettings(&s);
         if (!imported) s = Settings{};
         s.historyEnabled = historyConsent;
         s.language = language;
         NormalizeSettings(&s);
-        if (SaveOwnedSettings(s)) {
-            if (imported) Wh_Log(L"Imported legacy Windhawk settings");
-            else Wh_Log(L"Initialized empty mod-owned settings");
-        } else {
-            s.historyEnabled = false;
-            g_historyIdsPendingSave = !s.accounts.empty();
-            Wh_Log(L"Settings initialization save failed; history disabled");
+        if (imported && SaveOwnedSettings(s)) {
+            Wh_Log(L"Imported legacy Windhawk settings");
+        } else if (imported) {
+            // Accounts are never published unsaved (removing one deletes its sign-in before the
+            // save that would fail). The next load imports again; until then saving needs the
+            // settings window's confirmation, so an edit can't drop the import unasked.
+            if (!g_settingsLoadError) {
+                Wh_Log(L"Saving imported legacy settings failed; defaults until the next load");
+                g_settingsLoadError = true;
+                g_settingsLoadBackup = false;
+                g_settingsReplaceAllowed = false;
+            }
+            s = Settings{};
+            s.historyEnabled = historyConsent;
+            s.language = language;
         }
     } else if (loadResult == OwnedSettingsLoadResult::Loaded && historyIdsChanged) {
         // Other Explorer processes must not race to persist independently generated IDs.
