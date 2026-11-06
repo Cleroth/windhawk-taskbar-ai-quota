@@ -251,6 +251,10 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "auth/oauth.h"
 
+#include "auth/login-layout.h"
+
+#include "auth/login-controls.h"
+
 #include "auth/login.h"
 
 #include "providers/anthropic.h"

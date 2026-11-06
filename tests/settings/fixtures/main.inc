@@ -16,6 +16,7 @@
 #include "i18n-numbers.inc"
 #include "layout-audit.inc"
 #include "i18n-layout.inc"
+#include "signin-layout.inc"
 #include "render-support.inc"
 #include "render.inc"
 #include "render-controls.inc"
@@ -49,6 +50,7 @@ int main(int argc, char** argv) {
         RunI18nErrorTests();
         RunI18nNumberTests();
         RunI18nLayoutTests();
+        RunSignInLayoutTests();
     }
     std::cout << "RESULT " << passed << " passed, " << failed << " failed; " << assertions << " assertions\n";
     return failed ? 1 : 0;

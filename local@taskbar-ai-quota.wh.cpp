@@ -10550,7 +10550,6 @@ struct TaskbarDisplayInfo {
 // src/core/forward.h
 // Forward declarations for calls that reach a later fragment.
 
-static int ScaleForDpi(int value, UINT dpi);
 static UINT WindowDpi(HWND hWnd);
 static void UpdateQuotaUi(QuotaUiInstance& state);
 static void CloseAccountFlyout(QuotaUiInstance& state);
@@ -11785,6 +11784,236 @@ static TokenEndpointResult RefreshToken(const std::wstring& provider, StoredToke
     return PostTokenEndpoint(anthropic, L"application/json", body, tok, err, retryAfterSec);
 }
 
+// src/auth/login-layout.h
+// The sign-in window's text and layout (the window: auth/login.h, its controls:
+// auth/login-controls.h): every text it shows, and its controls' rectangles and client size in
+// pixels at its DPI from that text measured in its font. Pure: the caller measures.
+
+// The buttons' labels, each in every state it shows: Copy link turns into Copied or Copy failed
+// (the device flow's button, which copies the code and opens GitHub, into Code copied), Cancel
+// into Close once a device sign-in ends without a token.
+struct LoginWindowLabels {
+    std::wstring open, copy, copied, copyFailed, signIn, cancel, close;
+};
+
+static LoginWindowLabels LoginWindowLabelsFor(const I18nLocale& locale, bool device) {
+    auto text = [&](I18nKey key) { return I18nText(locale, key); };
+    return {.open = text(TrCtx(L"sign-in-button", L"Open in browser")),
+            .copy = device ? text(TrCtx(L"sign-in-button", L"Copy code and open GitHub")) :
+                             text(TrCtx(L"sign-in-button", L"Copy link")),
+            .copied = device ? text(TrCtx(L"sign-in-button", L"Code copied")) :
+                               text(TrCtx(L"sign-in-button", L"Copied")),
+            .copyFailed = text(TrCtx(L"sign-in-button", L"Copy failed")),
+            .signIn = text(TrCtx(L"sign-in-button", L"Sign in")),
+            .cancel = text(TrCtx(L"sign-in-button", L"Cancel")),
+            .close = text(TrCtx(L"sign-in-button", L"Close"))};
+}
+
+// What a sign-in window shows, every state's text built before the window exists, so that
+// creating, relabeling and measuring it allocates nothing.
+struct LoginWindowText {
+    // GitHub's device flow shows its code (read-only), a status line, one copy button and Cancel.
+    // The others show Open in browser, Copy link, `alternate` when set (a loopback flow's other
+    // way to sign in) and Cancel; a pasted code or key (`paste`) adds a box, masked when `secret`,
+    // and Sign in below it.
+    bool device = false;
+    bool paste = false;
+    bool secret = false;
+    std::wstring instructions;
+    std::wstring otherSignIn;  // The instructions after a code from another sign-in; empty: never
+    std::wstring userCode;
+    std::vector<std::wstring> statuses;  // Every text the device flow's status line shows
+    std::wstring alternate;
+    LoginWindowLabels labels;
+};
+
+struct LoginLayout {
+    SIZE client{};
+    // `code`: the device flow's code or the box for a pasted code or key. A control the flow
+    // lacks stays empty.
+    RECT instructions{}, code{}, status{}, open{}, copy{}, alternate{}, signIn{}, cancel{};
+};
+
+// `width(text)`: the pixel width of `text` on one line; `wrappedHeight(text, width)`: its pixel
+// height wrapped at `width` pixels; `lineHeight`: the font's. Lengths are DIPs, each edge scaled
+// on its own: a button as wide as its widest label with 10 DIP on each side, the instructions and
+// the status line as tall as their tallest text wrapped at the content's width, each never
+// smaller than its English size. Only the buttons widen the content: text wraps.
+template <typename Width, typename WrappedHeight>
+static LoginLayout LoginWindowLayout(const LoginWindowText& text, UINT dpi, int lineHeight, const Width& width,
+                                     const WrappedHeight& wrappedHeight) {
+    auto px = [dpi](int dips) { return MulDiv(dips, (int)dpi, 96); };
+    auto dips = [dpi](int pixels) { return (int)(((long long)pixels * 96 + dpi - 1) / dpi); };
+    auto rect = [&](int x, int y, int w, int h) { return RECT{px(x), px(y), px(x) + px(w), px(y) + px(h)}; };
+    auto button = [&](int least, std::initializer_list<const std::wstring*> states) {
+        int widest = 0;
+        for (const std::wstring* label : states) widest = std::max(widest, width(*label));
+        return std::max(least, dips(widest) + 20);
+    };
+    constexpr int kSide = 12, kGap = 6;
+    const LoginWindowLabels& labels = text.labels;
+    const int buttonHeight = std::max(30, dips(lineHeight + px(10)));
+    const int boxHeight = std::max(24, dips(lineHeight + px(6)));
+    const int open = text.device ? 0 : button(120, {&labels.open});
+    const int copy = button(text.device ? 246 : 120, {&labels.copy, &labels.copied, &labels.copyFailed});
+    const int alternate = text.alternate.empty() ? 0 : button(82, {&text.alternate});
+    const int signIn = text.paste ? button(84, {&labels.signIn}) : 0;
+    const int cancel = text.device ? button(84, {&labels.cancel, &labels.close}) : button(84, {&labels.cancel});
+
+    // The link buttons from the left; Cancel at the right on their row, or after Sign in under the
+    // box.
+    const int links = (text.device ? 0 : open + kGap) + copy + (alternate ? kGap + alternate : 0);
+    const int content = std::max({424, text.paste ? links : links + kGap + cancel,
+                                  text.paste ? signIn + kGap + cancel : 0});
+    int instructions = wrappedHeight(text.instructions, px(content));
+    if (!text.otherSignIn.empty()) instructions = std::max(instructions, wrappedHeight(text.otherSignIn, px(content)));
+    instructions = std::max(52, dips(instructions));
+
+    LoginLayout layout;
+    int y = 10;
+    layout.instructions = rect(kSide, y, content, instructions);
+    y += instructions + kGap;
+    if (text.device) {
+        int status = 0;
+        for (const std::wstring& line : text.statuses) status = std::max(status, wrappedHeight(line, px(content)));
+        status = std::max(20, dips(status));
+        layout.code = rect(kSide, y, content, boxHeight);
+        y += boxHeight + 8;
+        layout.status = rect(kSide, y, content, status);
+        y += status + 8;
+    } else {
+        layout.open = rect(kSide, y, open, buttonHeight);
+    }
+    const int copyLeft = kSide + (text.device ? 0 : open + kGap);
+    layout.copy = rect(copyLeft, y, copy, buttonHeight);
+    if (alternate) layout.alternate = rect(copyLeft + copy + kGap, y, alternate, buttonHeight);
+    if (text.paste) {
+        y += buttonHeight + 12;
+        layout.code = rect(kSide, y, content, boxHeight);
+        y += boxHeight + 12;
+        layout.signIn = rect(kSide + content - cancel - kGap - signIn, y, signIn, buttonHeight);
+    }
+    layout.cancel = rect(kSide + content - cancel, y, cancel, buttonHeight);
+    layout.client = {px(kSide + content + kSide), px(y + buttonHeight + (text.device ? 12 : 10))};
+    return layout;
+}
+
+// src/auth/login-controls.h
+// The sign-in window's controls (the window: auth/login.h): their ids, creation, and their layout
+// (auth/login-layout.h) measured in the system message font at the window's DPI. Window and GDI
+// calls only, no allocation.
+
+enum {
+    kLoginInstructions = 100,
+    kLoginCode,
+    kLoginCopyLink,
+    kLoginOpenLink,
+    kLoginStatus,
+    kLoginAlternate,
+};
+
+// Creates the controls `text` describes in `window`, in tab order; the status line shows `status`.
+static void CreateLoginControls(HWND window, const LoginWindowText& text, PCWSTR status) {
+    HINSTANCE instance = GetModuleHandleW(nullptr);
+    auto create = [&](DWORD exStyle, PCWSTR cls, PCWSTR caption, DWORD style, int id) {
+        CreateWindowExW(exStyle, cls, caption, WS_CHILD | WS_VISIBLE | style, 0, 0, 0, 0, window,
+                        reinterpret_cast<HMENU>((INT_PTR)id), instance, nullptr);
+    };
+    const LoginWindowLabels& labels = text.labels;
+    create(0, L"STATIC", text.instructions.c_str(), SS_LEFT | SS_NOPREFIX, kLoginInstructions);
+    if (text.device) {
+        // Read-only but selectable, so the code can also be copied by hand. The one button copies
+        // the code and opens the verification page.
+        create(WS_EX_CLIENTEDGE, L"EDIT", text.userCode.c_str(),
+               WS_TABSTOP | ES_READONLY | ES_CENTER | ES_AUTOHSCROLL, kLoginCode);
+        create(0, L"STATIC", status, SS_LEFT | SS_NOPREFIX, kLoginStatus);
+        create(0, L"BUTTON", labels.copy.c_str(), WS_TABSTOP | BS_DEFPUSHBUTTON, kLoginCopyLink);
+    } else {
+        create(0, L"BUTTON", labels.open.c_str(), WS_TABSTOP | BS_PUSHBUTTON, kLoginOpenLink);
+        create(0, L"BUTTON", labels.copy.c_str(), WS_TABSTOP | BS_PUSHBUTTON, kLoginCopyLink);
+    }
+    if (!text.alternate.empty()) {
+        create(0, L"BUTTON", text.alternate.c_str(), WS_TABSTOP | BS_PUSHBUTTON, kLoginAlternate);
+    }
+    if (text.paste) {
+        create(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL | (text.secret ? ES_PASSWORD : 0),
+               kLoginCode);
+        create(0, L"BUTTON", labels.signIn.c_str(), WS_TABSTOP | BS_DEFPUSHBUTTON, IDOK);
+    }
+    create(0, L"BUTTON", labels.cancel.c_str(), WS_TABSTOP | BS_PUSHBUTTON, IDCANCEL);
+}
+
+// Lays the controls out at `dpi` in the message font for it, which replaces `font` on every
+// control (the previous one is kept when it can't be created), and sizes the window to fit,
+// keeping its position.
+static void LayoutLoginControls(HWND window, const LoginWindowText& text, UINT dpi, HFONT& font) {
+    NONCLIENTMETRICSW metrics{sizeof(metrics)};
+    LOGFONTW fontDescription{};
+    using SystemParametersInfoForDpi_t = BOOL(WINAPI*)(UINT, UINT, PVOID, UINT, UINT);
+    auto systemParametersInfoForDpi = reinterpret_cast<SystemParametersInfoForDpi_t>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "SystemParametersInfoForDpi"));
+    if (systemParametersInfoForDpi &&
+        systemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0, dpi)) {
+        fontDescription = metrics.lfMessageFont;
+    } else {
+        fontDescription.lfHeight = -MulDiv(9, (int)dpi, 72);
+        fontDescription.lfQuality = CLEARTYPE_QUALITY;
+        wcscpy_s(fontDescription.lfFaceName, L"Segoe UI");  // i18n-en
+    }
+    HFONT created = CreateFontIndirectW(&fontDescription);
+    HFONT shown = created ? created : font;
+
+    // Measured as the controls draw: a button's label on one line, a static's text wrapped at
+    // words, '&' as itself. Without a DC every text measures 0: the English sizes.
+    HDC dc = GetDC(window);
+    HGDIOBJ previous = dc && shown ? SelectObject(dc, shown) : nullptr;
+    TEXTMETRICW textMetrics{};
+    if (dc) GetTextMetricsW(dc, &textMetrics);
+    auto width = [&](const std::wstring& label) {
+        SIZE size{};
+        if (dc) GetTextExtentPoint32W(dc, label.c_str(), (int)label.size(), &size);
+        return (int)size.cx;
+    };
+    auto wrappedHeight = [&](const std::wstring& line, int lineWidth) {
+        RECT bounds{0, 0, lineWidth, 0};
+        if (dc) {
+            DrawTextW(dc, line.c_str(), (int)line.size(), &bounds,
+                      DT_CALCRECT | DT_WORDBREAK | DT_EXPANDTABS | DT_NOPREFIX);
+        }
+        return (int)bounds.bottom;
+    };
+    LoginLayout layout = LoginWindowLayout(text, dpi, textMetrics.tmHeight, width, wrappedHeight);
+    if (previous) SelectObject(dc, previous);
+    if (dc) ReleaseDC(window, dc);
+
+    const std::pair<int, const RECT*> placed[] = {
+        {kLoginInstructions, &layout.instructions}, {kLoginCode, &layout.code}, {kLoginStatus, &layout.status},
+        {kLoginOpenLink, &layout.open}, {kLoginCopyLink, &layout.copy}, {kLoginAlternate, &layout.alternate},
+        {IDOK, &layout.signIn}, {IDCANCEL, &layout.cancel}};
+    for (const auto& [id, r] : placed) {
+        if (HWND child = GetDlgItem(window, id)) {
+            if (created) SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(created), TRUE);
+            SetWindowPos(child, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    }
+    if (created) {
+        if (font) DeleteObject(font);
+        font = created;
+    }
+    RECT frame{0, 0, layout.client.cx, layout.client.cy};
+    DWORD style = (DWORD)GetWindowLongPtrW(window, GWL_STYLE);
+    DWORD exStyle = (DWORD)GetWindowLongPtrW(window, GWL_EXSTYLE);
+    using AdjustWindowRectExForDpi_t = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
+    auto adjustWindowRectExForDpi = reinterpret_cast<AdjustWindowRectExForDpi_t>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "AdjustWindowRectExForDpi"));
+    if (!adjustWindowRectExForDpi || !adjustWindowRectExForDpi(&frame, style, FALSE, exStyle, dpi)) {
+        AdjustWindowRectEx(&frame, style, FALSE, exStyle);
+    }
+    SetWindowPos(window, nullptr, 0, 0, frame.right - frame.left, frame.bottom - frame.top,
+                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
 // src/auth/login.h
 // Sign-in thread: the sign-in window, the Anthropic and OpenAI loopback listeners, GitHub device
 // flow, code exchange, and OpenCode Go's pasted API key.
@@ -11918,15 +12147,8 @@ static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedRou
 // its message loop polls for the token. Runs its own message loop on the login thread; closed on
 // cancel, submit, callback, its alternate button, a granted device sign-in, or unload. A device
 // sign-in that ends otherwise stays open with the reason until closed, as does a pasted code#state
-// from another sign-in.
-enum {
-    kLoginInstructions = 100,
-    kLoginCode,
-    kLoginCopyLink,
-    kLoginOpenLink,
-    kLoginStatus,
-    kLoginAlternate,
-};
+// from another sign-in. Laid out by its text's measure (auth/login-controls.h), again on a DPI
+// change.
 constexpr UINT kLoginAccept = WM_APP + 1;  // FD_ACCEPT notification for the loopback listener.
 
 struct LoginDialogState {
@@ -11936,24 +12158,23 @@ struct LoginDialogState {
     I18nLocale locale = CurrentLocale();
     std::wstring url;  // The authorize link, or the device flow's verification page.
     // Loopback flow when set, answered on `callbackRoute`; device flow with `poll`; otherwise a
-    // code is pasted, masked when `secret`.
+    // code is pasted (`text.paste`).
     SOCKET listener = INVALID_SOCKET;
     std::string callbackRoute;
-    bool secret = false;
     std::string expectedState;  // OAuth state the callback or a pasted code#state must carry.
-    // A loopback flow's button that closes the window to sign in another way (alternateChosen);
-    // empty: none.
-    std::wstring alternate;
-    // Device flow: the code to enter on the verification page, and the token poll the message
-    // loop runs, never the window procedure, once GetTickCount64 reaches nextPollMs. It catches
-    // everything itself, may set `status`, which the loop then shows, and returns the wait before
-    // the next poll, or 0 when the sign-in ended: granted if it set ok, else the window keeps the
-    // status, without polling, until closed. A fixed buffer, so showing it allocates nothing
-    // outside the poll's own catch.
-    std::wstring userCode;
+    // What the window shows. The sign-in sets the instructions, a pasted key's `secret`, a
+    // loopback flow's `alternate` button, which closes the window to sign in another way
+    // (alternateChosen), and the device flow's code and statuses; the window adds the rest.
+    LoginWindowText text;
+    // Device flow: the token poll the message loop runs, never the window procedure, once
+    // GetTickCount64 reaches nextPollMs. It catches everything itself, may set `status` (one of
+    // `text.statuses`), which the loop then shows, and returns the wait before the next poll, or 0
+    // when the sign-in ended: granted if it set ok, else the window keeps the status, without
+    // polling, until closed. A fixed buffer, so showing it allocates nothing outside the poll's
+    // own catch.
     std::function<ULONGLONG()> poll;
     ULONGLONG nextPollMs = 0;
-    wchar_t status[128] = L"";
+    wchar_t status[256] = L"";
 
     // Results
     std::wstring pastedCode;
@@ -11964,69 +12185,12 @@ struct LoginDialogState {
     bool done = false;
 
     // Window
-    HWND edit = nullptr;
     HFONT font = nullptr;
-    UINT dpi = 96;
     std::array<HICON, 2> icons{};  // App icon (ICON_SMALL, ICON_BIG), destroyed after the window
 };
 
-static void LayoutLoginDialog(HWND hWnd, LoginDialogState& state, UINT dpi) {
-    auto sc = [dpi](int value) { return ScaleForDpi(value, dpi); };
-    constexpr UINT flags = SWP_NOZORDER | SWP_NOACTIVATE;
-    // The device flow's code and status line sit between the instructions and the buttons.
-    int buttonsTop = state.poll ? 128 : 68;
-    SetWindowPos(GetDlgItem(hWnd, kLoginInstructions), nullptr, sc(12), sc(10), sc(424), sc(52), flags);
-    if (state.poll) {
-        SetWindowPos(GetDlgItem(hWnd, kLoginCode), nullptr, sc(12), sc(68), sc(424), sc(24), flags);
-        SetWindowPos(GetDlgItem(hWnd, kLoginStatus), nullptr, sc(12), sc(100), sc(424), sc(20), flags);
-    }
-    // The device flow's one button spans the link flows' two.
-    if (state.poll) {
-        SetWindowPos(GetDlgItem(hWnd, kLoginCopyLink), nullptr, sc(12), sc(buttonsTop), sc(246), sc(30), flags);
-    } else {
-        SetWindowPos(GetDlgItem(hWnd, kLoginOpenLink), nullptr, sc(12), sc(buttonsTop), sc(120), sc(30), flags);
-        SetWindowPos(GetDlgItem(hWnd, kLoginCopyLink), nullptr, sc(138), sc(buttonsTop), sc(120), sc(30), flags);
-    }
-    if (!state.alternate.empty()) {
-        SetWindowPos(GetDlgItem(hWnd, kLoginAlternate), nullptr, sc(264), sc(buttonsTop), sc(82), sc(30), flags);
-    }
-    if (state.edit) {
-        SetWindowPos(state.edit, nullptr, sc(12), sc(110), sc(424), sc(24), flags);
-        SetWindowPos(GetDlgItem(hWnd, IDOK), nullptr, sc(262), sc(146), sc(84), sc(30), flags);
-    }
-    SetWindowPos(GetDlgItem(hWnd, IDCANCEL), nullptr, sc(352), sc(state.edit ? 146 : buttonsTop),
-                 sc(84), sc(30), flags);
-
-    NONCLIENTMETRICSW metrics{sizeof(metrics)};
-    LOGFONTW fontDescription{};
-    using SystemParametersInfoForDpi_t = BOOL(WINAPI*)(UINT, UINT, PVOID, UINT, UINT);
-    auto systemParametersInfoForDpi = reinterpret_cast<SystemParametersInfoForDpi_t>(
-        GetProcAddress(GetModuleHandleW(L"user32.dll"), "SystemParametersInfoForDpi"));
-    if (systemParametersInfoForDpi &&
-        systemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(metrics),
-                                   &metrics, 0, dpi)) {
-        fontDescription = metrics.lfMessageFont;
-    } else {
-        fontDescription.lfHeight = -MulDiv(9, (int)dpi, 72);
-        fontDescription.lfQuality = CLEARTYPE_QUALITY;
-        wcscpy_s(fontDescription.lfFaceName, L"Segoe UI");  // i18n-en
-    }
-    HFONT font = CreateFontIndirectW(&fontDescription);
-    if (font) {
-        for (int id : {(int)kLoginInstructions, (int)kLoginCode, (int)kLoginCopyLink,
-                       (int)kLoginOpenLink, (int)kLoginStatus, (int)kLoginAlternate, IDOK, IDCANCEL}) {
-            if (HWND child = GetDlgItem(hWnd, id)) {
-                SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
-            }
-        }
-        if (state.font) DeleteObject(state.font);
-        state.font = font;
-    }
-    state.dpi = dpi;
-}
-
-// Its text and the loopback's answer allocate: a failure ends inside it (a window that can't be
-// created, a message ignored), never in Windows' callback frames.
+// A pasted code and the loopback's answer allocate: a failure ends inside it (a window that can't
+// be created, a message ignored), never in Windows' callback frames.
 static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) try {
     auto* st = reinterpret_cast<LoginDialogState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
     switch (msg) {
@@ -12040,46 +12204,14 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 Wh_Log(L"Sign-in: could not watch the localhost listener (%d)", WSAGetLastError());
                 return -1;
             }
-            HINSTANCE hInst = GetModuleHandleW(nullptr);
-            auto create = [&](DWORD exStyle, PCWSTR cls, const std::wstring& text, DWORD style, int id) {
-                return CreateWindowExW(exStyle, cls, text.c_str(), WS_CHILD | WS_VISIBLE | style,
-                                       0, 0, 0, 0, hWnd, reinterpret_cast<HMENU>((INT_PTR)id),
-                                       hInst, nullptr);
-            };
-            auto button = [&](I18nKey key) { return I18nText(st->locale, key); };
-            create(0, L"STATIC", L"", SS_LEFT, kLoginInstructions);
-            if (st->poll) {
-                // Read-only but selectable, so the code can also be copied by hand.
-                create(WS_EX_CLIENTEDGE, L"EDIT", st->userCode,
-                       WS_TABSTOP | ES_READONLY | ES_CENTER | ES_AUTOHSCROLL, kLoginCode);
-                create(0, L"STATIC", L"", SS_LEFTNOWORDWRAP | SS_ENDELLIPSIS | SS_NOPREFIX, kLoginStatus);
-            }
-            // The device flow's one button copies the code and opens the verification page.
-            if (st->poll) {
-                create(0, L"BUTTON", button(TrCtx(L"sign-in-button", L"Copy code and open GitHub")),
-                       WS_TABSTOP | BS_DEFPUSHBUTTON, kLoginCopyLink);
-            } else {
-                create(0, L"BUTTON", button(TrCtx(L"sign-in-button", L"Open in browser")), WS_TABSTOP | BS_PUSHBUTTON,
-                       kLoginOpenLink);
-                create(0, L"BUTTON", button(TrCtx(L"sign-in-button", L"Copy link")), WS_TABSTOP | BS_PUSHBUTTON,
-                       kLoginCopyLink);
-            }
-            if (!st->alternate.empty()) {
-                create(0, L"BUTTON", st->alternate, WS_TABSTOP | BS_PUSHBUTTON, kLoginAlternate);
-            }
-            if (st->listener == INVALID_SOCKET && !st->poll) {
-                st->edit = create(WS_EX_CLIENTEDGE, L"EDIT", L"",
-                                  WS_TABSTOP | ES_AUTOHSCROLL | (st->secret ? ES_PASSWORD : 0), kLoginCode);
-                create(0, L"BUTTON", button(TrCtx(L"sign-in-button", L"Sign in")), WS_TABSTOP | BS_DEFPUSHBUTTON, IDOK);
-            }
-            create(0, L"BUTTON", button(TrCtx(L"sign-in-button", L"Cancel")), WS_TABSTOP | BS_PUSHBUTTON, IDCANCEL);
+            CreateLoginControls(hWnd, st->text, st->status);
             return 0;
         }
         case WM_COMMAND: {
             if (!st) break;
             switch (LOWORD(wParam)) {
                 case kLoginCopyLink: {
-                    const std::wstring& text = st->poll ? st->userCode : st->url;
+                    const std::wstring& text = st->text.device ? st->text.userCode : st->url;
                     bool copied = false;
                     if (OpenClipboard(hWnd)) {
                         size_t bytes = (text.size() + 1) * sizeof(wchar_t);
@@ -12094,10 +12226,8 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                         CloseClipboard();
                     }
                     SetWindowTextW(GetDlgItem(hWnd, kLoginCopyLink),
-                                   I18nText(st->locale, !copied  ? TrCtx(L"sign-in-button", L"Copy failed") :
-                                                        st->poll ? TrCtx(L"sign-in-button", L"Code copied") :
-                                                                   TrCtx(L"sign-in-button", L"Copied")).c_str());
-                    if (st->poll) OpenUrl(st->url.c_str());
+                                   (copied ? st->text.labels.copied : st->text.labels.copyFailed).c_str());
+                    if (st->text.device) OpenUrl(st->url.c_str());
                     return 0;
                 }
                 case kLoginOpenLink:
@@ -12108,10 +12238,11 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     DestroyWindow(hWnd);
                     return 0;
                 case IDOK: {
-                    if (!st->edit) return 0;
-                    int len = GetWindowTextLengthW(st->edit);
+                    HWND edit = GetDlgItem(hWnd, kLoginCode);
+                    if (!st->text.paste || !edit) return 0;
+                    int len = GetWindowTextLengthW(edit);
                     std::wstring buf(len + 1, L'\0');
-                    GetWindowTextW(st->edit, buf.data(), len + 1);
+                    GetWindowTextW(edit, buf.data(), len + 1);
                     buf.resize(len);
                     // A code#state from another sign-in's link can't complete this one: keep the
                     // window open and say so. A code pasted without its state is let through.
@@ -12120,14 +12251,9 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                         size_t last = buf.find_last_not_of(L" \t\r\n");
                         if (hash != std::wstring::npos && last != std::wstring::npos && last > hash &&
                             WideToUtf8(buf.substr(hash + 1, last - hash)) != st->expectedState) {
-                            SetWindowTextW(GetDlgItem(hWnd, kLoginInstructions),
-                                           I18nText(st->locale,
-                                                    TrCtx(L"sign-in-window",
-                                                          L"That code belongs to another sign-in link. Open this "
-                                                          L"window's link, approve access, then paste the code its "
-                                                          L"page shows.")).c_str());
-                            SendMessageW(st->edit, EM_SETSEL, 0, -1);
-                            SetFocus(st->edit);
+                            SetWindowTextW(GetDlgItem(hWnd, kLoginInstructions), st->text.otherSignIn.c_str());
+                            SendMessageW(edit, EM_SETSEL, 0, -1);
+                            SetFocus(edit);
                             return 0;
                         }
                     }
@@ -12165,7 +12291,7 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                          suggested->bottom - suggested->top,
                          SWP_NOZORDER | SWP_NOACTIVATE);
             if (st) {
-                LayoutLoginDialog(hWnd, *st, HIWORD(wParam));
+                LayoutLoginControls(hWnd, st->text, HIWORD(wParam), st->font);
                 SetAppWindowIcons(hWnd, HIWORD(wParam), st->icons);
             }
             return 0;
@@ -12187,12 +12313,20 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 
 // Returns true once a code was pasted or the loopback callback delivered one. Titled by `req`'s
 // account and provider.
-static bool ShowLoginDialog(const LoginRequest& req, const std::wstring& instructions, LoginDialogState& st) {
-    // Built before the class and window exist, so a failure leaves neither behind, and the message
-    // loop itself allocates nothing outside the poll.
+static bool ShowLoginDialog(const LoginRequest& req, LoginDialogState& st) {
+    // Built before the class and window exist, so a failure leaves neither behind, and neither the
+    // window's layout nor its message loop allocates outside the poll.
     std::wstring title = I18nText(st.locale, TrCtx(L"sign-in-window", L"Sign in: {label} ({provider})"),
                                   {{L"label", req.label}, {L"provider", ProviderDisplayName(req.provider)}});
-    const std::wstring closeLabel = I18nText(st.locale, TrCtx(L"sign-in-button", L"Close"));
+    st.text.device = (bool)st.poll;
+    st.text.paste = st.listener == INVALID_SOCKET && !st.poll;
+    st.text.labels = LoginWindowLabelsFor(st.locale, st.text.device);
+    if (st.text.paste && !st.expectedState.empty()) {
+        st.text.otherSignIn = I18nText(st.locale, TrCtx(L"sign-in-window",
+                                                        L"That code belongs to another sign-in link. Open this "
+                                                        L"window's link, approve access, then paste the code its "
+                                                        L"page shows."));
+    }
     static PCWSTR kClass = L"AiQuotaLoginDlg_" WH_MOD_ID;
     HINSTANCE hInst = GetModuleHandleW(nullptr);
     WNDCLASSEXW wc{};
@@ -12231,27 +12365,17 @@ static bool ShowLoginDialog(const LoginRequest& req, const std::wstring& instruc
     // The taskbar shows the app icon instead of File Explorer's (ui/window-icon.h).
     UiSetWindowAppId(wnd, kWindowAppId);
     SetAppWindowIcons(wnd, dpi, st.icons);
-    RECT windowRect{0, 0, ScaleForDpi(448, dpi), ScaleForDpi(st.edit ? 186 : st.poll ? 170 : 108, dpi)};
-    using AdjustWindowRectExForDpi_t = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
-    auto adjustWindowRectExForDpi = reinterpret_cast<AdjustWindowRectExForDpi_t>(
-        GetProcAddress(GetModuleHandleW(L"user32.dll"), "AdjustWindowRectExForDpi"));
-    if (!adjustWindowRectExForDpi ||
-        !adjustWindowRectExForDpi(&windowRect, style, FALSE, exStyle, dpi)) {
-        AdjustWindowRectEx(&windowRect, style, FALSE, exStyle);
-    }
-    int width = windowRect.right - windowRect.left;
-    int height = windowRect.bottom - windowRect.top;
+    LayoutLoginControls(wnd, st.text, dpi, st.font);
+    RECT windowRect{};
+    GetWindowRect(wnd, &windowRect);
     int x = monitorInfo.rcWork.left +
-            (monitorInfo.rcWork.right - monitorInfo.rcWork.left - width) / 2;
+            (monitorInfo.rcWork.right - monitorInfo.rcWork.left - (windowRect.right - windowRect.left)) / 2;
     int y = monitorInfo.rcWork.top +
-            (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top - height) / 2;
-    SetWindowPos(wnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE);
-    LayoutLoginDialog(wnd, st, dpi);
-    SetWindowTextW(GetDlgItem(wnd, kLoginInstructions), instructions.c_str());
-    if (st.poll) SetWindowTextW(GetDlgItem(wnd, kLoginStatus), st.status);
+            (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top - (windowRect.bottom - windowRect.top)) / 2;
+    SetWindowPos(wnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
     ShowWindow(wnd, SW_SHOW);
     SetForegroundWindow(wnd);
-    SetFocus(st.edit ? st.edit : GetDlgItem(wnd, st.poll ? kLoginCopyLink : kLoginOpenLink));
+    SetFocus(GetDlgItem(wnd, st.text.paste ? kLoginCode : st.text.device ? kLoginCopyLink : kLoginOpenLink));
 
     MSG msg;
     if (st.poll) {
@@ -12297,7 +12421,7 @@ static bool ShowLoginDialog(const LoginRequest& req, const std::wstring& instruc
                 // Focus moves to Close before the button it could be on is disabled.
                 stopped = true;
                 HWND close = GetDlgItem(wnd, IDCANCEL);
-                SetWindowTextW(close, closeLabel.c_str());
+                SetWindowTextW(close, st.text.labels.close.c_str());
                 SetFocus(close);
                 EnableWindow(GetDlgItem(wnd, kLoginCopyLink), FALSE);
                 continue;
@@ -12354,15 +12478,14 @@ static void DoAnthropicLogin(const LoginRequest& req) {
         dialog.listener = listener;
         dialog.callbackRoute = "/callback";
         dialog.expectedState = state;
-        dialog.alternate = I18nText(dialog.locale, TrCtx(L"sign-in-button", L"Use a code"));
-        bool received = ShowLoginDialog(
-            req,
+        dialog.text.alternate = I18nText(dialog.locale, TrCtx(L"sign-in-button", L"Use a code"));
+        dialog.text.instructions =
             I18nText(dialog.locale,
                      TrCtx(L"sign-in-window",
                            L"Open the sign-in link in a browser on this PC and approve access on claude.ai. This "
                            L"window closes once sign-in completes. On another device, choose {button}."),
-                     {{L"button", dialog.alternate}}),
-            dialog);
+                     {{L"button", dialog.text.alternate}});
+        bool received = ShowLoginDialog(req, dialog);
         SOCKET s = g_loginSocket.exchange(INVALID_SOCKET);
         if (s != INVALID_SOCKET) closesocket(s);
         if (g_unloading) return;
@@ -12382,10 +12505,10 @@ static void DoAnthropicLogin(const LoginRequest& req) {
         LoginDialogState dialog;
         dialog.url = BuildAnthropicAuthorizeUrl(redirect, challenge, state);
         dialog.expectedState = state;
-        std::wstring instructions =
+        dialog.text.instructions =
             I18nText(dialog.locale, TrCtx(L"sign-in-window", L"Open the sign-in link in a browser and approve access on "
                                                              L"claude.ai, then paste the code shown on the page below."));
-        if (!ShowLoginDialog(req, instructions, dialog) || g_unloading) return;
+        if (!ShowLoginDialog(req, dialog) || g_unloading) return;
 
         const std::wstring& pasted = dialog.pastedCode;
         size_t b = pasted.find_first_not_of(L" \t\r\n");
@@ -12456,11 +12579,11 @@ static void DoOpenAiLogin(const LoginRequest& req) {
     dialog.url = BuildOpenAiAuthorizeUrl(port, challenge, state);
     dialog.listener = listener;
     dialog.expectedState = state;
-    std::wstring instructions =
+    dialog.text.instructions =
         I18nText(dialog.locale, TrCtx(L"sign-in-window",
                                       L"Open the sign-in link in a browser on this PC and approve access. This window "
                                       L"closes once sign-in completes."));
-    bool received = ShowLoginDialog(req, instructions, dialog);
+    bool received = ShowLoginDialog(req, dialog);
     SOCKET s = g_loginSocket.exchange(INVALID_SOCKET);
     if (s != INVALID_SOCKET) closesocket(s);
     if (g_unloading) return;
@@ -12538,14 +12661,25 @@ static void DoCopilotLogin(const LoginRequest& req) {
     AccountError transient;
     LoginDialogState dialog;
     // The status line: waiting, retrying after a transient failure, or a terminal end's reason.
+    // The window fits the tallest of them, a retry after each kind of failure the poll retries
+    // included (any HTTP status shows three digits).
     const std::wstring waiting =
         I18nText(dialog.locale, TrCtx(L"sign-in-status", L"Waiting for approval on GitHub\u2026"));
     const std::wstring expired =
         I18nText(dialog.locale, TrCtx(L"sign-in-status", L"The code expired. Close this window and sign in again."));
     const std::wstring failed =
         I18nText(dialog.locale, TrCtx(L"sign-in-status", L"Sign-in failed. See the Windhawk log for details."));
+    const std::wstring denied = I18nText(dialog.locale, TrCtx(L"sign-in-status", L"Sign-in was denied on GitHub."));
+    auto retrying = [&](const AccountError& failure) {
+        return I18nText(dialog.locale, TrCtx(L"sign-in-status", L"{reason}, retrying\u2026"),
+                        {{L"reason", AccountErrorText(dialog.locale, failure, AccountErrorForm::Alone)}});
+    };
+    dialog.text.statuses = {waiting, expired, failed, denied, retrying({AccountErrorCode::Network}),
+                            retrying({.code = AccountErrorCode::Http, .status = 503}),
+                            retrying({AccountErrorCode::UnexpectedTokenResponse}),
+                            retrying({AccountErrorCode::InvalidTokenResponse})};
     dialog.url = kCopilotVerificationUrl;
-    dialog.userCode = userCode;
+    dialog.text.userCode = userCode;
     dialog.nextPollMs = GetTickCount64() + intervalMs;
     wcsncpy_s(dialog.status, waiting.c_str(), _TRUNCATE);
     dialog.poll = [&]() -> ULONGLONG {
@@ -12591,10 +12725,8 @@ static void DoCopilotLogin(const LoginRequest& req) {
                         std::wstring detail = GetStr(root, L"error_description");
                         Wh_Log(L"Sign-in [%s] failed: %s", req.label.c_str(),
                                detail.empty() ? code.c_str() : detail.c_str());
-                        std::wstring reason =
-                            code == L"access_denied" ?
-                                I18nText(dialog.locale, TrCtx(L"sign-in-status", L"Sign-in was denied on GitHub.")) :
-                            code == L"expired_token" ? expired : failed;
+                        const std::wstring& reason =
+                            code == L"access_denied" ? denied : code == L"expired_token" ? expired : failed;
                         wcsncpy_s(dialog.status, reason.c_str(), _TRUNCATE);
                         return 0;
                     }
@@ -12616,10 +12748,7 @@ static void DoCopilotLogin(const LoginRequest& req) {
                     transient = failure;
                     Wh_Log(L"Sign-in [%s]: %s, polling on", req.label.c_str(), AccountErrorText({}, failure).c_str());
                 }
-                std::wstring retrying =
-                    I18nText(dialog.locale, TrCtx(L"sign-in-status", L"{reason}, retrying\u2026"),
-                             {{L"reason", AccountErrorText(dialog.locale, failure, AccountErrorForm::Alone)}});
-                wcsncpy_s(dialog.status, retrying.c_str(), _TRUNCATE);
+                wcsncpy_s(dialog.status, retrying(failure).c_str(), _TRUNCATE);
             }
             // Wakes at the expiry at the latest, where the next call ends without a request.
             ULONGLONG now = GetTickCount64();
@@ -12631,12 +12760,12 @@ static void DoCopilotLogin(const LoginRequest& req) {
             return 0;
         }
     };
-    std::wstring instructions =
+    dialog.text.instructions =
         I18nText(dialog.locale,
                  TrCtx(L"sign-in-window",
                        L"Copy the code and open GitHub below, or enter it at github.com/login/device on any device, "
                        L"signed in to the GitHub account with Copilot. This window closes once sign-in completes."));
-    bool granted = ShowLoginDialog(req, instructions, dialog);
+    bool granted = ShowLoginDialog(req, dialog);
     if (g_unloading) return;
     if (!granted) {
         if (!ended) Wh_Log(L"Sign-in [%s]: cancelled", req.label.c_str());
@@ -12661,12 +12790,12 @@ static void DoCopilotLogin(const LoginRequest& req) {
 static void DoOpenCodeLogin(const LoginRequest& req) {
     LoginDialogState dialog;
     dialog.url = kOpenCodeConsoleUrl;
-    dialog.secret = true;
-    std::wstring instructions =
+    dialog.text.secret = true;
+    dialog.text.instructions =
         I18nText(dialog.locale, TrCtx(L"sign-in-window",
                                       L"Open the OpenCode console in a browser, copy an API key of the workspace with "
                                       L"your Go subscription, and paste it below."));
-    if (!ShowLoginDialog(req, instructions, dialog) || g_unloading) return;
+    if (!ShowLoginDialog(req, dialog) || g_unloading) return;
 
     const std::wstring& pasted = dialog.pastedCode;
     size_t b = pasted.find_first_not_of(L" \t\r\n");
@@ -31470,10 +31599,6 @@ static int SettingsTaskDialog(TASKDIALOGCONFIG config, BOOL* verification) {
         return 0;
     }
     return context.forced ? context.forcedResult : button;
-}
-
-static int ScaleForDpi(int value, UINT dpi) {
-    return MulDiv(value, (int)dpi, 96);
 }
 
 static UINT WindowDpi(HWND hWnd) {

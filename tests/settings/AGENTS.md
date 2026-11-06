@@ -5,8 +5,8 @@ fragments behind both custom-drawn windows (meter model,
 `src/ui/` toolkit, the settings edit controller, shell and page builders; the usage history
 window's view, chart, controller and frame builders on the shared history model), offscreen renders of
 both windows, a native-host probe of the toolkit's window host (with its dropdown popup, tooltip
-and number box text boxes, and the history window's dialog scope), and a capture/foreground probe
-for the dropdown popup. Not a Windhawk,
+and number box text boxes, and the history window's dialog scope), a capture/foreground probe
+for the dropdown popup, and a probe of the sign-in window's controls. Not a Windhawk,
 Explorer or XAML test. The history domain (journal memory, series, continuity, burn-up, CSV) stays in
 `tests/history`.
 
@@ -106,7 +106,11 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   format read, fixed, trimmed and grouped numbers, integer arguments shown as regional text in
   plurals, the taskbar's amounts, the details flyout's amount templates, and number boxes (format
   and parse round trips, typed variants, the controller, a draft across a regional change, the
-  History page's box).
+  History page's box). `fixtures/signin-layout.inc`: the sign-in window's layout
+  (`auth/login-layout.h`) from label widths and wrapped lines the sign-in probe measured: English's
+  fixed geometry at 96, 120, 144 and 192 DPI, German, Russian, Japanese and the pseudo-locale
+  widening and growing it, the reserves (another sign-in's instructions, Close, a long Sign in),
+  nothing measured and a taller font's line.
   `fixtures/controls.inc`: the
   toolkit controls the history window builds on (segment geometry, hits and keys, ellipsis
   trimming, a dropdown's width and cut value's tooltip, the navigation pane's stops, scrollbar and
@@ -356,12 +360,27 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   owner deactivation, minimize/restore, a disabled owner, a message box and destruction. Prints
   `OBSERVE` lines and checks the native facts the step-4 popup design was derived from (a failure
   means revisiting the design, not the probe).
+- `extract-signin`, `signin-compile`, `signin-probe`: the sign-in window's controls
+  (`auth/login-controls.h` with `auth/login-layout.h`, the catalogs and the account errors;
+  `fixtures/signin-probe.inc`, hand-written) in probe windows that are never shown, with comctl32 6
+  activated from a manifest written to the run directory, as Explorer's gives the sign-in window.
+  In every language and the pseudo-locale at 96 and 144 DPI, each flow (Anthropic's browser and
+  code, OpenAI, OpenCode Go's key, GitHub's device flow) with its text as the sign-ins build it:
+  each button's ideal size (`BCM_GETIDEALSIZE`) for every label it shows within its rectangle, each
+  static's every text as it paints it (`WM_PRINTCLIENT`) inside its own, the boxes' text rectangle
+  a line tall, nothing overlapping or outside the client; English's fixed geometry at 96, 120, 144
+  and 192 DPI; a DPI change laying the window out as a new one in a new font; the production
+  frame's client at the window's own DPI. `render-signin-<tag>-<96|144>` (en, qps-ploc, de, ru, ja,
+  zh-Hans): every flow, then another sign-in's code (Copy failed) and an ended device sign-in (its
+  tallest status, Code copied, Close); WM_PRINT leaves out a box's themed border, so the probe
+  draws a plain one, and themes draw at the probe monitor's DPI. `OBSERVE` lines report each
+  control's size, its labels' widths and ideal sizes and its texts' lines.
 
 ## Outputs and side effects
 
 Each run creates a retained `.out/run-.../` with the extracted `settings.cpp`, `history.cpp`,
-`status.cpp`, `ui-host.cpp` and `popup.cpp` (plus `.manifest.json` section boundaries and hashes), executables, the DLL,
-`render-*.png`, per-phase logs and `results.json`. The tool never prunes old runs. The host probe
+`status.cpp`, `ui-host.cpp`, `popup.cpp` and `signin.cpp` (plus `.manifest.json` section boundaries and hashes), executables, the DLL,
+`render-*.png`, the sign-in probe's `signin-probe.manifest`, per-phase logs and `results.json`. The tool never prunes old runs. The host probe
 shows off-screen, never-activated windows and briefly a message box, and reads the user's theme
 (registry, `UISettings`); its popup, text box, slider, preview, chart, tooltip and color dialog
 cases (each on its own) and the popup probe run on hidden desktops they create and never switch to, so their
@@ -374,7 +393,7 @@ credential or Explorer access.
 
 Exit 0 requires every phase to pass: tooling self-tests, freshness and the mod check (default
 source), the extractions, compiles, exactly one successful `RESULT` summary from `model`, `render`, `history`,
-`history-render`, `status`, `host-probe` and `popup-probe`, every reported render present as a PNG, and
+`history-render`, `status`, `host-probe`, `popup-probe` and `signin-probe`, every reported render present as a PNG, and
 source and harness unchanged during the run. A pass covers extracted logic, offscreen rendering and the host's
 window/thread/teardown contract in a test process (the controller against a test store, the
 popup and EDITs against a stub client); Explorer, the settings thread's real client and store,
@@ -389,7 +408,10 @@ interactive mode, and neither runs inside Explorer (where the taskbar shares the
 same holds for the tooltip: on the hidden desktop the cursor image isn't readable (the fallback
 square stands in) and `WindowFromPoint` is only an observation; pointer routing through the
 readout, real cursor sizes, multi-monitor DPI and z-order next to the taskbar need
-`--tooltip-interactive` and Explorer.
+`--tooltip-interactive` and Explorer. The sign-in probe covers what the controls report in a test
+process with comctl32 6 from its manifest; Explorer's activation context, the caption, a real DPI
+change (its suggested rectangle, a move between monitors), the message loop and the sign-in flows
+need the runtime check.
 
 ## Maintenance rules
 
@@ -401,9 +423,10 @@ readout, real cursor sizes, multi-monitor DPI and z-order next to the taskbar ne
   target.
 - `fixtures/status/` holds captured public status pages only (no account data); replace a capture
   rather than edit it, and keep expected values read off it by hand.
-- Never extract the production store, storage, auth, account commands, settings client, history
-  journal, history ops (`history/ops.h`) or history window code (`history/ui-window.h`,
-  `window.h`).
+- Never extract the production store, storage, auth (the sign-in window's `auth/login-layout.h`
+  and `auth/login-controls.h` aside: text, layout and controls, no network or tokens), account
+  commands, settings client, history journal, history ops (`history/ops.h`) or history window code
+  (`history/ui-window.h`, `window.h`).
 - Fixtures live by domain under `fixtures/`: synthetic inputs with hand-derived expected values,
   not copies of production rules.
 - Keep generated artifacts under `.out/`.

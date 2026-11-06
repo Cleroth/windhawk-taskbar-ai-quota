@@ -70,9 +70,10 @@ Build files go to `.out/icon/`. Nothing references the two files.
   history window's view, chart, controller (against in-memory ops) and frame builders the same way,
   renders both windows (and the settings
   taskbar preview) offscreen, probes the toolkit's native
-  window host (popup, tooltip, text boxes, sliders and the color dialog included) and the dropdown
+  window host (popup, tooltip, text boxes, sliders and the color dialog included), the dropdown
   popup's capture/activation (`--popup-interactive` and the tooltip's pointer routing,
-  `--tooltip-interactive`: by hand); its full run includes `check-mod.ps1`'s check; guide:
+  `--tooltip-interactive`: by hand) and the sign-in window's controls in every language (renders
+  them too); its full run includes `check-mod.ps1`'s check; guide:
   [tests/settings/AGENTS.md](tests/settings/AGENTS.md).
 - A full integration check still requires Windhawk loading the mod into `explorer.exe`.
 - `python tests/i18n/check.py` reports the catalogs against the message keys in `src/` (missing,

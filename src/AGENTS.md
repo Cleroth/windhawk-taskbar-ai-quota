@@ -38,8 +38,10 @@ The mod is injected into `explorer.exe`. Execution domains:
   window takes its API key (masked); GitHub Copilot's device flow shows its code there
   and polls the token endpoint from that message loop between pumps, never from the window
   procedure, discarding a result once the window closed; the loop also sets its status line, and
-  a sign-in that ends without a token keeps the window open, not polling, until closed. Network
-  and token storage only; NEVER XAML.
+  a sign-in that ends without a token keeps the window open, not polling, until closed. The
+  window is laid out by its text's measure (`auth/login-controls.h`, the pure layout in
+  `auth/login-layout.h`), all of it built before the window: neither the layout nor the loop
+  allocates. Network and token storage only; NEVER XAML.
 - **Settings thread** (`SettingsWindowThreadProc`, one at a time): owns the custom-drawn settings
   window (`settings/ui-window.h`, a client of the `ui/` toolkit host; toolkit rules:
   [ui/AGENTS.md](ui/AGENTS.md)), persists autosaved configuration to mod LocalStorage and

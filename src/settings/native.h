@@ -101,10 +101,6 @@ static int SettingsTaskDialog(TASKDIALOGCONFIG config, BOOL* verification) {
     return context.forced ? context.forcedResult : button;
 }
 
-static int ScaleForDpi(int value, UINT dpi) {
-    return MulDiv(value, (int)dpi, 96);
-}
-
 static UINT WindowDpi(HWND hWnd) {
     if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
         using GetDpiForWindow_t = UINT(WINAPI*)(HWND);

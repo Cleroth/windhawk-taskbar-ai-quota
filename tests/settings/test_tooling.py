@@ -50,9 +50,10 @@ class ToolingTests(unittest.TestCase):
         results = json.loads(saved.call_args.args[0])
         return code, results, [step["name"] for step in results["phases"]]
 
-    EXTRACTS = ["extract", "extract-history", "extract-status", "extract-host", "extract-popup"]
-    BUILDS = ["model-compile", "history-compile", "status-compile", "host-compile", "probe-compile", "popup-compile"]
-    TESTS = ["model", "render", "history", "history-render", "status", "host-probe", "popup-probe"]
+    EXTRACTS = ["extract", "extract-history", "extract-status", "extract-host", "extract-popup", "extract-signin"]
+    BUILDS = ["model-compile", "history-compile", "status-compile", "host-compile", "probe-compile", "popup-compile",
+              "signin-compile"]
+    TESTS = ["model", "render", "history", "history-render", "status", "host-probe", "popup-probe", "signin-probe"]
 
     def test_default_phases_and_summary_required(self):
         reads = []
@@ -60,10 +61,11 @@ class ToolingTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(names, ["tooling", "freshness", *self.EXTRACTS, *self.BUILDS, "mod-check", *self.TESTS])
         self.assertEqual(reads, ["settings.manifest.json", "history.manifest.json", "status.manifest.json",
-                                 "ui-host.manifest.json", "popup.manifest.json"])
+                                 "ui-host.manifest.json", "popup.manifest.json", "signin.manifest.json"])
         self.assertEqual(results["phases"][-1]["tests"], {"passed": 3, "failed": 0, "assertions": 9})
-        # Both render phases report theirs: the settings window's, then the history window's.
-        self.assertEqual(results["renders"], ["render-a.png", "render-a.png"])
+        # Every render phase reports its own: the settings window's, the history window's, then the
+        # sign-in window's.
+        self.assertEqual(results["renders"], ["render-a.png", "render-a.png", "render-a.png"])
         code, results, _ = self.invoke_runner()
         self.assertEqual(code, 1)
         self.assertIn("evidence_error", results["phases"][-1])

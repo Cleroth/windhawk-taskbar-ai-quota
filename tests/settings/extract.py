@@ -28,6 +28,8 @@ MODEL = [
     ("definition", "ProviderDisplayName"),
     ("definition", "ThresholdNotificationText"),
     ("definition", "ThresholdToastXml"),
+    # The sign-in window's text and layout.
+    ("fragment", "auth/login-layout.h"),
     ("fragment", "taskbar/logo-paths.h"),
     ("fragment", "taskbar/meter-model.h"),
     *UI_PURE,
@@ -101,6 +103,16 @@ STATUS = [
     ("fragment", "fetch/status-feeds.h"),
 ]
 
+# The sign-in window's controls with their text and layout on the production catalogs: the sign-in
+# probe. Window and GDI code only: no network, tokens or account code.
+SIGNIN = [
+    *I18N,
+    ("fragment", "core/model.h"),
+    ("fragment", "core/account-error.h"),
+    ("fragment", "auth/login-layout.h"),
+    ("fragment", "auth/login-controls.h"),
+]
+
 TARGETS = {
     "model": (MODEL, "harness.hpp", "fixtures/main.inc"),
     "history": (HISTORY, "harness.hpp", "fixtures/history-main.inc"),
@@ -108,6 +120,7 @@ TARGETS = {
     "host": (HOST, "host.hpp", "fixtures/host-dll.inc"),
     # The same host as the owner window of the capture/foreground popup probe.
     "popup": (HOST, "host.hpp", "fixtures/popup-probe.inc"),
+    "signin": (SIGNIN, "harness.hpp", "fixtures/signin-probe.inc"),
 }
 
 

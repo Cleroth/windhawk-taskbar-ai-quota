@@ -1,4 +1,4 @@
-"""Run source-extracted settings and provider status tests, offscreen renders and native-host and popup probes, plus the mod check."""
+"""Run source-extracted settings and provider status tests, offscreen renders and native-host, popup and sign-in probes, plus the mod check."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -18,8 +18,9 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 DEFAULT_SOURCE = REPO / "local@taskbar-ai-quota.wh.cpp"
 DEFAULT_COMPILER = Path(r"C:\Program Files\Windhawk\Compiler\bin\clang++.exe")
-SUMMARY_PHASES = ("model", "render", "history", "history-render", "status", "host-probe", "popup-probe")
-RENDER_PHASES = ("render", "history-render")
+SUMMARY_PHASES = ("model", "render", "history", "history-render", "status", "host-probe", "popup-probe",
+                  "signin-probe")
+RENDER_PHASES = ("render", "history-render", "signin-probe")
 
 
 def hashes():
@@ -92,8 +93,9 @@ def main():
     root = Path(tempfile.mkdtemp(prefix=datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%SZ-"), dir=parent))
     print(f"Output: {root}", flush=True)
     results = {"source": str(source), "compiler": str(compiler), "output": str(root), "phases": [], "ok": False,
-               "scope": "isolated source-extracted model tests, offscreen renders, a native-host probe DLL and a "
-                        "popup capture probe on a hidden desktop; not Explorer, XAML or the mod's settings thread"}
+               "scope": "isolated source-extracted model tests, offscreen renders, a native-host probe DLL, a "
+                        "popup capture probe on a hidden desktop and a sign-in window controls probe in never-shown "
+                        "windows; not Explorer, XAML or the mod's settings and login threads"}
     try:
         results["source_sha256_before"] = hashlib.sha256(source.read_bytes()).hexdigest()
         results["harness_sha256_before"] = hashes()
@@ -102,6 +104,7 @@ def main():
         status_cpp, status_exe = root / "status.cpp", root / "status.exe"
         host_cpp, host_dll, probe = root / "ui-host.cpp", root / "ui-host.dll", root / "host-probe.exe"
         popup_cpp, popup_exe = root / "popup.cpp", root / "popup-probe.exe"
+        signin_cpp, signin_exe = root / "signin.cpp", root / "signin-probe.exe"
         flags = [str(compiler), "--target=x86_64-w64-mingw32", "-std=c++23", "-DUNICODE", "-D_UNICODE",
                  "-Wall", "-Wextra", "-O0", "-g", "-static"]
         # The probes mirror Windhawk's Windows 10 targeting and MSVC-style wide printf.
@@ -141,7 +144,8 @@ def main():
                 [("extract", extract + ["--output", str(cpp)]),
                  ("extract-history", extract + ["--output", str(history_cpp), "--target", "history"]),
                  ("extract-status", extract + ["--output", str(status_cpp), "--target", "status"]),
-                 host_build[0], popup_build[0]],
+                 host_build[0], popup_build[0],
+                 ("extract-signin", extract + ["--output", str(signin_cpp), "--target", "signin"])],
                 [("model-compile", flags + ["-I", str(HERE), str(cpp), "-o", str(exe), *render_libs]),
                  ("history-compile", flags + ["-I", str(HERE), str(history_cpp), "-o", str(history_exe), *render_libs]),
                  # The model's constants and helpers the status parser doesn't use stay quiet.
@@ -149,6 +153,11 @@ def main():
                                              str(status_cpp), "-o", str(status_exe),
                                              "-lole32", "-loleaut32", "-lruntimeobject"]),
                  *host_build[1:], popup_build[1],
+                 # The probe mirrors the login thread's native targeting; the model's helpers it
+                 # doesn't use stay quiet.
+                 ("signin-compile", native + ["-Wno-unused-const-variable", "-Wno-unused-function", "-municode",
+                                              "-I", str(HERE), str(signin_cpp), "-o", str(signin_exe),
+                                              "-luser32", "-lgdi32", "-lcomctl32", *render_libs, "-luuid"]),
                  # The mod's own syntax and metadata check rides along with the builds.
                  *([("mod-check", ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
                                    str(REPO / "check-mod.ps1")])] if default_source else [])],
@@ -160,6 +169,7 @@ def main():
                     ("status", [str(status_exe), str(HERE / "fixtures" / "status")]),
                     ("host-probe", [str(probe), str(host_dll)]),
                     ("popup-probe", [str(popup_exe)]),
+                    ("signin-probe", [str(signin_exe), str(root)]),
                 ]),
             ]
         for group in groups:
@@ -190,7 +200,8 @@ def main():
                         print(error, flush=True)
                 if name.startswith("extract") and step["ok"]:
                     extracted = {"extract": cpp, "extract-history": history_cpp, "extract-status": status_cpp,
-                                 "extract-host": host_cpp, "extract-popup": popup_cpp}[name]
+                                 "extract-host": host_cpp, "extract-popup": popup_cpp,
+                                 "extract-signin": signin_cpp}[name]
                     manifest = extracted.with_suffix(".manifest.json")
                     results.setdefault("extraction", {})[name] = json.loads(manifest.read_text(encoding="utf-8"))
             if not all(step["ok"] for step, _ in outcomes):
