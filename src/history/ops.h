@@ -26,16 +26,18 @@ struct HistoryProductionOps final : HistoryOps {
     HANDLE writer = nullptr;
 
     // Every exit of the window's thread (UiHostRun's return or an exception) cancels the write and
-    // waits for its worker. The window may close before: the worker never touches it.
+    // waits for its worker, and releases the window's range from the journal's memory. The window
+    // may close before: the worker never touches it.
     ~HistoryProductionOps() {
         if (job) job->cancel = true;
         JoinWriter();
+        ReleaseHistoryPin();
     }
 
     uint64_t TakeRequest() override { return g_historyRequestedAccount.exchange(0); }
 
-    // An explicit viewer read also prunes retained history while recording is off. Each call
-    // holds only the history leaf lock.
+    // An explicit viewer read also prunes retained history while recording is off; it pins the
+    // window's range in the journal's memory. Each call holds only the history leaf lock.
     HistorySnapshot ExplicitSnapshot(ULONGLONG from) override {
         MaintainHistory();
         return ReadHistorySnapshot(from);

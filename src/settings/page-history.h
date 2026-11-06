@@ -61,9 +61,9 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Keep history"));
         spec.description = {{I18nText(locale, Tr(L"Shared across Windows users. Forever has no size limit, so history "
-                                                 L"keeps growing in Explorer's memory and on disk; Antigravity readings "
-                                                 L"older than 15 days are kept about 10 minutes apart. Day limits "
-                                                 L"prune hourly, with a cap of about 60 MB."))}};
+                                                 L"keeps growing on disk; Antigravity readings older than 15 days are "
+                                                 L"kept about 10 minutes apart. Day limits prune hourly, with a cap of "
+                                                 L"about 60 MB."))}};
         spec.enabled = s.historyEnabled;
         if (!s.historyEnabled) spec.reason = recordingOff;
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::KeepHistory,

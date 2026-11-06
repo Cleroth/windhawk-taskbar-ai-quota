@@ -68,15 +68,21 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def generate(source, output, expected_hash):
+# Each target's prelude and fixture entry: the history model on its explicit inputs, and the
+# journal on synthetic files in a temp folder.
+TARGETS = {"model": ("win32-stubs.hpp", "main.inc"), "journal": ("journal-stubs.hpp", "journal-main.inc")}
+
+
+def generate(source, output, expected_hash, target="model"):
     raw = source.read_bytes()
     if digest(raw) != expected_hash:
         raise ValueError("Source changed before extraction; rerun against settled source")
     # Preserve original line endings too: these exact strings are emitted as UTF-8 bytes.
     text = raw.decode("utf-8-sig")
-    manifest = {"source": str(source), "sha256": digest(raw), "extractions": []}
+    manifest = {"source": str(source), "sha256": digest(raw), "target": target, "extractions": []}
+    stubs, main = TARGETS[target]
     chunks = ["// GENERATED: production sections below are extracted verbatim.\n",
-              '#include "win32-stubs.hpp"\n']
+              f'#include "{stubs}"\n']
 
     def emit(label, bounds):
         a, b = bounds
@@ -91,25 +97,38 @@ def generate(source, output, expected_hash):
     # localization engine with its catalogs (the history model's titles), the account model,
     # sample types, continuity rules, Antigravity thinning, the flyout's burn-up curves, the history
     # model and its CSV writer; so is the journal's coordination state (a lock, counters and
-    # flags). The journal and helper fragments only contribute named definitions.
-    for name in ["template", "catalog", "lang-de", "lang-es", "lang-fr", "lang-ja", "lang-pt-BR", "lang-ru",
-                 "lang-zh-Hans", "languages", "pseudo", "format", "numbers"]:
-        emit(f"i18n/{name}.h", fragment(text, f"i18n/{name}.h"))
-    emit("core/model.h", fragment(text, "core/model.h"))
-    emit("history/types.h", fragment(text, "history/types.h"))
-    # The journal's memory-only parts: its in-memory state (never the storage state after it),
-    # the status notifier, the record checksum, the history window's peek and an account
-    # deletion's memory step. Nothing that loads or writes storage.
+    # flags). The journal and helper fragments only contribute named definitions or anchored
+    # sections.
     journal = "history/journal.h"
-    emit("history/state.h", fragment(text, "history/state.h"))
-    emit("journal memory state", within(text, journal, between, "static std::deque<HistorySample> g_historySamples;", "static std::wstring g_historyPath;"))
-    for name in ["SetHistoryStatus", "HistoryChecksum", "PeekHistorySnapshot", "EraseHistorySamplesLocked"]:
-        emit(name, within(text, journal, definition, name))
-    for name in ["Utf8ToWide", "WideToUtf8"]:
-        emit(name, within(text, "core/helpers.h", definition, name))
-    for path in ["history/continuity.h", "history/thinning.h", "history/burn-up.h", "history/series.h", "history/csv.h"]:
-        emit(path, fragment(text, path))
-    chunks.append('\n#include "fixtures/main.inc"\n')
+    if target == "model":
+        for name in ["template", "catalog", "lang-de", "lang-es", "lang-fr", "lang-ja", "lang-pt-BR", "lang-ru",
+                     "lang-zh-Hans", "languages", "pseudo", "format", "numbers"]:
+            emit(f"i18n/{name}.h", fragment(text, f"i18n/{name}.h"))
+        emit("core/model.h", fragment(text, "core/model.h"))
+        emit("history/types.h", fragment(text, "history/types.h"))
+        # The journal's record checksum only: nothing that loads or writes storage.
+        emit("HistoryChecksum", within(text, journal, definition, "HistoryChecksum"))
+        for name in ["Utf8ToWide", "WideToUtf8"]:
+            emit(name, within(text, "core/helpers.h", definition, name))
+        for path in ["history/continuity.h", "history/thinning.h", "history/burn-up.h", "history/series.h",
+                     "history/csv.h"]:
+            emit(path, fragment(text, path))
+    else:
+        # The journal on synthetic files: its coordination state, the per-user storage folder's
+        # file helpers, the thinning machine it runs and the journal itself up to its recording
+        # consent (which reads and writes the user's Windhawk values and HKCU), then the burn-up
+        # tails it refills. The stubs point the storage folder and LocalAppData at a temp folder.
+        emit("history/types.h", fragment(text, "history/types.h"))
+        emit("history/state.h", fragment(text, "history/state.h"))
+        for name in ["CurrentUserSid", "UserStorageFolder", "PrepareUserStorageFolder", "OpenUserStorageFile",
+                     "CreateUserStagingFile", "DeleteStaleStagingFiles"]:
+            emit(name, within(text, "core/user-storage.h", definition, name))
+        for path in ["history/continuity.h", "history/thinning.h"]:
+            emit(path, fragment(text, path))
+        emit("journal without consent", within(text, journal, between, "struct HistoryFileHeader {",
+                                               "// Consent is per Windows user"))
+        emit("history/burn-up.h", fragment(text, "history/burn-up.h"))
+    chunks.append(f'\n#include "fixtures/{main}"\n')
     if source.read_bytes() != raw:
         raise ValueError("Source changed during extraction; rerun against settled source")
     output.write_bytes("\n".join(chunks).encode("utf-8"))
@@ -123,8 +142,9 @@ if __name__ == "__main__":
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--expected-hash", required=True)
+    parser.add_argument("--target", choices=sorted(TARGETS), default="model")
     args = parser.parse_args()
     try:
-        generate(args.source.resolve(), args.output.resolve(), args.expected_hash)
+        generate(args.source.resolve(), args.output.resolve(), args.expected_hash, args.target)
     except (OSError, UnicodeError, ValueError) as error:
         parser.exit(1, f"Extraction refused: {error}\n")

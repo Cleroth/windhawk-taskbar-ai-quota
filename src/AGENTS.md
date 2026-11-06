@@ -74,7 +74,8 @@ The mod is injected into `explorer.exe`. Execution domains:
   all window state and reaches the journal, settings and live readings only through the ops in
   `history/ops.h`. `NotifySettingsWindowChanged` also reaches it: its refresh reads the
   journal only through the memory-only `PeekHistorySnapshot`; only its explicit loads may
-  initialize or retry storage. Its dialogs (message boxes, the save dialog and its overwrite
+  initialize or retry storage or read the journal's file, and they pin the window's range in the
+  journal's memory until the history thread ends (the ops' destruction releases it). Its dialogs (message boxes, the save dialog and its overwrite
   prompt) run in the scope of `history/modal.h` (the close latch, then unload, ends them, nested
   and late ones included); a Yes/No prompt ignores Cancel, so the scope answers No there. NEVER
   XAML. Before unloading, cancel its tracked modal dialogs and join it. Its CSV export writes on
@@ -120,10 +121,11 @@ first, then reads/updates XAML.
 - Burn-up curves (`history/burn-up-store.h`): only the fetch thread publishes; settings
   publication and Clear history reset it via `ResetBurnUpCurvesLocked` (under `g_dataMutex`).
   The fetch thread caches per-account journal tails and the history window keeps a snapshot by
-  the journal's stamp, so any change to `g_historySamples` other than `AppendHistory` must bump
-  `g_historyEpoch` (Clear) or `g_historyRevision` (load, cap eviction, retention pruning,
-  Antigravity thinning, an account's deletion). An account's deletion also notifies the windows
-  (`NotifySettingsWindowChanged`).
+  the journal's stamp, so any change to `g_historySamples` (the journal's memory) other than an
+  append or an explicit load's widening at its start must bump `g_historyEpoch` (Clear) or
+  `g_historyRevision` (load, every rewrite, records leaving memory). An account's deletion also
+  notifies the windows (`NotifySettingsWindowChanged`). A tail reaching back before memory reads
+  the file under `g_historyMutex` and is taken only whole.
 - `g_settingsGeneration` gates published data. Code that publishes to `g_data` must re-check the
   generation under lock (see the existing publish block).
 - Manual refreshes queue in `g_refreshRequests` (under the leaf `g_refreshMutex`): one entry per
@@ -237,6 +239,16 @@ access token without refresh or expiry and sent only to its usage endpoint.
   unwritable until Clear. Only the shell process records; save pending history IDs before
   recording. History IDs are separate from auth identities and follow configured entries, not
   verified logins.
+- The journal is the file's committed records, then the pending ones (admitted, not yet
+  written). Memory holds its summary (per account, the last record's time, the oldest time) and
+  its cache: every record from `g_historyCacheFrom` on (the last 35 days and the history window's
+  pinned range), then every pending one, in journal order. Never hold the whole journal in memory
+  outside the window's pinned range; read older records from the file in validated chunks.
+  Rewrites (retention, cap, thinning, Clear, an account's deletion) are one transaction each:
+  one source handle sharing only reads across all its passes, a staging file moved over the
+  journal, then non-throwing swaps of the cache, summary and counts; any failure leaves file and
+  memory as they were. Appends write only after the committed records, once the header and length
+  are verified (never a hole); a damaged, shortened or lost file stops writes until Clear.
 - User-facing recording/storage/export behavior: [docs/usage-history.md](../docs/usage-history.md);
   its manual runtime checks: [docs/usage-history-verification.md](../docs/usage-history-verification.md).
 

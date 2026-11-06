@@ -458,11 +458,11 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"OpenCode Go in der Taskleiste anzuzeigen."},
     {L"", L"Set Credits max to show the Credits bar.",
      L"Legen Sie „Credits-Maximum“ fest, um den Credits-Balken anzuzeigen."},
-    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
-          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
-          L"with a cap of about 60 MB.",
-     L"Gilt für alle Windows-Benutzer. „Unbegrenzt“ hat keine Größenbeschränkung, daher wächst der Verlauf im Speicher "
-     L"des Explorers und auf dem Datenträger weiter; Antigravity-Messwerte, die älter als 15 Tage sind, werden in "
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing on disk; Antigravity "
+          L"readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, with a cap of about "
+          L"60 MB.",
+     L"Gilt für alle Windows-Benutzer. „Unbegrenzt“ hat keine Größenbeschränkung, daher wächst der Verlauf auf dem "
+     L"Datenträger weiter; Antigravity-Messwerte, die älter als 15 Tage sind, werden in "
      L"Abständen von etwa 10 Minuten aufbewahrt. Tageslimits bereinigen stündlich, mit einer Obergrenze von etwa "
      L"60\u00A0MB."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",

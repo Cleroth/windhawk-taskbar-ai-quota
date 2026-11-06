@@ -1,6 +1,28 @@
 // Antigravity thinning (history/thinning.h) on synthetic minute-by-minute readings: hand-derived
 // expectations of which readings stay and how lines connect and break through the thinned ones.
+// The journal's maintenance streams the same machine over its file (journal-rewrite.inc).
     {
+        // The machine fed a journal held in memory, each eligible reading in order, then its fates applied
+        // as the journal's rewrite applies them (widened ones checksummed again); nullopt when nothing changes.
+        auto thin = [](const std::deque<HistorySample>& samples, ULONGLONG nowMs) -> std::optional<std::deque<HistorySample>> {
+            HistoryThinning thinning(nowMs);
+            for (const auto& sample : samples) {
+                if (thinning.Eligible(sample)) thinning.Feed(sample);
+            }
+            if (!thinning.changed) return std::nullopt;
+            std::deque<HistorySample> thinned;
+            size_t ordinal = 0;
+            for (const auto& sample : samples) {
+                HistoryThinFate fate = thinning.Eligible(sample) ? thinning.fates[ordinal++] : HistoryThinFate::Kept;
+                if (fate == HistoryThinFate::Dropped) continue;
+                HistorySample& kept = thinned.emplace_back(sample);
+                if (fate == HistoryThinFate::Widened) {
+                    kept.intervalMs = kHistoryThinSpacingMs;
+                    kept.checksum = HistoryChecksum(kept);
+                }
+            }
+            return thinned;
+        };
         constexpr ULONGLONG minute = 60000;
         const ULONGLONG now = baseTime + 40 * kHistoryDayMs;
         const ULONGLONG start = now - 20 * kHistoryDayMs;  // Past the 15-day age
@@ -58,7 +80,7 @@
 
         Run("thinning/steady readings keep one per 10 minutes, the first and the last; all but the last widened to "
             "10 minutes and checksummed again; the lines stay whole", [&] {
-            auto thinned = ThinHistorySamples(run(7, start, 121), now);
+            auto thinned = thin(run(7, start, 121), now);
             CHECK(thinned);
             CHECK(minutes(*thinned, 7, start) == (std::vector<ULONGLONG>{0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120}));
             for (size_t i = 0; i < thinned->size(); ++i) {
@@ -70,7 +92,7 @@
         });
         Run("thinning/a reset drifting 30 s a reading stays connected: a kept reading reaches at most 2 minutes of "
             "drift", [&] {
-            auto thinned = ThinHistorySamples(run(7, start, 61, [](HistorySample& sample, size_t k) {
+            auto thinned = thin(run(7, start, 61, [](HistorySample& sample, size_t k) {
                 sample.meters[0].resetMs += k * 30000;
             }), now);
             CHECK(thinned);
@@ -81,7 +103,7 @@
         Run("thinning/a 3-minute gap stays a gap: both its readings kept at their 1-minute interval; past it, the "
             "unwidened reading reaches only 2 minutes", [&] {
             // Minutes 0-30, then 33-62.
-            auto thinned = ThinHistorySamples(run(7, start, 61, [](HistorySample& sample, size_t k) {
+            auto thinned = thin(run(7, start, 61, [](HistorySample& sample, size_t k) {
                 if (k > 30) sample.timeMs += 2 * minute;
             }), now);
             CHECK(thinned);
@@ -97,7 +119,7 @@
         });
         Run("thinning/a failed reading stays with both neighbours, its interval and flag unchanged; the lines break "
             "only there", [&] {
-            auto thinned = ThinHistorySamples(run(7, start, 41, [](HistorySample& sample, size_t k) {
+            auto thinned = thin(run(7, start, 41, [](HistorySample& sample, size_t k) {
                 if (k == 20) {
                     sample.failed = 1;
                     sample.meters = {};
@@ -112,7 +134,7 @@
                                                        HistoryBreak::Unavailable, HistoryBreak::None, HistoryBreak::None}));
         });
         Run("thinning/a meter gaining or losing its value, and a real reset, keep both readings around the change", [&] {
-            auto thinned = ThinHistorySamples(run(7, start, 61, [&](HistorySample& sample, size_t k) {
+            auto thinned = thin(run(7, start, 61, [&](HistorySample& sample, size_t k) {
                 // The third-party 5-hour pool reads until minute 24; the Gemini 5-hour pool resets at 45.
                 if (k < 25) sample.meters[4] = {10, start + 5 * hour, 5 * hour};
                 if (k >= 45) sample.meters[0] = {0, start + 10 * hour, 5 * hour};
@@ -135,7 +157,7 @@
             const ULONGLONG cutoff = now - 15 * kHistoryDayMs;
             const ULONGLONG from = cutoff - 30 * minute;
             auto samples = run(7, from, 41);
-            auto thinned = ThinHistorySamples(samples, now);
+            auto thinned = thin(samples, now);
             CHECK(thinned);
             CHECK(minutes(*thinned, 7, from) ==
                   (std::vector<ULONGLONG>{0, 10, 20, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40}));
@@ -159,7 +181,7 @@
             const ULONGLONG recent = now - hour;
             auto latest = run(7, recent, 61);
             samples.insert(samples.end(), latest.begin(), latest.end());
-            auto thinned = ThinHistorySamples(samples, now);
+            auto thinned = thin(samples, now);
             CHECK(thinned);
             std::vector<ULONGLONG> old = minutes(*thinned, 7, start);
             old.resize(4);
@@ -193,10 +215,10 @@
             std::deque<HistorySample> daily = samples;
             for (int day = 0; day <= 3; ++day) {
                 const ULONGLONG when = first + ULONGLONG(day) * kHistoryDayMs;
-                if (auto thinned = ThinHistorySamples(daily, when)) daily = std::move(*thinned);
-                CHECK(!ThinHistorySamples(daily, when));
+                if (auto thinned = thin(daily, when)) daily = std::move(*thinned);
+                CHECK(!thin(daily, when));
             }
-            auto once = ThinHistorySamples(samples, first + 3 * kHistoryDayMs);
+            auto once = thin(samples, first + 3 * kHistoryDayMs);
             CHECK(once && daily.size() == once->size());
             for (size_t i = 0; i < daily.size() && i < once->size(); ++i) {
                 CHECK(!memcmp(&daily[i], &(*once)[i], sizeof(HistorySample)));
@@ -205,7 +227,7 @@
             CHECK(all(links(daily, 7, 0), HistoryBreak::None));
         });
         Run("thinning/nothing older than 15 days, or no samples: nothing changes", [&] {
-            CHECK(!ThinHistorySamples(run(7, now - 2 * hour, 121), now));
-            CHECK(!ThinHistorySamples({}, now));
+            CHECK(!thin(run(7, now - 2 * hour, 121), now));
+            CHECK(!thin({}, now));
         });
     }

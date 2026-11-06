@@ -341,10 +341,10 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"account on the taskbar.",
      L"选择<b>{button}</b>，即可在任务栏上显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 或 OpenCode Go 账户。"},
     {L"", L"Set Credits max to show the Credits bar.", L"设置“积分上限”以显示积分条。"},
-    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
-          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
-          L"with a cap of about 60 MB.",
-     L"所有 Windows 用户共享此设置。“永久”没有大小限制，因此历史会在资源管理器的内存和磁盘中持续增长；超过 15 天的 Antigravity 读数按约 10 分钟的间隔保留。按天数限制时每小时清理一次，上限约 60 MB。"},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing on disk; Antigravity "
+          L"readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, with a cap of about "
+          L"60 MB.",
+     L"所有 Windows 用户共享此设置。“永久”没有大小限制，因此历史会在磁盘中持续增长；超过 15 天的 Antigravity 读数按约 10 分钟的间隔保留。按天数限制时每小时清理一次，上限约 60 MB。"},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"每个条形旁的简称：{key5h}、{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyCr}、{keyMo}。"},
     {L"", L"Short text", L"短文本"},

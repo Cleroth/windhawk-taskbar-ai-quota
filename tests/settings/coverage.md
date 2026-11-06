@@ -73,11 +73,14 @@ to `<target>.cpp` with a `.manifest.json`.
 - `history-view.inc`: compact formats in synthetic time zones, number rounding, summary cards and
   No readings entries built from synthetic readings.
 - `history-controller.inc`: the controller against `TestHistoryOps` (in-memory request, journal
-  with its stamp and peek contract, settings with polls, clock, unload, posted refresh messages,
-  deferral timer, consent transaction, a controllable export write job, operation log).
-  Orchestration only: never the production ops or the opener-to-window bridge.
+  with its stamp and peek contract, including where its memory starts and the incomplete peek
+  before it, settings with polls, clock, unload, posted refresh messages, deferral timer, consent
+  transaction, a controllable export write job, operation log). Orchestration only: never the
+  production ops or the opener-to-window bridge.
 - `history-refresh.inc`: live refresh, deferral (modal, popup, inspection) and its resume paths,
-  the no-stranding invariant after every event, Enable recording.
+  the no-stranding invariant after every event, Enable recording; ranges reaching back before
+  the journal's memory (explicit loads widen it; refreshes keep the held range, replaced only on
+  a journal change, an account's deletion elsewhere included).
 - `history-operations.inc`: Export, Clear, Delete history and About these charts through the test
   ops' dialogs, with cancellations, failures, the close latch and unload inside each; the export's
   pending write (progress polls, refresh deferral, close and unload while pending, late

@@ -11,7 +11,7 @@ int main(int argc, char**) {
 #include "continuity.inc"
 #include "thinning.inc"
 #include "burn-up.inc"
-#include "journal.inc"
+#include "refresh-cost.inc"
     std::cout << "RESULT " << passed << " passed, " << failed << " failed; " << assertions << " assertions\n";
     return failed ? 1 : 0;
 }

@@ -8,6 +8,9 @@ static BurnUpStore g_burnUpCurves;
 static std::atomic<ULONGLONG> g_burnUpPolicyGeneration{0};
 // Asks the fetch thread to rebuild every recorded account from local history only.
 static std::atomic<bool> g_burnUpRebuildRequested{false};
+// The journal's memory holds every current window (with its reset tolerance) at the current
+// clock; only a stale window or a clock moved back reads its file.
+static_assert(kBurnUpMaxWindowMs + kHistoryResetToleranceMs < kHistoryHotWindowMs);
 
 // Drops published curves and requests a full local rebuild. Caller holds g_dataMutex, then
 // updates the UI and wakes the fetch thread once it holds no locks.
@@ -18,10 +21,10 @@ static void ResetBurnUpCurvesLocked() {
 
 // Fetch thread only, after AppendHistory while this shell records. Under g_historyMutex the
 // flagged recorded accounts' tails in `cache` copy only what was appended since the last round
-// (a full scan of their current windows after an invalidation or journal change; never loading
-// the journal). Curves are built outside the lock and published unless Clear or a policy change
-// superseded the copy or `policyGeneration`'s settings snapshot. Returns whether the store was
-// published.
+// (a full scan of their current windows after an invalidation or journal change, reading the
+// journal's file for a window reaching back before its memory; never loading the journal). Curves
+// are built outside the lock and published unless Clear or a policy change superseded the copy or
+// `policyGeneration`'s settings snapshot. Returns whether the store was published.
 static bool RebuildBurnUpCurves(BurnUpSampleCache& cache, const std::vector<AccountConfig>& accounts,
                                 const std::vector<AccountData>& readings,
                                 const std::vector<bool>& rebuild, bool replaceAll,
@@ -55,8 +58,11 @@ static bool RebuildBurnUpCurves(BurnUpSampleCache& cache, const std::vector<Acco
         {
             std::lock_guard lock(g_historyMutex);
             epoch = g_historyEpoch.load();
-            UpdateBurnUpTails(cache, g_historySamples, epoch, g_historyRevision,
-                              g_historyAppendCount, targets, replaceAll);
+            UpdateBurnUpTails(cache, g_historySamples, g_historyCacheFrom, epoch, g_historyRevision,
+                              g_historyAppendCount, targets, replaceAll,
+                              [](ULONGLONG from, const std::function<void(const HistorySample&)>& use) {
+                                  return ReadHistoryRangeLocked(from, use) == HistoryPass::Done;
+                              });
         }
         if (g_unloading) {
             cache = {};  // A refill may have stopped part-way.

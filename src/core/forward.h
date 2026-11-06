@@ -9,8 +9,6 @@ static void OpenHistoryWindow(uint64_t historyId = 0);
 static void UiSetWindowAppId(HWND window, PCWSTR appId);
 static void SetAppWindowIcons(HWND window, UINT dpi, std::array<HICON, 2>& icons);
 static std::vector<BYTE> AppIconPng();
-static std::optional<std::deque<HistorySample>> ThinHistorySamples(const std::deque<HistorySample>& samples,
-                                                                   ULONGLONG nowMs);
 static std::wstring NotificationProjectionText(const I18nLocale& locale, uint64_t historyId, int slot,
                                                const WindowUsage& reading);
 static bool SaveOwnedSettings(const Settings& settings);

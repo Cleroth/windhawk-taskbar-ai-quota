@@ -17,6 +17,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 DEFAULT_SOURCE = REPO / "local@taskbar-ai-quota.wh.cpp"
 DEFAULT_COMPILER = Path(r"C:\Program Files\Windhawk\Compiler\bin\clang++.exe")
+# The test executables, each with exactly one successful RESULT summary.
+SUMMARY_PHASES = ("model", "journal")
 
 
 def hashes():
@@ -81,28 +83,38 @@ def main():
         results["source_sha256_before"] = hashlib.sha256(source.read_bytes()).hexdigest()
         results["harness_sha256_before"] = hashes()
         cpp, exe = root / "history.cpp", root / "history.exe"
+        journal_cpp, journal_exe = root / "journal.cpp", root / "journal.exe"
         flags = [str(compiler), "--target=x86_64-w64-mingw32", "-std=c++23", "-DUNICODE", "-D_UNICODE", "-Wall", "-Wextra", "-O0", "-g", "-static"]
+        extract = [sys.executable, "-B", str(HERE / "extract.py"), "--source", str(source),
+                   "--expected-hash", results["source_sha256_before"]]
         commands = [
             ("tooling", [sys.executable, "-B", str(HERE / "test_tooling.py")]),
             # A stale generated file would test code that src/ no longer contains.
             *([("freshness", ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
                               str(REPO / "generate-mod.ps1"), "-Check"])]
               if source == DEFAULT_SOURCE.resolve() else []),
-            ("extract", [sys.executable, "-B", str(HERE / "extract.py"), "--source", str(source), "--output", str(cpp), "--expected-hash", results["source_sha256_before"]]),
+            ("extract", extract + ["--output", str(cpp)]),
+            ("extract-journal", extract + ["--output", str(journal_cpp), "--target", "journal"]),
             ("model-compile", flags + ["-I", str(HERE), str(cpp), "-o", str(exe)]),
             ("model", [str(exe)]),
+            # Its synthetic journal files go to a folder of the run directory (the working one).
+            ("journal-compile", flags + ["-I", str(HERE), str(journal_cpp), "-o", str(journal_exe),
+                                         "-ladvapi32", "-lbcrypt", "-lole32", "-lshell32", "-luuid"]),
+            ("journal", [str(journal_exe)]),
         ]
         for name, command in commands:
-            step, text = phase(root, name, command)
+            step, text = phase(root, name, command, 600 if name == "journal" else 120)
             results["phases"].append(step)
-            if name == "model":
+            if name in SUMMARY_PHASES:
                 try:
                     step["tests"] = observations(name, text)
                 except ValueError as error:
                     step.update(ok=False, evidence_error=str(error))
                     print(error, flush=True)
-            if name == "extract" and step["ok"]:
-                results["extraction"] = json.loads(cpp.with_suffix(".manifest.json").read_text(encoding="utf-8"))
+            if name.startswith("extract") and step["ok"]:
+                target = cpp if name == "extract" else journal_cpp
+                results.setdefault("extraction", {})[name] = json.loads(
+                    target.with_suffix(".manifest.json").read_text(encoding="utf-8"))
             if not step["ok"]:
                 break
         results["ok"] = len(results["phases"]) == len(commands) and all(step["ok"] for step in results["phases"])

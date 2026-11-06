@@ -41,6 +41,21 @@ history** or **Delete history...** removes that account's.
 - Choosing a day count or **Custom** from **Forever** asks first (No keeps Forever); **Custom**
   then shows 3650 days.
 
+## Memory (a journal spanning more than 35 days)
+
+- After a restart, note Explorer's private bytes (Task Manager's details, Memory (private working
+  set) or Process Explorer). Open the viewer on **All retained**: the oldest sample shows, and the
+  number rises while it is open; close it: it falls back toward the earlier value (Windows' heap
+  may keep part of it), and reopening on 7 days doesn't raise it again.
+- The details flyout's charts still cover each current window whole (monthly windows included),
+  also for an account whose last successful poll is older than 35 days.
+- With the viewer open on **All retained**, lengthen **Keep history** (or set the clock back a
+  day): the shown range keeps its start until **Refresh**, then reaches back.
+- Remove a recorded account with **Also delete its usage history** while the viewer shows a
+  range older than 35 days: its samples leave the open viewer without a refresh.
+- End Explorer (Task Manager) during maintenance of a large journal (the first hour after a
+  start): after the restart the journal loads whole, and no `*.staging` file stays beside it.
+
 ## Views (several accounts with retained readings)
 
 - A newly opened viewer defaults to All accounts, Weekly and the Default time span (7 days after

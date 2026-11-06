@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.18.0
+// @version         2.18.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -282,11 +282,11 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "providers/opencode.h"
 
-#include "history/journal.h"
-
 #include "history/continuity.h"
 
 #include "history/thinning.h"
+
+#include "history/journal.h"
 
 #include "history/burn-up.h"
 
@@ -599,11 +599,16 @@ void Wh_ModUninit() {
         std::lock_guard lock(g_historyMutex);
         g_historyOwnership.close();
         g_historySamples.clear();
+        g_historyPending.clear();
+        g_historySummary = {};
+        g_historyCommittedRecords = 0;
+        g_historyHeaderValid = false;
+        g_historyCacheFrom = 0;
+        g_historyPinMs = ULLONG_MAX;
         g_historyPath.clear();
         SetHistoryStatus({});
         g_historyLoaded = false;
         g_historyWritable = true;
-        g_historyDirty = false;
         g_historyCapped = false;
         g_historyMaintenanceMs = 0;
         g_historyWriteRetryMs = 0;

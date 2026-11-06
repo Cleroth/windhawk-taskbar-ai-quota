@@ -35,8 +35,8 @@ static uint32_t HistoryProviderCode(const std::wstring& provider) {
            provider == L"copilot" ? 4 : provider == L"opencode" ? 5 : 0;
 }
 // The journal's state when it was read: loaded (a damaged or unreadable journal stays loaded with
-// an error status), then its epoch (Clear), revision (load, cap eviction, retention pruning) and
-// append count. Equal stamps hold the same samples.
+// an error status), then its epoch (Clear), revision (load, any rewrite, records leaving memory)
+// and append count. Equal stamps hold the same samples.
 struct HistoryJournalStamp {
     bool loaded = false;
     uint64_t epoch = 0, revision = 0, appended = 0;
@@ -65,12 +65,18 @@ struct HistorySnapshot {
     HistoryJournalError status = HistoryJournalError::None;  // The journal's error status; None while healthy
     bool capped = false;  // The storage cap pruned the oldest samples
     HistoryJournalStamp stamp;
+    // Every sample from here on: the asked start, or later when the older ones couldn't be read
+    ULONGLONG from = 0;
 };
 // A memory-only look at the journal: its stamp, status and cap, and a replacement for a held
-// snapshot (every sample from the asked start on, possibly none) or nullopt: no replacement.
+// snapshot (every sample from `from` on, possibly none) or nullopt: no replacement. Incomplete:
+// memory doesn't reach back to the asked start, so `from` is the held snapshot's start (or later,
+// where memory begins); only an explicit load reads further back.
 struct HistoryPeek {
     HistoryJournalStamp stamp;
     HistoryJournalError status = HistoryJournalError::None;
     bool capped = false;
     std::optional<std::vector<HistorySample>> samples;
+    ULONGLONG from = 0;
+    bool incomplete = false;
 };

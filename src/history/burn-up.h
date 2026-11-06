@@ -59,15 +59,24 @@ struct BurnUpSampleCache {
     std::vector<BurnUpAccountTail> accounts;
 };
 
-// Copy step, run under g_historyMutex with the journal's epoch, revision and append count. A
-// requested tail gets only the samples appended since the last copy; it is refilled from its
-// scan start when it is new or must reach further back, on `rescan`, or when the journal changed
-// other than by appends (Clear, load, cap eviction, retention pruning), which also drops
-// unrequested tails: they refill once requested again. Each requested tail is then trimmed to its
-// scan start.
-static void UpdateBurnUpTails(BurnUpSampleCache& cache, const std::deque<HistorySample>& journal,
+// Reads the journal's samples older than its cache, from `from` on, from the file
+// (ReadHistoryRangeLocked): `use(sample)` for each in journal order; whether every one was read.
+using BurnUpArchiveReader =
+    std::function<bool(ULONGLONG from, const std::function<void(const HistorySample&)>& use)>;
+
+// Copy step, run under g_historyMutex with the journal's cache (`journal`: in journal order, every
+// sample from `cachedFrom` on), epoch, revision and append count. A requested tail gets only the
+// samples appended since the last copy; it is refilled from its scan start when it is new or must
+// reach further back, on `rescan`, or when the journal changed other than by appends (Clear, load,
+// rewrites, samples leaving the cache), which also drops unrequested tails: they refill once
+// requested again. A refill reaching back before the cache reads the older part through `older`
+// first, one pass for all; each refill is built aside and taken only whole, and one whose older
+// part couldn't be read drops its tail, refilled when next requested. Each requested tail is then
+// trimmed to its scan start.
+static void UpdateBurnUpTails(BurnUpSampleCache& cache, const std::deque<HistorySample>& journal, ULONGLONG cachedFrom,
                               uint64_t epoch, uint64_t revision, uint64_t appended,
-                              const std::vector<BurnUpRequest>& requests, bool rescan) {
+                              const std::vector<BurnUpRequest>& requests, bool rescan,
+                              const BurnUpArchiveReader& older) {
     uint64_t added = appended - cache.appended;
     if (rescan || cache.epoch != epoch || cache.revision != revision ||
         appended < cache.appended || added > journal.size()) {
@@ -81,34 +90,49 @@ static void UpdateBurnUpTails(BurnUpSampleCache& cache, const std::deque<History
         return std::find_if(cache.accounts.begin(), cache.accounts.end(),
                             [&](const BurnUpAccountTail& tail) { return tail.historyId == historyId; });
     };
-    std::vector<uint64_t> refill;
+    std::vector<BurnUpAccountTail> refills;
     ULONGLONG oldest = ULLONG_MAX;
     for (const auto& request : requests) {
         auto tail = tailOf(request.historyId);
         if (tail != cache.accounts.end() && request.from >= tail->from) continue;
-        if (tail == cache.accounts.end()) {
-            tail = cache.accounts.insert(cache.accounts.end(), BurnUpAccountTail{request.historyId});
-        }
-        tail->from = request.from;
-        tail->samples.clear();
-        refill.push_back(request.historyId);
+        BurnUpAccountTail& refill = refills.emplace_back();
+        refill.historyId = request.historyId;
+        refill.from = request.from;
         oldest = std::min(oldest, request.from);
     }
-    auto refilled = [&](uint64_t historyId) {
-        return std::find(refill.begin(), refill.end(), historyId) != refill.end();
+    auto refillOf = [&](uint64_t historyId) {
+        return std::find_if(refills.begin(), refills.end(),
+                            [&](const BurnUpAccountTail& refill) { return refill.historyId == historyId; });
     };
     for (size_t i = journal.size() - added; i < journal.size(); ++i) {
         auto tail = tailOf(journal[i].accountId);
-        if (tail != cache.accounts.end() && !refilled(tail->historyId)) tail->samples.push_back(journal[i]);
-    }
-    for (size_t i = journal.size(); i-- > 0 && journal[i].timeMs >= oldest && !g_unloading;) {
-        auto tail = tailOf(journal[i].accountId);
-        if (tail != cache.accounts.end() && refilled(tail->historyId) && journal[i].timeMs >= tail->from) {
-            tail->samples.push_front(journal[i]);
+        if (tail != cache.accounts.end() && refillOf(tail->historyId) == refills.end()) {
+            tail->samples.push_back(journal[i]);
         }
+    }
+    auto take = [&](const HistorySample& sample) {
+        auto refill = refillOf(sample.accountId);
+        if (refill != refills.end() && sample.timeMs >= refill->from) refill->samples.push_back(sample);
+    };
+    bool archived = oldest >= cachedFrom || older(oldest, take);
+    size_t first = journal.size();
+    while (first > 0 && journal[first - 1].timeMs >= oldest) --first;
+    for (size_t i = first; i < journal.size() && !g_unloading; ++i) take(journal[i]);
+    for (auto& refill : refills) {
+        auto tail = tailOf(refill.historyId);
+        if (g_unloading || (!archived && refill.from < cachedFrom)) {
+            if (tail != cache.accounts.end()) cache.accounts.erase(tail);
+            continue;
+        }
+        if (tail == cache.accounts.end()) {
+            tail = cache.accounts.insert(cache.accounts.end(), BurnUpAccountTail{refill.historyId});
+        }
+        tail->from = refill.from;
+        tail->samples = std::move(refill.samples);
     }
     for (const auto& request : requests) {
         auto tail = tailOf(request.historyId);
+        if (tail == cache.accounts.end()) continue;
         tail->from = request.from;
         while (!tail->samples.empty() && tail->samples.front().timeMs < tail->from) tail->samples.pop_front();
     }

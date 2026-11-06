@@ -437,11 +437,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Нажмите <b>{button}</b>, чтобы показать на панели задач аккаунт Anthropic, OpenAI, Google Antigravity, GitHub "
      L"Copilot или OpenCode Go."},
     {L"", L"Set Credits max to show the Credits bar.", L"Задайте «Максимум кредитов», чтобы показать полосу кредитов."},
-    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
-          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
-          L"with a cap of about 60 MB.",
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing on disk; Antigravity "
+          L"readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, with a cap of about "
+          L"60 MB.",
      L"Общий параметр для всех пользователей Windows. «Бессрочно» не ограничивает размер, поэтому история продолжает "
-     L"расти в памяти Проводника и на диске; замеры Antigravity старше 15 дней хранятся с интервалом около 10 минут. "
+     L"расти на диске; замеры Antigravity старше 15 дней хранятся с интервалом около 10 минут. "
      L"Ограничения в днях очищают историю каждый час, с пределом около 60\u00A0МБ."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"Короткое обозначение рядом с каждой полосой: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},

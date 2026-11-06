@@ -45,11 +45,13 @@ struct HistoryOps {
     // The latest open request's history ID (0: none), cleared.
     virtual uint64_t TakeRequest() = 0;
     // Prunes the journal to the published retention, then reads its samples from `from` on with
-    // their stamp; may initialize or retry the storage.
+    // their stamp (from later when older ones couldn't be read); may initialize or retry the
+    // storage and reads the journal's file. The window's range stays in the journal's memory.
     virtual HistorySnapshot ExplicitSnapshot(ULONGLONG from) = 0;
-    // Memory only, never initializing or retrying the storage: the journal's stamp, status and
-    // cap, and, when `samples` asks, a replacement for a snapshot held with `held` from
-    // `heldFrom` (the journal loaded, and another stamp or `from` further back).
+    // Memory only, never initializing, retrying or reading the storage: the journal's stamp,
+    // status and cap, and, when `samples` asks, a replacement for a snapshot held with `held` from
+    // `heldFrom` (the journal loaded, and another stamp or `from` further back). Incomplete when
+    // memory doesn't reach back to `from`: the replacement (if any) keeps the held range.
     virtual HistoryPeek PeekSnapshot(ULONGLONG from, bool samples, const HistoryJournalStamp& held,
                                      ULONGLONG heldFrom) = 0;
     virtual HistorySettingsSnapshot ReadSettings() = 0;
@@ -308,7 +310,8 @@ struct HistoryController {
         HistorySortSamples(loaded->samples);
         HistoryJournalError status = loaded->status;
         bool capped = loaded->capped;
-        if (!Adopt(std::move(read), std::move(loaded), readStart, start, end, readStart, request)) return;
+        ULONGLONG loadedFrom = std::max(readStart, loaded->from);
+        if (!Adopt(std::move(read), std::move(loaded), loadedFrom, start, end, readStart, request)) return;
         journalStatus = status;
         journalCapped = capped;
         liveDirty = samplesDirty = false;
@@ -781,7 +784,9 @@ struct HistoryController {
     // The sample part (after the first load): the times move to now, and the snapshot is
     // replaced when the journal holds other samples for them (another stamp, or a start further
     // back); its accounts, their rows and the selection are rebuilt in the same step, before
-    // anything can paint or pick. Returns whether it ran.
+    // anything can paint or pick. A start further back than the journal's memory reaches stays an
+    // explicit load's (Refresh): the shown range keeps the held one's start, replaced whole when
+    // the journal changed. Returns whether it ran.
     bool Samples() {
         if (!snapshot) return false;
         auto [start, end, readStart] = Times(settings.settings.historyRetentionDays);
@@ -797,8 +802,9 @@ struct HistoryController {
             replacement->status = peek.status;
             replacement->capped = peek.capped;
             replacement->stamp = peek.stamp;
+            replacement->from = std::max(readStart, peek.from);
             next = std::move(replacement);
-            nextFrom = readStart;
+            nextFrom = next->from;
         }
         if (!Adopt(settings, std::move(next), nextFrom, start, end, readStart, 0)) return false;
         Compose();
@@ -821,10 +827,15 @@ struct HistoryController {
     // Takes `read` and the `next` snapshot (read from `nextFrom`) for the times [start, end) read
     // from `readStart`: collects the accounts over them and resolves the selection (a listed
     // request wins; else it stays while listed, else All accounts; a change drops the notice).
-    // Start 0 (All kept forever) begins at the oldest sample held, showing at least a day.
-    // False when unload cut the collection short: nothing changes then.
+    // Times before `nextFrom` (a snapshot starting later than asked) aren't shown. Start 0 (All
+    // kept forever) begins at the oldest sample held, showing at least a day. False when unload
+    // cut the collection short: nothing changes then.
     bool Adopt(HistorySettingsSnapshot read, std::shared_ptr<const HistorySnapshot> next, ULONGLONG nextFrom,
                ULONGLONG start, ULONGLONG end, ULONGLONG readStart, uint64_t request) {
+        if (nextFrom > readStart) {
+            readStart = std::min(nextFrom, end);
+            start = std::max(start, readStart);
+        }
         if (!start && end) {
             start = end > kHistoryDayMs ? end - kHistoryDayMs : 0;
             if (next && !next->samples.empty()) start = std::min(start, next->samples.front().timeMs);

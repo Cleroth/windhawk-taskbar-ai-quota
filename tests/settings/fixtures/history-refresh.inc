@@ -221,6 +221,71 @@ static void RunHistoryRefreshTests() {
         CHECK(c.generation == 5 && c.heldFrom == kWeekFrom - kHistoryDayMs && c.to == kWeekTo - kHistoryDayMs);
     });
 
+    Run("history refresh: with the journal's memory holding 30 days, All loads 90 explicitly; a longer retention "
+        "reaching back before memory is incomplete: nothing loads, the shown range keeps the held start, which is "
+        "replaced whole only when the journal changes (an account's history deleted elsewhere too); Refresh loads "
+        "the wider range", [] {
+        TestHistoryOps ops = TestControllerOps();
+        ops.cached = kWeekTo - 30 * kHistoryDayMs;
+        HistoryController c(ops);
+        c.Open();
+        c.Load();
+        c.Command(HistoryUiCommand::Range, int(HistoryUiRange::All));
+        const ULONGLONG held = kWeekTo - 90 * kHistoryDayMs;
+        CHECK(ops.log.back() == L"snapshot 90d" && ops.cached == held && c.heldFrom == held && c.generation == 2);
+        auto refresh = [&] {
+            c.Notify();
+            TestDeliver(c, ops);
+            TestSettled(c, ops);
+        };
+        ops.log.clear();
+        ops.settings.settings.historyRetentionDays = 120;
+        refresh();
+        CHECK(ops.log.back() == L"peek 120d" && c.generation == 2 && c.heldFrom == held && c.from == held &&
+              c.readFrom == held && c.view.retentionDays == 120);
+        // A recorded poll: the held range replaced whole, from its start.
+        ops.Append(TestReading(0x0A, 2, kWeekTo - kMinute, {{1, 64}}));
+        refresh();
+        CHECK(c.generation == 3 && c.heldFrom == held && c.from == held && c.snapshot->samples.size() == 6);
+        // The removed account's history deleted from Settings: an ordinary refresh drops its samples.
+        CHECK(std::any_of(c.accounts.begin(), c.accounts.end(), [](const HistoryUiAccount& a) { return a.id == 0xDEAD; }));
+        std::erase_if(ops.journal, [](const HistorySample& sample) { return sample.accountId == 0xDEAD; });
+        ops.stamp.revision++;
+        refresh();
+        CHECK(c.generation == 4 && c.heldFrom == held && c.snapshot->samples.size() == 5);
+        CHECK(std::none_of(c.snapshot->samples.begin(), c.snapshot->samples.end(),
+                           [](const HistorySample& sample) { return sample.accountId == 0xDEAD; }));
+        CHECK(std::none_of(c.accounts.begin(), c.accounts.end(), [](const HistoryUiAccount& a) { return a.id == 0xDEAD; }));
+        for (const std::wstring& entry : ops.log) {
+            CHECK(entry.rfind(L"snapshot", 0) != 0 && entry.rfind(L"delete", 0) != 0 && entry != L"clear");
+        }
+        CHECK(TestCount(ops.log, L"peek 120d") == 3);
+        c.Command(HistoryUiCommand::Refresh);
+        CHECK(ops.log.back() == L"snapshot 120d" && c.heldFrom == kWeekTo - 120 * kHistoryDayMs && c.from == c.heldFrom &&
+              ops.cached == c.heldFrom && c.generation == 5);
+        // Within memory again, a refresh replaces only on a change, then from its own start.
+        refresh();
+        CHECK(ops.log.back() == L"peek 120d" && c.generation == 5);
+    });
+
+    Run("history refresh: a clock moved back before the journal's memory keeps the held week until a load", [] {
+        TestHistoryOps ops = TestControllerOps();
+        ops.cached = kWeekFrom;
+        HistoryController c(ops);
+        c.Open();
+        c.Load();
+        CHECK(c.heldFrom == kWeekFrom && ops.cached == kWeekFrom);
+        ops.now -= kHistoryDayMs;
+        c.Notify();
+        TestDeliver(c, ops);
+        TestSettled(c, ops);
+        CHECK(ops.log.back() == L"peek 7d" && c.generation == 1 && c.heldFrom == kWeekFrom && c.from == kWeekFrom &&
+              c.to == kWeekTo - kHistoryDayMs);
+        c.Command(HistoryUiCommand::Refresh);
+        CHECK(ops.log.back() == L"snapshot 7d" && c.heldFrom == kWeekFrom - kHistoryDayMs && c.from == c.heldFrom &&
+              c.generation == 2);
+    });
+
     Run("history refresh: a modal holds both parts, nested modals until the last ends, which posts them once", [] {
         TestHistoryOps ops = TestControllerOps();
         HistoryController c(ops);

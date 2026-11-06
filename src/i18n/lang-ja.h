@@ -358,10 +358,10 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"account on the taskbar.",
      L"<b>{button}</b> を選択すると、Anthropic、OpenAI、Google Antigravity、GitHub Copilot、OpenCode Go のアカウントをタスク バーに表示できます。"},
     {L"", L"Set Credits max to show the Credits bar.", L"クレジット バーを表示するには、［クレジット上限］を設定してください。"},
-    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
-          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
-          L"with a cap of about 60 MB.",
-     L"Windows のユーザー間で共有されます。［無期限］ではサイズの上限がないため、履歴はエクスプローラーのメモリとディスク上で増え続けます。15 日より古い Antigravity の測定値は約 10 分間隔で保持されます。日数を指定すると 1 時間ごとに古い履歴が整理され、容量の上限は約 60 MB になります。"},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing on disk; Antigravity "
+          L"readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, with a cap of about "
+          L"60 MB.",
+     L"Windows のユーザー間で共有されます。［無期限］ではサイズの上限がないため、履歴はディスク上で増え続けます。15 日より古い Antigravity の測定値は約 10 分間隔で保持されます。日数を指定すると 1 時間ごとに古い履歴が整理され、容量の上限は約 60 MB になります。"},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"各バーの横の短いキー: {key5h}、{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyCr}、{keyMo}。"},
     {L"", L"Short text", L"短いテキスト"},

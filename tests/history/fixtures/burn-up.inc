@@ -378,21 +378,25 @@
             journal.push_back(reading(time, used)); journal.back().accountId = id;
         };
         const ULONGLONG from = start + hour;
+        // A journal held whole in memory: no tail reads the file.
+        const BurnUpArchiveReader memoryOnly = [](ULONGLONG, const std::function<void(const HistorySample&)>&) -> bool {
+            throw std::runtime_error("unexpected read of the journal's file");
+        };
         Run("burn-up/tails copy only new appends", [&] {
             auto journal = journalOf(10);
             BurnUpSampleCache cache;
-            UpdateBurnUpTails(cache, journal, 1, 1, 20, {{7, 1, from}}, false);
+            UpdateBurnUpTails(cache, journal, 0, 1, 1, 20, {{7, 1, from}}, false, memoryOnly);
             CHECK(tailContents(cache, 7) == expected(journal, 7, from));
             CHECK(!tailOf(cache, 9));
             journal[0].meters[1].value = -5;
             append(journal, 7, start + hour + 10 * poll, 10);
             append(journal, 9, start + hour + 10 * poll + 1, 110);
-            UpdateBurnUpTails(cache, journal, 1, 1, 22, {{7, 1, from}}, false);
+            UpdateBurnUpTails(cache, journal, 0, 1, 1, 22, {{7, 1, from}}, false, memoryOnly);
             auto tail = tailContents(cache, 7);
             CHECK(tail.size() == 11);
             CHECK(tail.front().second == 0);  // Kept as copied: not rescanned.
             CHECK(tail.back() == (std::pair<ULONGLONG, double>{start + hour + 10 * poll, 10}));
-            UpdateBurnUpTails(cache, journal, 1, 1, 22, {{7, 1, from}, {9, 3, from}}, false);
+            UpdateBurnUpTails(cache, journal, 0, 1, 1, 22, {{7, 1, from}, {9, 3, from}}, false, memoryOnly);
             CHECK(tailContents(cache, 9) == expected(journal, 9, from));  // New tail scans.
             CHECK(tailContents(cache, 7) == tail);
         });
@@ -400,11 +404,11 @@
             for (int change = 0; change < 3; ++change) {
                 auto journal = journalOf(10);
                 BurnUpSampleCache cache;
-                UpdateBurnUpTails(cache, journal, 1, 1, 20, {{7, 1, from}, {9, 3, from}}, false);
+                UpdateBurnUpTails(cache, journal, 0, 1, 1, 20, {{7, 1, from}, {9, 3, from}}, false, memoryOnly);
                 journal[0].meters[1].value = -5;
                 // Cap eviction or load (revision), Clear (epoch), or an invalidation's full rebuild.
-                UpdateBurnUpTails(cache, journal, change == 1 ? 2 : 1, change == 0 ? 2 : 1, 20,
-                                  {{7, 1, from}}, change == 2);
+                UpdateBurnUpTails(cache, journal, 0, change == 1 ? 2 : 1, change == 0 ? 2 : 1, 20,
+                                  {{7, 1, from}}, change == 2, memoryOnly);
                 CHECK(tailContents(cache, 7) == expected(journal, 7, from));
                 CHECK(tailContents(cache, 7).front().second == -5);
                 CHECK(!tailOf(cache, 9));  // Unrequested tails don't survive a journal change.
@@ -413,41 +417,84 @@
         Run("burn-up/tails follow their scan start", [&] {
             auto journal = journalOf(10);
             BurnUpSampleCache cache;
-            UpdateBurnUpTails(cache, journal, 1, 1, 20, {{7, 1, from + 4 * poll}}, false);
+            UpdateBurnUpTails(cache, journal, 0, 1, 1, 20, {{7, 1, from + 4 * poll}}, false, memoryOnly);
             CHECK(tailContents(cache, 7) == expected(journal, 7, from + 4 * poll));
-            UpdateBurnUpTails(cache, journal, 1, 1, 20, {{7, 1, from + 6 * poll}}, false);  // Window moved on.
+            UpdateBurnUpTails(cache, journal, 0, 1, 1, 20, {{7, 1, from + 6 * poll}}, false, memoryOnly);  // Window moved on.
             CHECK(tailContents(cache, 7) == expected(journal, 7, from + 6 * poll));
-            UpdateBurnUpTails(cache, journal, 1, 1, 20, {{7, 1, from}}, false);  // Reaches further back.
+            UpdateBurnUpTails(cache, journal, 0, 1, 1, 20, {{7, 1, from}}, false, memoryOnly);  // Reaches further back.
             CHECK(tailContents(cache, 7) == expected(journal, 7, from));
-            UpdateBurnUpTails(cache, journal, 1, 1, 20, {{7, 1, ULLONG_MAX}}, false);  // No window.
+            UpdateBurnUpTails(cache, journal, 0, 1, 1, 20, {{7, 1, ULLONG_MAX}}, false, memoryOnly);  // No window.
             CHECK(tailContents(cache, 7).empty());
-            UpdateBurnUpTails(cache, journal, 1, 1, 20, {{7, 1, from}}, false);
+            UpdateBurnUpTails(cache, journal, 0, 1, 1, 20, {{7, 1, from}}, false, memoryOnly);
             CHECK(tailContents(cache, 7) == expected(journal, 7, from));
         });
         Run("burn-up/retention pruning refills requested tails at once and others when requested", [&] {
             auto journal = journalOf(10);
             BurnUpSampleCache cache;
-            UpdateBurnUpTails(cache, journal, 1, 1, 20, {{7, 1, from}, {9, 3, from}}, false);
+            UpdateBurnUpTails(cache, journal, 0, 1, 1, 20, {{7, 1, from}, {9, 3, from}}, false, memoryOnly);
             // Maintenance prunes the four oldest rounds of both accounts and bumps the revision.
             journal.erase(journal.begin(), journal.begin() + 8);
             const ULONGLONG kept = start + hour + 4 * poll;
-            UpdateBurnUpTails(cache, journal, 1, 2, 20, {{7, 1, from}}, false);
+            UpdateBurnUpTails(cache, journal, 0, 1, 2, 20, {{7, 1, from}}, false, memoryOnly);
             CHECK(tailContents(cache, 7) == expected(journal, 7, from));
             CHECK(tailContents(cache, 7).size() == 6 && tailContents(cache, 7).front().first == kept);
             CHECK(!tailOf(cache, 9));
             append(journal, 7, start + hour + 10 * poll, 10);
             append(journal, 9, start + hour + 10 * poll + 1, 110);
-            UpdateBurnUpTails(cache, journal, 1, 2, 22, {{7, 1, from}, {9, 3, from}}, false);
+            UpdateBurnUpTails(cache, journal, 0, 1, 2, 22, {{7, 1, from}, {9, 3, from}}, false, memoryOnly);
             CHECK(tailContents(cache, 9) == expected(journal, 9, from));
             CHECK(tailContents(cache, 9).size() == 7 && tailContents(cache, 9).front().first == kept + 1);
             CHECK(tailContents(cache, 7) == expected(journal, 7, from) && tailContents(cache, 7).size() == 7);
         });
+        Run("burn-up/tails reaching back before the journal's memory read the older part first, once for all, then "
+            "memory; a read failing part-way drops only the tails that needed it, never extended by appends, and the "
+            "next request refills them whole", [&] {
+            // The journal's memory holds the samples from the fifth round on; the file the four before.
+            auto whole = journalOf(10);
+            const ULONGLONG cachedFrom = start + hour + 4 * poll;
+            std::deque<HistorySample> journal;
+            std::vector<HistorySample> archive;
+            for (const auto& sample : whole) {
+                if (sample.timeMs >= cachedFrom) journal.push_back(sample);
+                else archive.push_back(sample);
+            }
+            int reads = 0;
+            bool failing = false;
+            const BurnUpArchiveReader older = [&](ULONGLONG oldest, const std::function<void(const HistorySample&)>& use) {
+                ++reads;
+                size_t delivered = 0;
+                for (const auto& sample : archive) {
+                    if (failing && ++delivered > 3) return false;
+                    if (sample.timeMs >= oldest) use(sample);
+                }
+                return true;
+            };
+            BurnUpSampleCache cache;
+            UpdateBurnUpTails(cache, journal, cachedFrom, 1, 1, 20, {{7, 1, from}, {9, 3, cachedFrom}}, false, older);
+            CHECK(reads == 1 && tailContents(cache, 7) == expected(whole, 7, from) &&
+                  tailContents(cache, 9) == expected(whole, 9, cachedFrom));
+            append(journal, 7, start + hour + 10 * poll, 10);
+            append(whole, 7, start + hour + 10 * poll, 10);
+            UpdateBurnUpTails(cache, journal, cachedFrom, 1, 1, 21, {{7, 1, from}, {9, 3, cachedFrom}}, false, older);
+            CHECK(reads == 1 && tailContents(cache, 7) == expected(whole, 7, from));
+            failing = true;
+            UpdateBurnUpTails(cache, journal, cachedFrom, 1, 1, 21, {{7, 1, from}, {9, 3, cachedFrom}}, true, older);
+            CHECK(reads == 2 && !tailOf(cache, 7) && tailContents(cache, 9) == expected(whole, 9, cachedFrom));
+            append(journal, 7, start + hour + 11 * poll, 11);
+            append(whole, 7, start + hour + 11 * poll, 11);
+            UpdateBurnUpTails(cache, journal, cachedFrom, 1, 1, 22, {{9, 3, cachedFrom}}, false, older);
+            CHECK(reads == 2 && !tailOf(cache, 7));
+            failing = false;
+            UpdateBurnUpTails(cache, journal, cachedFrom, 1, 1, 22, {{7, 1, from}, {9, 3, cachedFrom}}, false, older);
+            CHECK(reads == 3 && tailContents(cache, 7) == expected(whole, 7, from) &&
+                  tailContents(cache, 9) == expected(whole, 9, cachedFrom));
+        });
         Run("burn-up/unrequested tails still receive their appends", [&] {
             auto journal = journalOf(5);
             BurnUpSampleCache cache;
-            UpdateBurnUpTails(cache, journal, 1, 1, 10, {{7, 1, from}, {9, 3, from}}, false);
+            UpdateBurnUpTails(cache, journal, 0, 1, 1, 10, {{7, 1, from}, {9, 3, from}}, false, memoryOnly);
             append(journal, 9, start + hour + 5 * poll + 1, 105);
-            UpdateBurnUpTails(cache, journal, 1, 1, 11, {{7, 1, from}}, false);
+            UpdateBurnUpTails(cache, journal, 0, 1, 1, 11, {{7, 1, from}}, false, memoryOnly);
             CHECK(tailContents(cache, 9) == expected(journal, 9, from));
             CHECK(tailContents(cache, 7) == expected(journal, 7, from));
         });

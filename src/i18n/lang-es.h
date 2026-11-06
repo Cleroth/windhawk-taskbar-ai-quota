@@ -445,11 +445,11 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"OpenCode Go en la barra de tareas."},
     {L"", L"Set Credits max to show the Credits bar.",
      L"Define el máximo de créditos para mostrar la barra de créditos."},
-    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
-          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
-          L"with a cap of about 60 MB.",
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing on disk; Antigravity "
+          L"readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, with a cap of about "
+          L"60 MB.",
      L"Compartido entre los usuarios de Windows. Para siempre no tiene límite de tamaño, así que el historial sigue "
-     L"creciendo en la memoria del Explorador y en el disco; las lecturas de Antigravity de más de 15 días se "
+     L"creciendo en el disco; las lecturas de Antigravity de más de 15 días se "
      L"conservan con unos 10 minutos de separación. Los límites en días depuran cada hora, con un tope de unos "
      L"60\u00A0MB."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",

@@ -17,7 +17,7 @@ class ToolingTests(unittest.TestCase):
         """Exercise real orchestration with no filesystem writes or child execution."""
         exit_codes = exit_codes or {}
 
-        def fake_phase(root, name, command):
+        def fake_phase(root, name, command, timeout=120):
             code = exit_codes.get(name, 0)
             return {"name": name, "command": command, "log": f"{name}.log",
                     "exit_code": code, "ok": code == 0}, "no summary\n"
@@ -37,21 +37,24 @@ class ToolingTests(unittest.TestCase):
             code = run.main()
         return code, json.loads(saved.call_args.args[0]), phases.call_args_list, parser.call_args_list
 
-    def test_default_phases_in_order_with_one_evidence_parse(self):
+    def test_default_phases_in_order_with_one_evidence_parse_per_test(self):
         code, results, calls, parsed = self.invoke_runner()
-        expected = ["tooling", "freshness", "extract", "model-compile", "model"]
+        expected = ["tooling", "freshness", "extract", "extract-journal", "model-compile", "model", "journal-compile",
+                    "journal"]
         self.assertEqual(code, 0)
         self.assertTrue(results["ok"])
         self.assertEqual([call.args[1] for call in calls], expected)
         self.assertEqual([step["name"] for step in results["phases"]], expected)
-        self.assertEqual([call.args[0] for call in parsed], ["model"])
+        self.assertEqual([call.args[0] for call in parsed], ["model", "journal"])
 
     def test_failed_compile_never_runs_the_tests(self):
-        code, results, calls, parsed = self.invoke_runner(exit_codes={"model-compile": 1})
-        self.assertEqual(code, 1)
-        self.assertFalse(results["ok"])
-        self.assertEqual(calls[-1].args[1], "model-compile")
-        self.assertEqual(parsed, [])
+        for compile_phase, tests in (("model-compile", []), ("journal-compile", ["model"])):
+            with self.subTest(compile_phase=compile_phase):
+                code, results, calls, parsed = self.invoke_runner(exit_codes={compile_phase: 1})
+                self.assertEqual(code, 1)
+                self.assertFalse(results["ok"])
+                self.assertEqual(calls[-1].args[1], compile_phase)
+                self.assertEqual([call.args[0] for call in parsed], tests)
 
     def test_stale_generated_source_stops_before_extraction(self):
         code, results, calls, _ = self.invoke_runner(exit_codes={"freshness": 1})
@@ -64,7 +67,8 @@ class ToolingTests(unittest.TestCase):
         code, results, calls, _ = self.invoke_runner(["--source", "other.wh.cpp"])
         self.assertEqual(code, 0)
         self.assertTrue(results["ok"])
-        self.assertEqual([call.args[1] for call in calls], ["tooling", "extract", "model-compile", "model"])
+        self.assertEqual([call.args[1] for call in calls],
+                         ["tooling", "extract", "extract-journal", "model-compile", "model", "journal-compile", "journal"])
 
     def test_definition_preserves_bytes_and_ignores_quoted_braces(self):
         code = 'static int Example() {\r\n // }\r\n const char* s = "}"; /* { */ return 1;\r\n}'

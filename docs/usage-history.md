@@ -146,15 +146,26 @@ or not:
   first retry it and, if it stays, fail as in use rather than leave a copy that could come back.
 
 History is kept **forever** by default: nothing is pruned by age and there is no size limit, so
-the journal keeps growing on disk and in Explorer's memory (for example, six accounts polled
-every 10 minutes around the clock add about 75 MB a year; **All retained** in the viewer holds
-another copy while open). Settings saved before this option keep their day count. With a number
+the journal keeps growing on disk (for example, six accounts polled every 10 minutes around the
+clock add about 75 MB a year). Settings saved before this option keep their day count. With a number
 of days, hourly maintenance prunes older samples while recording or when refreshing the viewer
 (including with recording off); loading a journal also permits maintenance. Retention edits do
 not bypass that hourly cadence. A **250,000-sample cap (about 60 MB)** then also evicts oldest records in
 batches; many accounts or frequent polls can shorten effective retention. Leaving **Forever**
 asks first, since both limits apply again. Only the taskbar-owning Explorer records, with
 exclusive journal ownership to prevent competing writers. Storage failures appear in the viewer.
+
+Explorer normally keeps only about the last 35 days of readings in memory, what the details
+flyout's usage charts need; the journal file holds the rest. Memory also holds the range the open
+viewer shows (**All retained**: the whole journal, besides the viewer's own copy) until it closes,
+readings not saved yet while storage fails, and, while they run, what refilling an older chart
+window from the file and maintenance need. The viewer reads older readings from the file only
+when it loads (opening it, **Refresh / F5**, or a range or comparison change); its live updates
+don't, so a span reaching further back (a longer retention, a clock set back) shows after
+**Refresh**. Maintenance, thinning, **Clear all history...** and history deletion write the
+journal anew from the file into a new file that replaces it: if any step fails, the previous
+journal stays as it was. If the journal file is changed, shortened or removed outside the mod,
+recording stops saving to it, and the viewer says so, until **Clear all history...**.
 
 Antigravity is read every minute whatever the poll interval, so whatever the retention its
 readings older than 15 days are thinned to about one every 10 minutes (at the first maintenance

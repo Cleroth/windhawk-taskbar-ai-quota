@@ -14,6 +14,8 @@ struct TestHistoryOps final : HistoryOps {
     uint64_t request = 0;
     std::vector<HistorySample> journal;
     HistoryJournalStamp stamp{true, 1, 1, 0};
+    // Where the journal's memory starts (0: it holds every sample); an explicit load widens it
+    ULONGLONG cached = 0;
     HistoryJournalError status = HistoryJournalError::None;
     bool capped = false;
     // Kept for 90 days, so All retained spans a fixed period (kept forever: its own cases)
@@ -83,6 +85,7 @@ struct TestHistoryOps final : HistoryOps {
     }
     HistorySnapshot ExplicitSnapshot(ULONGLONG from) override {
         log.push_back(L"snapshot " + Days(from));
+        cached = std::min(cached, from);
         HistorySnapshot snapshot;
         for (const HistorySample& sample : journal) {
             if (sample.timeMs >= from) snapshot.samples.push_back(sample);
@@ -90,18 +93,24 @@ struct TestHistoryOps final : HistoryOps {
         snapshot.status = status;
         snapshot.capped = capped;
         snapshot.stamp = stamp;
+        snapshot.from = from;
         return snapshot;
     }
     // The journal's peek contract (tests/history checks the production one): a replacement only
-    // with samples asked for, the journal loaded, and another stamp or a start further back.
+    // with samples asked for, the journal loaded, and another stamp or a start further back; from
+    // before memory's start, incomplete: the held range, replaced only when the stamp changed.
     HistoryPeek PeekSnapshot(ULONGLONG from, bool samples, const HistoryJournalStamp& held,
                              ULONGLONG heldFrom) override {
         log.push_back(samples ? L"peek " + Days(from) : L"peek");
         HistoryPeek peek{stamp, status, capped, std::nullopt};
-        if (samples && stamp.loaded && (stamp != held || from < heldFrom)) {
-            peek.samples.emplace();
-            for (const HistorySample& sample : journal) {
-                if (sample.timeMs >= from) peek.samples->push_back(sample);
+        if (samples && stamp.loaded) {
+            peek.incomplete = from < cached;
+            peek.from = peek.incomplete ? std::max(heldFrom, cached) : from;
+            if (peek.incomplete ? stamp != held || peek.from != heldFrom : stamp != held || from < heldFrom) {
+                peek.samples.emplace();
+                for (const HistorySample& sample : journal) {
+                    if (sample.timeMs >= peek.from) peek.samples->push_back(sample);
+                }
             }
         }
         if (peeked) peeked();
