@@ -308,7 +308,8 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   (hand-written) loads it, opens the window on the DLL's worker thread, closes it from another
   thread, joins and unloads, repeatedly, and checks classes, windows and GDI/USER handle counts;
   then client creation failure, a conflicting class registration, render-target loss through the
-  production discard path, the window icons (both sizes at the window's DPI, redrawn at the new
+  production discard path, the minimum size (at the window's DPI, within its monitor's work area),
+  the window icons (both sizes at the window's DPI, redrawn at the new
   sizes on synthetic DPI changes and on theme notifications sent to the window only, the replaced
   ones destroyed and no handle growth, destroyed after close), and an unload close during a
   message box. Handle counts are process-wide: a window case reads them on the window thread once
@@ -370,8 +371,10 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   each button's ideal size (`BCM_GETIDEALSIZE`) for every label it shows within its rectangle, each
   static's every text as it paints it (`WM_PRINTCLIENT`) inside its own, the boxes' text rectangle
   a line tall, nothing overlapping or outside the client; English's fixed geometry at 96, 120, 144
-  and 192 DPI; a DPI change laying the window out as a new one in a new font; the production
-  frame's client at the window's own DPI. `render-signin-<tag>-<96|144>` (en, qps-ploc, de, ru, ja,
+  and 192 DPI; a DPI change to the probe monitor's DPI, its messages through the production
+  handler (the scaled size measured without changing the window, Windows' suggestion taken with a
+  single resize), laying the window out as a new one in a new font; the production frame's client
+  at the window's own DPI. `render-signin-<tag>-<96|144>` (en, qps-ploc, de, ru, ja,
   zh-Hans): every flow, then another sign-in's code (Copy failed) and an ended device sign-in (its
   tallest status, Code copied, Close); WM_PRINT leaves out a box's themed border, so the probe
   draws a plain one, and themes draw at the probe monitor's DPI. `OBSERVE` lines report each

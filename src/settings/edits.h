@@ -954,9 +954,10 @@ struct SettingsEdits {
     }
 
     // A text box's text (every change). Number text parses in the regional number format the box
-    // showed it in: the frame's (`locale`) as typing starts, kept while the text is its draft's,
-    // so a regional change meanwhile doesn't reject what the box shows. Text that doesn't parse
-    // keeps the last valid value. A label is checked against the other accounts.
+    // showed it in: `locale`'s (the format the box's text was set in) as typing starts, kept while
+    // the text is its draft's, so a regional change meanwhile doesn't reject what the box shows.
+    // Text that doesn't parse keeps the last valid value. A label is checked against the other
+    // accounts.
     void SetText(uint64_t key, SettingsField field, std::wstring text, const I18nLocale& locale = {}) {
         std::optional<SettingsNumberRange> range = SettingsFieldRange(field);
         bool free = field == SettingsField::AccountLabel || field == SettingsField::AccountTileText;

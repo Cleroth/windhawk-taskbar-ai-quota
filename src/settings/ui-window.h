@@ -56,6 +56,10 @@ struct SettingsUiClient final : UiHostClient {
     SettingsView view;
     std::array<COLORREF, 16> customColors{};
     std::optional<bool> versionCopied;
+    // The regional number format each number box's text was last set in, by its target (account
+    // key, field): a draft typed into the box parses in it. The frame's or its text draft's, as
+    // built, unless an IME composition kept the box's earlier text (the host sets none meanwhile).
+    std::map<std::pair<uint64_t, uint32_t>, I18nNumberFormat> boxNumbers;
 
     // Accounts: the expanded cards, and the card being dragged: its order meanwhile, where it
     // started, the pointer's offset from its top, where it is drawn and where the first card
@@ -167,7 +171,7 @@ struct SettingsUiClient final : UiHostClient {
     }
 
     // Each frame takes the current language and regional number format: its text, numbers, the
-    // toolkit's text formats and the title all, and number boxes parse what they show in it. The
+    // toolkit's text formats and the title all, and number boxes it sets parse in it. The
     // preview's scroll stays within what the built strip can scroll, and a new position starts it
     // from its home. Account cards follow the projection's order, a dragged card its drag order.
     // The window takes the projected material at once.
@@ -230,6 +234,14 @@ struct SettingsUiClient final : UiHostClient {
                 previewScroll = view.previewScroll =
                     std::clamp(previewScroll, float(item.minimum), float(item.maximum));
             }
+        }
+        for (const UiItem& item : frame.content) {
+            if (item.kind != UiItemKind::NumberBox) continue;
+            const UiTextBox* box = UiFindTextBox(host.boxes, item.id);
+            if (box && box->composing) continue;
+            // A text draft's text keeps the format it was typed or stepped in.
+            const SettingsDraft* draft = edits.Find(item.action.key, SettingsField(item.action.target));
+            boxNumbers[{item.action.key, item.action.target}] = draft && draft->text ? draft->numbers : locale.Numbers();
         }
     }
 
@@ -521,14 +533,18 @@ struct SettingsUiClient final : UiHostClient {
                         break;
                 }
                 break;
-            case UiActionKind::TextChange:
+            case UiActionKind::TextChange: {
                 // Typing supersedes a pending step: its timer no longer commits.
                 KillStepTimer(host, field);
                 if (field == SettingsField::PollMinutes) pollCustom = true;
                 if (field == SettingsField::RetentionDays) retentionCustom = true;
-                edits.SetText(action.key, field, std::move(action.text), view.locale);
+                auto shown = boxNumbers.find({action.key, action.target});
+                edits.SetText(action.key, field, std::move(action.text),
+                              shown == boxNumbers.end() ? view.locale :
+                                                          I18nLocale(view.locale.Language(), shown->second));
                 UiHostRequestRebuild(host, false);
                 break;
+            }
             case UiActionKind::TextCommit:
             case UiActionKind::TextBlur: {
                 // Committed from the queue, never inside the focus-loss handler; so is the sign-in

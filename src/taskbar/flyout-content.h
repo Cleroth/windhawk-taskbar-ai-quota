@@ -1091,12 +1091,12 @@ static void UpdateAccountFlyout(
         if (popup.card.Width() != cardWidth) popup.card.Width(cardWidth);
 
         // The header's texts whole in its tooltip while the label passes its cap or the row the
-        // card's width.
+        // card's width, which the screen's room caps (ShowAccountFlyout).
         if (popup.header) {
             TileTextMeasure measure = XamlTileTextMeasure(locale);
             popup.header.Measure({INFINITY, INFINITY});
             bool cut = measure(account.label, TileFont::Display, 20) > kFlyoutTitleMaxWidth ||
-                       popup.header.DesiredSize().Width > cardWidth - 2;
+                       popup.header.DesiredSize().Width > std::min(cardWidth, popup.card.MaxWidth()) - 2;
             std::wstring tip = !cut        ? L"" :
                                plan.empty() ? account.label + L" \u00B7 " + ProviderDisplayName(account.provider) :
                                               account.label + L" \u00B7 " + ProviderDisplayName(account.provider) +

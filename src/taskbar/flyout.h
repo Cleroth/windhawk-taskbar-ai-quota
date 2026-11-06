@@ -224,7 +224,8 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         // The card fits the screen beyond the taskbar, less the gap and a margin; its quota rows
         // scroll past that. A taskbar down a side has the screen's height beside it. Its width,
         // grown past kFlyoutCardWidth for a long value (UpdateAccountFlyout), stays within the
-        // screen's less a margin each side.
+        // screen's less a margin each side, or beside a side taskbar, the room there less the gap
+        // and a margin.
         RECT taskbar{};
         MONITORINFO monitor{sizeof(monitor)};
         double scale = xamlRoot.RasterizationScale();
@@ -237,6 +238,11 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
             double roomDips = roomPx / scale - kFlyoutTaskbarGap - kFlyoutScreenMargin;
             card.MaxHeight(std::max(roomDips, 200.0));
             double widthDips = (monitor.rcMonitor.right - monitor.rcMonitor.left) / scale - 2 * kFlyoutScreenMargin;
+            if (state.edge == TaskbarEdge::Left || state.edge == TaskbarEdge::Right) {
+                LONG besidePx = std::max(taskbar.left - monitor.rcMonitor.left,
+                                         monitor.rcMonitor.right - taskbar.right);
+                widthDips = besidePx / scale - kFlyoutTaskbarGap - kFlyoutScreenMargin;
+            }
             card.MaxWidth(std::max(widthDips, kFlyoutCardWidth));
         }
         popup.card = card;

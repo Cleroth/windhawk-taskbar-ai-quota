@@ -1,6 +1,6 @@
 // The sign-in window's controls (the window: auth/login.h): their ids, creation, and their layout
-// (auth/login-layout.h) measured in the system message font at the window's DPI. Window and GDI
-// calls only, no allocation.
+// (auth/login-layout.h) measured in the system message font at the window's DPI, also on its DPI
+// messages. Window and GDI calls only, no allocation.
 
 enum {
     kLoginInstructions = 100,
@@ -42,10 +42,11 @@ static void CreateLoginControls(HWND window, const LoginWindowText& text, PCWSTR
     create(0, L"BUTTON", labels.cancel.c_str(), WS_TABSTOP | BS_PUSHBUTTON, IDCANCEL);
 }
 
-// Lays the controls out at `dpi` in the message font for it, which replaces `font` on every
-// control (the previous one is kept when it can't be created), and sizes the window to fit,
-// keeping its position.
-static void LayoutLoginControls(HWND window, const LoginWindowText& text, UINT dpi, HFONT& font) {
+// Returns the window size that fits the controls laid out at `dpi` in the message font for it.
+// With `apply`, also lays them out in that font, which replaces `font` on every control (the
+// previous one is kept when it can't be created); without, only measures (in `font` when the new
+// one can't be created), changing nothing. Never sizes the window.
+static SIZE LayoutLoginControls(HWND window, const LoginWindowText& text, UINT dpi, HFONT& font, bool apply) {
     NONCLIENTMETRICSW metrics{sizeof(metrics)};
     LOGFONTW fontDescription{};
     using SystemParametersInfoForDpi_t = BOOL(WINAPI*)(UINT, UINT, PVOID, UINT, UINT);
@@ -85,20 +86,24 @@ static void LayoutLoginControls(HWND window, const LoginWindowText& text, UINT d
     if (previous) SelectObject(dc, previous);
     if (dc) ReleaseDC(window, dc);
 
-    const std::pair<int, const RECT*> placed[] = {
-        {kLoginInstructions, &layout.instructions}, {kLoginCode, &layout.code}, {kLoginStatus, &layout.status},
-        {kLoginOpenLink, &layout.open}, {kLoginCopyLink, &layout.copy}, {kLoginAlternate, &layout.alternate},
-        {IDOK, &layout.signIn}, {IDCANCEL, &layout.cancel}};
-    for (const auto& [id, r] : placed) {
-        if (HWND child = GetDlgItem(window, id)) {
-            if (created) SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(created), TRUE);
-            SetWindowPos(child, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top,
-                         SWP_NOZORDER | SWP_NOACTIVATE);
+    if (apply) {
+        const std::pair<int, const RECT*> placed[] = {
+            {kLoginInstructions, &layout.instructions}, {kLoginCode, &layout.code}, {kLoginStatus, &layout.status},
+            {kLoginOpenLink, &layout.open}, {kLoginCopyLink, &layout.copy}, {kLoginAlternate, &layout.alternate},
+            {IDOK, &layout.signIn}, {IDCANCEL, &layout.cancel}};
+        for (const auto& [id, r] : placed) {
+            if (HWND child = GetDlgItem(window, id)) {
+                if (created) SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(created), TRUE);
+                SetWindowPos(child, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top,
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+            }
         }
-    }
-    if (created) {
-        if (font) DeleteObject(font);
-        font = created;
+        if (created) {
+            if (font) DeleteObject(font);
+            font = created;
+        }
+    } else if (created) {
+        DeleteObject(created);
     }
     RECT frame{0, 0, layout.client.cx, layout.client.cy};
     DWORD style = (DWORD)GetWindowLongPtrW(window, GWL_STYLE);
@@ -109,6 +114,28 @@ static void LayoutLoginControls(HWND window, const LoginWindowText& text, UINT d
     if (!adjustWindowRectExForDpi || !adjustWindowRectExForDpi(&frame, style, FALSE, exStyle, dpi)) {
         AdjustWindowRectEx(&frame, style, FALSE, exStyle);
     }
-    SetWindowPos(window, nullptr, 0, 0, frame.right - frame.left, frame.bottom - frame.top,
-                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    return {frame.right - frame.left, frame.bottom - frame.top};
+}
+
+// WM_GETDPISCALEDSIZE (Windows 10 1703 and later): Windhawk's MinGW headers define it only from
+// WINVER 0x0605, which the mod's build doesn't set.
+constexpr UINT kLoginGetDpiScaledSize = 0x02E4;
+
+// The window's DPI messages (its thread is Per Monitor v2 aware): kLoginGetDpiScaledSize answers
+// the size that fits the layout at the new DPI, only measured, so Windows suggests it;
+// WM_DPICHANGED takes the suggested rectangle, then lays the controls out at the DPI the window
+// has after it, without sizing the window again: the layout isn't linear in DPI, and a second size
+// could move a window that straddles two monitors back across, into another DPI change. Returns
+// the message's result.
+static LRESULT LoginDpiMessage(HWND window, UINT msg, WPARAM wParam, LPARAM lParam, const LoginWindowText& text,
+                               HFONT& font) {
+    if (msg == kLoginGetDpiScaledSize) {
+        *reinterpret_cast<SIZE*>(lParam) = LayoutLoginControls(window, text, UINT(wParam), font, false);
+        return TRUE;
+    }
+    const RECT* suggested = reinterpret_cast<const RECT*>(lParam);
+    SetWindowPos(window, nullptr, suggested->left, suggested->top, suggested->right - suggested->left,
+                 suggested->bottom - suggested->top, SWP_NOZORDER | SWP_NOACTIVATE);
+    LayoutLoginControls(window, text, WindowDpi(window), font, true);
+    return 0;
 }

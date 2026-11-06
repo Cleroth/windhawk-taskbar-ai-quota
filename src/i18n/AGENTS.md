@@ -64,7 +64,8 @@ and `-`; `%`, `$`, `USD`, `k`/`M` and `K`/`M`/`G`/`T` stay the callers'.
   values, minutes and day counts stay ungrouped, so en-US English stays as it was.
 - Never for text that is read back: CSV, logs, storage, protocol, copied version info.
 - Settings number boxes parse what `I18nInteger` shows (a space separator takes any space), in
-  the format the box showed it in: the frame's as typing starts, kept while the draft is text.
+  the format the box's text was set in as typing starts (the frame's, unless an IME composition
+  kept older text), kept while the draft is text.
 - Times: the taskbar, flyout and notifications use Windows' regional time formats; the usage
   history window the language's compact 24-hour form.
 

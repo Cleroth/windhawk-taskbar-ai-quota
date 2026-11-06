@@ -267,18 +267,14 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             }
             return 0;
         }
-        case WM_DPICHANGED: {
-            auto* suggested = reinterpret_cast<RECT*>(lParam);
-            SetWindowPos(hWnd, nullptr, suggested->left, suggested->top,
-                         suggested->right - suggested->left,
-                         suggested->bottom - suggested->top,
-                         SWP_NOZORDER | SWP_NOACTIVATE);
-            if (st) {
-                LayoutLoginControls(hWnd, st->text, HIWORD(wParam), st->font);
-                SetAppWindowIcons(hWnd, HIWORD(wParam), st->icons);
-            }
+        case kLoginGetDpiScaledSize:
+            if (!st) break;
+            return LoginDpiMessage(hWnd, msg, wParam, lParam, st->text, st->font);
+        case WM_DPICHANGED:
+            if (!st) break;
+            LoginDpiMessage(hWnd, msg, wParam, lParam, st->text, st->font);
+            SetAppWindowIcons(hWnd, WindowDpi(hWnd), st->icons);
             return 0;
-        }
         case WM_CLOSE:
             DestroyWindow(hWnd);
             return 0;
@@ -348,14 +344,10 @@ static bool ShowLoginDialog(const LoginRequest& req, LoginDialogState& st) {
     // The taskbar shows the app icon instead of File Explorer's (ui/window-icon.h).
     UiSetWindowAppId(wnd, kWindowAppId);
     SetAppWindowIcons(wnd, dpi, st.icons);
-    LayoutLoginControls(wnd, st.text, dpi, st.font);
-    RECT windowRect{};
-    GetWindowRect(wnd, &windowRect);
-    int x = monitorInfo.rcWork.left +
-            (monitorInfo.rcWork.right - monitorInfo.rcWork.left - (windowRect.right - windowRect.left)) / 2;
-    int y = monitorInfo.rcWork.top +
-            (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top - (windowRect.bottom - windowRect.top)) / 2;
-    SetWindowPos(wnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    SIZE size = LayoutLoginControls(wnd, st.text, dpi, st.font, true);
+    int x = monitorInfo.rcWork.left + (monitorInfo.rcWork.right - monitorInfo.rcWork.left - size.cx) / 2;
+    int y = monitorInfo.rcWork.top + (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top - size.cy) / 2;
+    SetWindowPos(wnd, HWND_TOPMOST, x, y, size.cx, size.cy, SWP_NOACTIVATE);
     ShowWindow(wnd, SW_SHOW);
     SetForegroundWindow(wnd);
     SetFocus(GetDlgItem(wnd, st.text.paste ? kLoginCode : st.text.device ? kLoginCopyLink : kLoginOpenLink));

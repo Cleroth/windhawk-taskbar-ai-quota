@@ -6,8 +6,9 @@
 // Checks what the controls themselves report against that layout: each button's ideal size
 // (BCM_GETIDEALSIZE) for every label it shows, each static's every text as the control paints it
 // (WM_PRINTCLIENT) inside its rectangle, each box's text rectangle (EM_GETRECT) a line tall, no
-// control over another or outside the client, a DPI change laying out as a new window, and the
-// production frame's client at the window's own DPI. Themes draw at the probe monitor's DPI
+// control over another or outside the client, a DPI change (its messages through the production
+// handler: the scaled size measured only, the suggestion taken with one resize) laying out as a
+// new window, and the production frame's client at the window's own DPI. Themes draw at the probe monitor's DPI
 // whatever DPI the layout is for. Renders every flow per language and DPI, with the states that
 // change text (render-signin-<tag>-<dpi>.png); OBSERVE lines report the measures.
 // Usage: signin-probe.exe <render directory>
@@ -91,17 +92,24 @@ static LoginWindowText SignInText(const I18nLocale& locale, SignInFlow flow) {
     return text;
 }
 
-// A probe window with the production controls laid out for `text` at `dpi`; never shown.
+// A probe window with the production controls laid out for `text` at `dpi` and sized to fit, as
+// ShowLoginDialog sizes it; never shown. Its DPI messages go to the production handler
+// (SignInProbeProc), which reads `text` (it outlives the window); `resizes` counts the
+// SetWindowPos calls that size it.
 struct SignInWindow {
     HWND window = nullptr;
     HFONT font = nullptr;
+    const LoginWindowText* text = nullptr;
+    int resizes = 0;
 
-    SignInWindow(const LoginWindowText& text, UINT dpi, DWORD style = WS_POPUP, DWORD exStyle = 0) {
+    SignInWindow(const LoginWindowText& text, UINT dpi, DWORD style = WS_POPUP, DWORD exStyle = 0) : text(&text) {
         window = CreateWindowExW(exStyle, kSignInProbeClass, L"", style, 0, 0, 100, 100, nullptr, nullptr,
                                  GetModuleHandleW(nullptr), nullptr);
         if (!window) throw std::runtime_error("CreateWindowExW failed: " + std::to_string(GetLastError()));
+        SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
         CreateLoginControls(window, text, text.statuses.empty() ? L"" : text.statuses[0].c_str());
-        LayoutLoginControls(window, text, dpi, font);
+        SIZE size = LayoutLoginControls(window, text, dpi, font, true);
+        SetWindowPos(window, nullptr, 0, 0, size.cx, size.cy, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
     ~SignInWindow() {
         DestroyWindow(window);
@@ -124,7 +132,23 @@ struct SignInWindow {
         GetClientRect(window, &r);
         return {r.right, r.bottom};
     }
+    RECT Outer() const {
+        RECT r{};
+        GetWindowRect(window, &r);
+        return r;
+    }
 };
+
+static LRESULT CALLBACK SignInProbeProc(HWND window, UINT msg, WPARAM wParam, LPARAM lParam) {
+    auto* w = reinterpret_cast<SignInWindow*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+    if (w && (msg == kLoginGetDpiScaledSize || msg == WM_DPICHANGED)) {
+        return LoginDpiMessage(window, msg, wParam, lParam, *w->text, w->font);
+    }
+    if (w && msg == WM_WINDOWPOSCHANGING && !(reinterpret_cast<const WINDOWPOS*>(lParam)->flags & SWP_NOSIZE)) {
+        w->resizes++;
+    }
+    return DefWindowProcW(window, msg, wParam, lParam);
+}
 
 static constexpr int kSignInControls[] = {kLoginInstructions, kLoginCode, kLoginStatus, kLoginOpenLink, kLoginCopyLink,
                                           kLoginAlternate, IDOK, IDCANCEL};
@@ -490,21 +514,69 @@ static void RunSignInProbe(const std::wstring& directory) {
         }
     });
 
-    Run("sign-in window: a DPI change lays the window out as a new one at the new DPI, in a new font", [&] {
+    // The messages a move onto this monitor sends, synthesized: the window's DPI after the
+    // suggested rectangle is the monitor's, so a window laid out at another DPI changes to it.
+    Run("sign-in window: a DPI change's scaled size is the size that fits the new DPI, measured without changing "
+        "the window; the change then takes Windows' suggestion, sized once, and lays the window out as a new one "
+        "in a new font", [&] {
+        const DWORD style = WS_POPUP | WS_CAPTION | WS_SYSMENU, exStyle = WS_EX_TOPMOST | WS_EX_DLGMODALFRAME;
         for (PCWSTR tag : {L"en", L"de", L"qps-ploc"}) {
             const I18nLocale locale(*I18nLanguageByTag(tag));
             for (const auto& [flow, name] : kSignInFlows) {
                 LoginWindowText text = SignInText(locale, flow);
-                SignInWindow changed(text, 96), fresh(text, 144);
-                HFONT before = changed.font;
-                LayoutLoginControls(changed.window, text, 144, changed.font);
-                CHECK(changed.font && changed.font != before);
-                CHECK(changed.Client().cx == fresh.Client().cx && changed.Client().cy == fresh.Client().cy);
-                for (int id : kSignInControls) {
-                    RECT a = changed.Rect(id), b = fresh.Rect(id);
-                    CHECK(EqualRect(&a, &b));
-                    if (HWND control = changed.Child(id)) {
-                        CHECK(reinterpret_cast<HFONT>(SendMessageW(control, WM_GETFONT, 0, 0)) == changed.font);
+                SignInWindow fresh(text, monitorDpi, style, exStyle);
+                const RECT freshOuter = fresh.Outer();
+                const SIZE fits{freshOuter.right - freshOuter.left, freshOuter.bottom - freshOuter.top};
+                for (UINT from : {96u, 144u}) {
+                    if (from == monitorDpi) continue;
+                    // Windows' suggestion: the scaled size's answer, or a linear scaling of the
+                    // window (its default without one), which the change keeps as it is.
+                    for (bool linear : {false, true}) {
+                        SignInWindow changed(text, from, style, exStyle);
+                        const RECT before = changed.Outer();
+                        const HFONT beforeFont = changed.font;
+                        std::vector<RECT> beforeControls;
+                        for (int id : kSignInControls) beforeControls.push_back(changed.Rect(id));
+
+                        SIZE scaled{MulDiv(before.right - before.left, int(monitorDpi), int(from)),
+                                    MulDiv(before.bottom - before.top, int(monitorDpi), int(from))};
+                        const SIZE linearSize = scaled;
+                        changed.resizes = 0;
+                        CHECK(SendMessageW(changed.window, kLoginGetDpiScaledSize, monitorDpi,
+                                           reinterpret_cast<LPARAM>(&scaled)) == TRUE);
+                        CHECK(scaled.cx == fits.cx && scaled.cy == fits.cy);
+                        // Measured only: the window, its controls and their font as they were.
+                        const RECT after = changed.Outer();
+                        CHECK(EqualRect(&before, &after) && changed.resizes == 0 && changed.font == beforeFont);
+                        for (size_t i = 0; i < std::size(kSignInControls); i++) {
+                            RECT r = changed.Rect(kSignInControls[i]);
+                            CHECK(EqualRect(&r, &beforeControls[i]));
+                            if (HWND control = changed.Child(kSignInControls[i])) {
+                                CHECK(reinterpret_cast<HFONT>(SendMessageW(control, WM_GETFONT, 0, 0)) == beforeFont);
+                            }
+                        }
+
+                        const SIZE suggestedSize = linear ? linearSize : scaled;
+                        RECT suggested{before.left + 7, before.top + 5, before.left + 7 + suggestedSize.cx,
+                                       before.top + 5 + suggestedSize.cy};
+                        CHECK(SendMessageW(changed.window, WM_DPICHANGED, MAKEWPARAM(monitorDpi, monitorDpi),
+                                           reinterpret_cast<LPARAM>(&suggested)) == 0);
+                        const RECT ended = changed.Outer();
+                        CHECK(EqualRect(&ended, &suggested) && changed.resizes == 1);
+                        CHECK(changed.font && changed.font != beforeFont);
+                        for (int id : kSignInControls) {
+                            RECT a = changed.Rect(id), b = fresh.Rect(id);
+                            CHECK(EqualRect(&a, &b));
+                            if (HWND control = changed.Child(id)) {
+                                CHECK(reinterpret_cast<HFONT>(SendMessageW(control, WM_GETFONT, 0, 0)) == changed.font);
+                            }
+                        }
+                        if (!linear) {
+                            CHECK(changed.Client().cx == fresh.Client().cx && changed.Client().cy == fresh.Client().cy);
+                        }
+                        std::cout << "OBSERVE signin dpi " << Narrow(tag) << ' ' << name << ' ' << from << "->"
+                                  << monitorDpi << " suggestion " << (linear ? "linear" : "scaled size") << ": linear "
+                                  << Size(linearSize) << ", scaled size " << Size(fits) << '\n';
                     }
                 }
             }
@@ -562,7 +634,7 @@ int wmain(int argc, wchar_t** argv) {
     InitCommonControlsEx(&controls);
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
-    wc.lpfnWndProc = DefWindowProcW;
+    wc.lpfnWndProc = SignInProbeProc;
     wc.hInstance = GetModuleHandleW(nullptr);
     wc.lpszClassName = kSignInProbeClass;
     wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);

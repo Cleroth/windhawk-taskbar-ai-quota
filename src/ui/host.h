@@ -856,11 +856,19 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 if (!wParam) UiHostClosePopup(host);
                 handled = false;
                 break;
+            // The minimum size, within the work area of the window's monitor: on a smaller one
+            // (high scaling) the window still fits it, and its content scrolls.
             case WM_GETMINMAXINFO:
                 if (isMain) {
                     auto* info = reinterpret_cast<MINMAXINFO*>(lParam);
-                    info->ptMinTrackSize = {LONG(host.config->minSize.width * UiHostScale(host)),
-                                            LONG(host.config->minSize.height * UiHostScale(host))};
+                    LONG width = LONG(host.config->minSize.width * UiHostScale(host));
+                    LONG height = LONG(host.config->minSize.height * UiHostScale(host));
+                    MONITORINFO monitor{sizeof(monitor)};
+                    if (GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor)) {
+                        width = std::min(width, monitor.rcWork.right - monitor.rcWork.left);
+                        height = std::min(height, monitor.rcWork.bottom - monitor.rcWork.top);
+                    }
+                    info->ptMinTrackSize = {width, height};
                 }
                 break;
             case WM_DPICHANGED: {

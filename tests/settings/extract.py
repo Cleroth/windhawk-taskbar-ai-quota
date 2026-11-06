@@ -106,6 +106,7 @@ STATUS = [
 # The sign-in window's controls with their text and layout on the production catalogs: the sign-in
 # probe. Window and GDI code only: no network, tokens or account code.
 SIGNIN = [
+    ("definition", "WindowDpi"),
     *I18N,
     ("fragment", "core/model.h"),
     ("fragment", "core/account-error.h"),

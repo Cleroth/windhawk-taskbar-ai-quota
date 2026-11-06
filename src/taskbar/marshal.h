@@ -10,9 +10,13 @@ static void PostUiUpdate() {
 
     for (HWND hWnd : FindCurrentProcessTaskbarWnds()) {
         RunFromWindowThread(hWnd, [](void* param) -> bool {
-            HWND hWnd = static_cast<HWND>(param);
-            auto* state = FindUiState(hWnd);
-            if (!g_unloading && state && state->quotaGrid) UpdateQuotaUi(*state);
+            try {
+                HWND hWnd = static_cast<HWND>(param);
+                auto* state = FindUiState(hWnd);
+                if (!g_unloading && state && state->quotaGrid) UpdateQuotaUi(*state);
+            } catch (...) {
+                Wh_Log(L"Taskbar update: exception");
+            }
             return true;
         }, hWnd);
     }
@@ -33,10 +37,17 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, D
     static std::vector<std::pair<UINT_PTR, PayloadRef>> pendingPayloads;
     static std::atomic<UINT_PTR> nextPayloadId{1};
 
+    // A proc that throws fails the marshal; its exception never reaches Windows' frames or the
+    // caller.
     DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
     if (!tid) return false;
     if (tid == GetCurrentThreadId()) {
-        return proc(param);
+        try {
+            return proc(param);
+        } catch (...) {
+            Wh_Log(L"Window-thread marshal: exception");
+            return false;
+        }
     }
 
     PayloadRef pay = std::make_shared<Payload>(proc, param);
@@ -70,10 +81,16 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, D
                         }
                     }
                     // Multiple concurrent marshals install hooks in the same chain. Only the
-                    // first hook that claims this ID may execute and release its payload.
+                    // first hook that claims this ID may execute and release its payload; `ran`
+                    // is published below whatever the proc does, or its sender would wait forever.
                     if (payload) {
-                        payload->result.store(payload->proc(payload->param),
-                                              std::memory_order_release);
+                        bool result = false;
+                        try {
+                            result = payload->proc(payload->param);
+                        } catch (...) {
+                            Wh_Log(L"Window-thread marshal: exception");
+                        }
+                        payload->result.store(result, std::memory_order_release);
                     }
                 }
             }

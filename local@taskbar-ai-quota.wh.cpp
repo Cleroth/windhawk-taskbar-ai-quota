@@ -10739,11 +10739,14 @@ static void SetCurrentLanguage(const I18nLanguage& language) {
 // This Windows user's regional number format (their Region settings), read anew each time, so a
 // change shows from the next snapshot; a part Windows can't give stays en-US's.
 static I18nNumberFormat ReadNumberFormat() {
-    wchar_t decimal[8] = {}, group[8] = {}, grouping[16] = {};
-    GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SDECIMAL, decimal, ARRAYSIZE(decimal));
-    GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STHOUSAND, group, ARRAYSIZE(group));
-    GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SGROUPING, grouping, ARRAYSIZE(grouping));
-    return I18nNumberFormatFrom(decimal, group, grouping);
+    // Each part as long as Windows says (its count holds the terminating null; 0: none, empty).
+    auto read = [](LCTYPE type, auto& buffer) {
+        int count = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, type, buffer, int(std::size(buffer)));
+        return std::wstring_view(buffer, count > 0 ? size_t(count - 1) : 0);
+    };
+    wchar_t decimal[8], group[8], grouping[16];
+    return I18nNumberFormatFrom(read(LOCALE_SDECIMAL, decimal), read(LOCALE_STHOUSAND, group),
+                                read(LOCALE_SGROUPING, grouping));
 }
 
 // The localization context of a frame, notification or dialog: the current language with this
@@ -11918,8 +11921,8 @@ static LoginLayout LoginWindowLayout(const LoginWindowText& text, UINT dpi, int 
 
 // src/auth/login-controls.h
 // The sign-in window's controls (the window: auth/login.h): their ids, creation, and their layout
-// (auth/login-layout.h) measured in the system message font at the window's DPI. Window and GDI
-// calls only, no allocation.
+// (auth/login-layout.h) measured in the system message font at the window's DPI, also on its DPI
+// messages. Window and GDI calls only, no allocation.
 
 enum {
     kLoginInstructions = 100,
@@ -11961,10 +11964,11 @@ static void CreateLoginControls(HWND window, const LoginWindowText& text, PCWSTR
     create(0, L"BUTTON", labels.cancel.c_str(), WS_TABSTOP | BS_PUSHBUTTON, IDCANCEL);
 }
 
-// Lays the controls out at `dpi` in the message font for it, which replaces `font` on every
-// control (the previous one is kept when it can't be created), and sizes the window to fit,
-// keeping its position.
-static void LayoutLoginControls(HWND window, const LoginWindowText& text, UINT dpi, HFONT& font) {
+// Returns the window size that fits the controls laid out at `dpi` in the message font for it.
+// With `apply`, also lays them out in that font, which replaces `font` on every control (the
+// previous one is kept when it can't be created); without, only measures (in `font` when the new
+// one can't be created), changing nothing. Never sizes the window.
+static SIZE LayoutLoginControls(HWND window, const LoginWindowText& text, UINT dpi, HFONT& font, bool apply) {
     NONCLIENTMETRICSW metrics{sizeof(metrics)};
     LOGFONTW fontDescription{};
     using SystemParametersInfoForDpi_t = BOOL(WINAPI*)(UINT, UINT, PVOID, UINT, UINT);
@@ -12004,20 +12008,24 @@ static void LayoutLoginControls(HWND window, const LoginWindowText& text, UINT d
     if (previous) SelectObject(dc, previous);
     if (dc) ReleaseDC(window, dc);
 
-    const std::pair<int, const RECT*> placed[] = {
-        {kLoginInstructions, &layout.instructions}, {kLoginCode, &layout.code}, {kLoginStatus, &layout.status},
-        {kLoginOpenLink, &layout.open}, {kLoginCopyLink, &layout.copy}, {kLoginAlternate, &layout.alternate},
-        {IDOK, &layout.signIn}, {IDCANCEL, &layout.cancel}};
-    for (const auto& [id, r] : placed) {
-        if (HWND child = GetDlgItem(window, id)) {
-            if (created) SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(created), TRUE);
-            SetWindowPos(child, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top,
-                         SWP_NOZORDER | SWP_NOACTIVATE);
+    if (apply) {
+        const std::pair<int, const RECT*> placed[] = {
+            {kLoginInstructions, &layout.instructions}, {kLoginCode, &layout.code}, {kLoginStatus, &layout.status},
+            {kLoginOpenLink, &layout.open}, {kLoginCopyLink, &layout.copy}, {kLoginAlternate, &layout.alternate},
+            {IDOK, &layout.signIn}, {IDCANCEL, &layout.cancel}};
+        for (const auto& [id, r] : placed) {
+            if (HWND child = GetDlgItem(window, id)) {
+                if (created) SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(created), TRUE);
+                SetWindowPos(child, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top,
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+            }
         }
-    }
-    if (created) {
-        if (font) DeleteObject(font);
-        font = created;
+        if (created) {
+            if (font) DeleteObject(font);
+            font = created;
+        }
+    } else if (created) {
+        DeleteObject(created);
     }
     RECT frame{0, 0, layout.client.cx, layout.client.cy};
     DWORD style = (DWORD)GetWindowLongPtrW(window, GWL_STYLE);
@@ -12028,8 +12036,30 @@ static void LayoutLoginControls(HWND window, const LoginWindowText& text, UINT d
     if (!adjustWindowRectExForDpi || !adjustWindowRectExForDpi(&frame, style, FALSE, exStyle, dpi)) {
         AdjustWindowRectEx(&frame, style, FALSE, exStyle);
     }
-    SetWindowPos(window, nullptr, 0, 0, frame.right - frame.left, frame.bottom - frame.top,
-                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    return {frame.right - frame.left, frame.bottom - frame.top};
+}
+
+// WM_GETDPISCALEDSIZE (Windows 10 1703 and later): Windhawk's MinGW headers define it only from
+// WINVER 0x0605, which the mod's build doesn't set.
+constexpr UINT kLoginGetDpiScaledSize = 0x02E4;
+
+// The window's DPI messages (its thread is Per Monitor v2 aware): kLoginGetDpiScaledSize answers
+// the size that fits the layout at the new DPI, only measured, so Windows suggests it;
+// WM_DPICHANGED takes the suggested rectangle, then lays the controls out at the DPI the window
+// has after it, without sizing the window again: the layout isn't linear in DPI, and a second size
+// could move a window that straddles two monitors back across, into another DPI change. Returns
+// the message's result.
+static LRESULT LoginDpiMessage(HWND window, UINT msg, WPARAM wParam, LPARAM lParam, const LoginWindowText& text,
+                               HFONT& font) {
+    if (msg == kLoginGetDpiScaledSize) {
+        *reinterpret_cast<SIZE*>(lParam) = LayoutLoginControls(window, text, UINT(wParam), font, false);
+        return TRUE;
+    }
+    const RECT* suggested = reinterpret_cast<const RECT*>(lParam);
+    SetWindowPos(window, nullptr, suggested->left, suggested->top, suggested->right - suggested->left,
+                 suggested->bottom - suggested->top, SWP_NOZORDER | SWP_NOACTIVATE);
+    LayoutLoginControls(window, text, WindowDpi(window), font, true);
+    return 0;
 }
 
 // src/auth/login.h
@@ -12302,18 +12332,14 @@ static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             }
             return 0;
         }
-        case WM_DPICHANGED: {
-            auto* suggested = reinterpret_cast<RECT*>(lParam);
-            SetWindowPos(hWnd, nullptr, suggested->left, suggested->top,
-                         suggested->right - suggested->left,
-                         suggested->bottom - suggested->top,
-                         SWP_NOZORDER | SWP_NOACTIVATE);
-            if (st) {
-                LayoutLoginControls(hWnd, st->text, HIWORD(wParam), st->font);
-                SetAppWindowIcons(hWnd, HIWORD(wParam), st->icons);
-            }
+        case kLoginGetDpiScaledSize:
+            if (!st) break;
+            return LoginDpiMessage(hWnd, msg, wParam, lParam, st->text, st->font);
+        case WM_DPICHANGED:
+            if (!st) break;
+            LoginDpiMessage(hWnd, msg, wParam, lParam, st->text, st->font);
+            SetAppWindowIcons(hWnd, WindowDpi(hWnd), st->icons);
             return 0;
-        }
         case WM_CLOSE:
             DestroyWindow(hWnd);
             return 0;
@@ -12383,14 +12409,10 @@ static bool ShowLoginDialog(const LoginRequest& req, LoginDialogState& st) {
     // The taskbar shows the app icon instead of File Explorer's (ui/window-icon.h).
     UiSetWindowAppId(wnd, kWindowAppId);
     SetAppWindowIcons(wnd, dpi, st.icons);
-    LayoutLoginControls(wnd, st.text, dpi, st.font);
-    RECT windowRect{};
-    GetWindowRect(wnd, &windowRect);
-    int x = monitorInfo.rcWork.left +
-            (monitorInfo.rcWork.right - monitorInfo.rcWork.left - (windowRect.right - windowRect.left)) / 2;
-    int y = monitorInfo.rcWork.top +
-            (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top - (windowRect.bottom - windowRect.top)) / 2;
-    SetWindowPos(wnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    SIZE size = LayoutLoginControls(wnd, st.text, dpi, st.font, true);
+    int x = monitorInfo.rcWork.left + (monitorInfo.rcWork.right - monitorInfo.rcWork.left - size.cx) / 2;
+    int y = monitorInfo.rcWork.top + (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top - size.cy) / 2;
+    SetWindowPos(wnd, HWND_TOPMOST, x, y, size.cx, size.cy, SWP_NOACTIVATE);
     ShowWindow(wnd, SW_SHOW);
     SetForegroundWindow(wnd);
     SetFocus(GetDlgItem(wnd, st.text.paste ? kLoginCode : st.text.device ? kLoginCopyLink : kLoginOpenLink));
@@ -16978,9 +17000,13 @@ static void PostUiUpdate() {
 
     for (HWND hWnd : FindCurrentProcessTaskbarWnds()) {
         RunFromWindowThread(hWnd, [](void* param) -> bool {
-            HWND hWnd = static_cast<HWND>(param);
-            auto* state = FindUiState(hWnd);
-            if (!g_unloading && state && state->quotaGrid) UpdateQuotaUi(*state);
+            try {
+                HWND hWnd = static_cast<HWND>(param);
+                auto* state = FindUiState(hWnd);
+                if (!g_unloading && state && state->quotaGrid) UpdateQuotaUi(*state);
+            } catch (...) {
+                Wh_Log(L"Taskbar update: exception");
+            }
             return true;
         }, hWnd);
     }
@@ -17001,10 +17027,17 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, D
     static std::vector<std::pair<UINT_PTR, PayloadRef>> pendingPayloads;
     static std::atomic<UINT_PTR> nextPayloadId{1};
 
+    // A proc that throws fails the marshal; its exception never reaches Windows' frames or the
+    // caller.
     DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
     if (!tid) return false;
     if (tid == GetCurrentThreadId()) {
-        return proc(param);
+        try {
+            return proc(param);
+        } catch (...) {
+            Wh_Log(L"Window-thread marshal: exception");
+            return false;
+        }
     }
 
     PayloadRef pay = std::make_shared<Payload>(proc, param);
@@ -17038,10 +17071,16 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param, D
                         }
                     }
                     // Multiple concurrent marshals install hooks in the same chain. Only the
-                    // first hook that claims this ID may execute and release its payload.
+                    // first hook that claims this ID may execute and release its payload; `ran`
+                    // is published below whatever the proc does, or its sender would wait forever.
                     if (payload) {
-                        payload->result.store(payload->proc(payload->param),
-                                              std::memory_order_release);
+                        bool result = false;
+                        try {
+                            result = payload->proc(payload->param);
+                        } catch (...) {
+                            Wh_Log(L"Window-thread marshal: exception");
+                        }
+                        payload->result.store(result, std::memory_order_release);
                     }
                 }
             }
@@ -22280,12 +22319,12 @@ static void UpdateAccountFlyout(
         if (popup.card.Width() != cardWidth) popup.card.Width(cardWidth);
 
         // The header's texts whole in its tooltip while the label passes its cap or the row the
-        // card's width.
+        // card's width, which the screen's room caps (ShowAccountFlyout).
         if (popup.header) {
             TileTextMeasure measure = XamlTileTextMeasure(locale);
             popup.header.Measure({INFINITY, INFINITY});
             bool cut = measure(account.label, TileFont::Display, 20) > kFlyoutTitleMaxWidth ||
-                       popup.header.DesiredSize().Width > cardWidth - 2;
+                       popup.header.DesiredSize().Width > std::min(cardWidth, popup.card.MaxWidth()) - 2;
             std::wstring tip = !cut        ? L"" :
                                plan.empty() ? account.label + L" \u00B7 " + ProviderDisplayName(account.provider) :
                                               account.label + L" \u00B7 " + ProviderDisplayName(account.provider) +
@@ -22593,7 +22632,8 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         // The card fits the screen beyond the taskbar, less the gap and a margin; its quota rows
         // scroll past that. A taskbar down a side has the screen's height beside it. Its width,
         // grown past kFlyoutCardWidth for a long value (UpdateAccountFlyout), stays within the
-        // screen's less a margin each side.
+        // screen's less a margin each side, or beside a side taskbar, the room there less the gap
+        // and a margin.
         RECT taskbar{};
         MONITORINFO monitor{sizeof(monitor)};
         double scale = xamlRoot.RasterizationScale();
@@ -22606,6 +22646,11 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
             double roomDips = roomPx / scale - kFlyoutTaskbarGap - kFlyoutScreenMargin;
             card.MaxHeight(std::max(roomDips, 200.0));
             double widthDips = (monitor.rcMonitor.right - monitor.rcMonitor.left) / scale - 2 * kFlyoutScreenMargin;
+            if (state.edge == TaskbarEdge::Left || state.edge == TaskbarEdge::Right) {
+                LONG besidePx = std::max(taskbar.left - monitor.rcMonitor.left,
+                                         monitor.rcMonitor.right - taskbar.right);
+                widthDips = besidePx / scale - kFlyoutTaskbarGap - kFlyoutScreenMargin;
+            }
             card.MaxWidth(std::max(widthDips, kFlyoutCardWidth));
         }
         popup.card = card;
@@ -29459,11 +29504,19 @@ static LRESULT UiHostProc(UiHost& host, HWND window, UiSurfaceId surface, UINT m
                 if (!wParam) UiHostClosePopup(host);
                 handled = false;
                 break;
+            // The minimum size, within the work area of the window's monitor: on a smaller one
+            // (high scaling) the window still fits it, and its content scrolls.
             case WM_GETMINMAXINFO:
                 if (isMain) {
                     auto* info = reinterpret_cast<MINMAXINFO*>(lParam);
-                    info->ptMinTrackSize = {LONG(host.config->minSize.width * UiHostScale(host)),
-                                            LONG(host.config->minSize.height * UiHostScale(host))};
+                    LONG width = LONG(host.config->minSize.width * UiHostScale(host));
+                    LONG height = LONG(host.config->minSize.height * UiHostScale(host));
+                    MONITORINFO monitor{sizeof(monitor)};
+                    if (GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor)) {
+                        width = std::min(width, monitor.rcWork.right - monitor.rcWork.left);
+                        height = std::min(height, monitor.rcWork.bottom - monitor.rcWork.top);
+                    }
+                    info->ptMinTrackSize = {width, height};
                 }
                 break;
             case WM_DPICHANGED: {
@@ -32589,9 +32642,10 @@ struct SettingsEdits {
     }
 
     // A text box's text (every change). Number text parses in the regional number format the box
-    // showed it in: the frame's (`locale`) as typing starts, kept while the text is its draft's,
-    // so a regional change meanwhile doesn't reject what the box shows. Text that doesn't parse
-    // keeps the last valid value. A label is checked against the other accounts.
+    // showed it in: `locale`'s (the format the box's text was set in) as typing starts, kept while
+    // the text is its draft's, so a regional change meanwhile doesn't reject what the box shows.
+    // Text that doesn't parse keeps the last valid value. A label is checked against the other
+    // accounts.
     void SetText(uint64_t key, SettingsField field, std::wstring text, const I18nLocale& locale = {}) {
         std::optional<SettingsNumberRange> range = SettingsFieldRange(field);
         bool free = field == SettingsField::AccountLabel || field == SettingsField::AccountTileText;
@@ -36875,6 +36929,10 @@ struct SettingsUiClient final : UiHostClient {
     SettingsView view;
     std::array<COLORREF, 16> customColors{};
     std::optional<bool> versionCopied;
+    // The regional number format each number box's text was last set in, by its target (account
+    // key, field): a draft typed into the box parses in it. The frame's or its text draft's, as
+    // built, unless an IME composition kept the box's earlier text (the host sets none meanwhile).
+    std::map<std::pair<uint64_t, uint32_t>, I18nNumberFormat> boxNumbers;
 
     // Accounts: the expanded cards, and the card being dragged: its order meanwhile, where it
     // started, the pointer's offset from its top, where it is drawn and where the first card
@@ -36986,7 +37044,7 @@ struct SettingsUiClient final : UiHostClient {
     }
 
     // Each frame takes the current language and regional number format: its text, numbers, the
-    // toolkit's text formats and the title all, and number boxes parse what they show in it. The
+    // toolkit's text formats and the title all, and number boxes it sets parse in it. The
     // preview's scroll stays within what the built strip can scroll, and a new position starts it
     // from its home. Account cards follow the projection's order, a dragged card its drag order.
     // The window takes the projected material at once.
@@ -37049,6 +37107,14 @@ struct SettingsUiClient final : UiHostClient {
                 previewScroll = view.previewScroll =
                     std::clamp(previewScroll, float(item.minimum), float(item.maximum));
             }
+        }
+        for (const UiItem& item : frame.content) {
+            if (item.kind != UiItemKind::NumberBox) continue;
+            const UiTextBox* box = UiFindTextBox(host.boxes, item.id);
+            if (box && box->composing) continue;
+            // A text draft's text keeps the format it was typed or stepped in.
+            const SettingsDraft* draft = edits.Find(item.action.key, SettingsField(item.action.target));
+            boxNumbers[{item.action.key, item.action.target}] = draft && draft->text ? draft->numbers : locale.Numbers();
         }
     }
 
@@ -37340,14 +37406,18 @@ struct SettingsUiClient final : UiHostClient {
                         break;
                 }
                 break;
-            case UiActionKind::TextChange:
+            case UiActionKind::TextChange: {
                 // Typing supersedes a pending step: its timer no longer commits.
                 KillStepTimer(host, field);
                 if (field == SettingsField::PollMinutes) pollCustom = true;
                 if (field == SettingsField::RetentionDays) retentionCustom = true;
-                edits.SetText(action.key, field, std::move(action.text), view.locale);
+                auto shown = boxNumbers.find({action.key, action.target});
+                edits.SetText(action.key, field, std::move(action.text),
+                              shown == boxNumbers.end() ? view.locale :
+                                                          I18nLocale(view.locale.Language(), shown->second));
                 UiHostRequestRebuild(host, false);
                 break;
+            }
             case UiActionKind::TextCommit:
             case UiActionKind::TextBlur: {
                 // Committed from the queue, never inside the focus-loss handler; so is the sign-in

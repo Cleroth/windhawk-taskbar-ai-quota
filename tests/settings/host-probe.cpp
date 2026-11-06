@@ -419,6 +419,42 @@ int wmain(int argc, wchar_t** argv) {
         probe.Closed();
     });
 
+    Run("minimum size: the configured one at the window's DPI, within the work area of its monitor; a window "
+        "can be sized down to it", [&] {
+        Probe probe;
+        auto setMinSize = reinterpret_cast<void (*)(float, float)>(GetProcAddress(probe.module, "ProbeSetMinSize"));
+        CHECK(setMinSize);
+        // The settings and history windows' 800 x 590, then one larger than any work area.
+        struct Size {
+            float width, height;
+        };
+        for (Size minimum : {Size{800, 590}, Size{100000, 100000}}) {
+            setMinSize(minimum.width, minimum.height);
+            HWND hwnd = probe.Open();
+            MONITORINFO monitor{sizeof(monitor)};
+            CHECK(GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitor));
+            const LONG workWidth = monitor.rcWork.right - monitor.rcWork.left;
+            const LONG workHeight = monitor.rcWork.bottom - monitor.rcWork.top;
+            const float scale = float(GetDpiForWindow(hwnd)) / 96;
+            MINMAXINFO info{};
+            DWORD_PTR ignored = 0;
+            CHECK(SendMessageTimeoutW(hwnd, WM_GETMINMAXINFO, 0, reinterpret_cast<LPARAM>(&info), SMTO_BLOCK, kTimeout,
+                                      &ignored));
+            CHECK(info.ptMinTrackSize.x == std::min(LONG(minimum.width * scale), workWidth) &&
+                  info.ptMinTrackSize.y == std::min(LONG(minimum.height * scale), workHeight));
+            CHECK(SetWindowPos(hwnd, nullptr, 0, 0, 1, 1, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE));
+            RECT r{};
+            CHECK(GetWindowRect(hwnd, &r));
+            CHECK(r.right - r.left == info.ptMinTrackSize.x && r.bottom - r.top == info.ptMinTrackSize.y);
+            std::printf("OBSERVE minimum %gx%g DIP at %u DPI, work area %ldx%ld: %ldx%ld\n", minimum.width,
+                        minimum.height, GetDpiForWindow(hwnd), workWidth, workHeight, info.ptMinTrackSize.x,
+                        info.ptMinTrackSize.y);
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            probe.Closed();
+        }
+        setMinSize(0, 0);
+    });
+
     Run("window icons: both sizes at the window's DPI, redrawn on DPI changes and theme notifications without "
         "handle growth (read on the window thread once it settles), destroyed after close", [&] {
         Probe probe;

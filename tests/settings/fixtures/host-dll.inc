@@ -162,6 +162,7 @@ static bool g_probeFailAttach = false;
 static HDESK g_probeDesktop = nullptr;
 static HANDLE g_probeThread = nullptr;
 static bool g_probeInteractive = false;  // On the user's desktop, activated, in tooltip mode
+static std::optional<D2D1_SIZE_F> g_probeMinSize;  // The next window's minimum size, else the default
 static UiHost* g_probeHost = nullptr;     // The window thread's host, for its message hooks
 static HWND g_probeLastTip = nullptr;     // The tooltip window last seen by the hooks
 static HHOOK g_probeHooks[2] = {};
@@ -1062,6 +1063,7 @@ static DWORD WINAPI ProbeThread(LPVOID) {
         config.activate = g_probeInteractive;
         config.activateMessage = ProbeActivateMessage();
         if (!g_probeInteractive) config.position = POINT{-12000, -12000};
+        if (g_probeMinSize) config.minSize = *g_probeMinSize;
         // Window icons: a palette-inked track, a colored arc and a dot.
         UiItem icon;
         icon.kind = UiItemKind::Shape;
@@ -1118,6 +1120,10 @@ extern "C" __declspec(dllexport) RECT ProbeCursorRect(POINT* cursor) {
 // The next window opens on the user's desktop, activated, centered on the cursor's monitor, in
 // tooltip mode (the interactive routing mode).
 extern "C" __declspec(dllexport) void ProbeSetInteractive(BOOL interactive) { g_probeInteractive = interactive; }
+// The next windows' minimum outer size in DIPs; 0 x 0: the host's default.
+extern "C" __declspec(dllexport) void ProbeSetMinSize(float width, float height) {
+    g_probeMinSize = width || height ? std::optional<D2D1_SIZE_F>({width, height}) : std::nullopt;
+}
 extern "C" __declspec(dllexport) HWND ProbeWindow() { return g_probeWindow; }
 extern "C" __declspec(dllexport) HWND ProbeModalWindow() { return g_probeModal; }
 extern "C" __declspec(dllexport) int ProbeCount(int counter) { return g_counters[counter]; }

@@ -62,11 +62,14 @@ static void SetCurrentLanguage(const I18nLanguage& language) {
 // This Windows user's regional number format (their Region settings), read anew each time, so a
 // change shows from the next snapshot; a part Windows can't give stays en-US's.
 static I18nNumberFormat ReadNumberFormat() {
-    wchar_t decimal[8] = {}, group[8] = {}, grouping[16] = {};
-    GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SDECIMAL, decimal, ARRAYSIZE(decimal));
-    GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STHOUSAND, group, ARRAYSIZE(group));
-    GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SGROUPING, grouping, ARRAYSIZE(grouping));
-    return I18nNumberFormatFrom(decimal, group, grouping);
+    // Each part as long as Windows says (its count holds the terminating null; 0: none, empty).
+    auto read = [](LCTYPE type, auto& buffer) {
+        int count = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, type, buffer, int(std::size(buffer)));
+        return std::wstring_view(buffer, count > 0 ? size_t(count - 1) : 0);
+    };
+    wchar_t decimal[8], group[8], grouping[16];
+    return I18nNumberFormatFrom(read(LOCALE_SDECIMAL, decimal), read(LOCALE_STHOUSAND, group),
+                                read(LOCALE_SGROUPING, grouping));
 }
 
 // The localization context of a frame, notification or dialog: the current language with this
