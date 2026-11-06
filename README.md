@@ -3,9 +3,9 @@
 Shows Anthropic Claude, OpenAI/Codex, Google Antigravity, GitHub Copilot, and OpenCode Go AI agent and LLM subscription quota usage as compact bars on the Windows 11 taskbar.
 Can show on the primary taskbar only, all taskbars, or one specific monitor.
 
-![Quota tooltip](ss1.png)
-![Compact taskbar bars](ss2.png)
-![Threshold notification](ss3.png)
+![Details flyout above the taskbar's quota tiles](screenshots/overview.png)
+
+![Tile styles in the settings window](screenshots/styles.png)
 
 ## What It Shows
 

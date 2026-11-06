@@ -9,7 +9,9 @@ Windhawk mod that draws AI subscription quota bars on the Windows 11 taskbar; it
   Grep, shell output, and the generated root file don't.
 - User-facing behavior, settings list, sign-in flows and limitations: [README.md](README.md), the
   GitHub readme. The catalog readme is the `WindhawkModReadme` block in
-  `src/taskbar-ai-quota.cpp`; it hot-links `ss1.png`-`ss3.png` from `master`.
+  `src/taskbar-ai-quota.cpp`; it hot-links `screenshots/*.png` from `master`, which must be pushed
+  before a catalog PR's checks. The catalog archives each image URL once and fails a PR whose
+  image changed: a replaced screenshot needs a new filename.
 - Usage-history behavior, storage and manual verification:
   [README > Usage history](README.md#usage-history).
 - History regression suite: [tests/history/AGENTS.md](tests/history/AGENTS.md).

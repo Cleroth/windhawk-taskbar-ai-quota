@@ -51,11 +51,9 @@ under Display.
 Available in English, German, Spanish, French, Japanese, Brazilian Portuguese, Russian and
 Simplified Chinese (machine-translated), following your Windows display language by default.
 
-![Quota tooltip](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/ss1.png)
+![Details flyout above the taskbar's quota tiles](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/screenshots/overview.png)
 
-![Compact taskbar bars](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/ss2.png)
-
-![Threshold notification](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/ss3.png)
+![Tile styles in the settings window](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/screenshots/styles.png)
 
 ## Setup
 
