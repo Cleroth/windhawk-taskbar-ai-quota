@@ -849,7 +849,9 @@ struct HistoryController {
         ULONGLONG now = ops->Now();
         HistoryUiView v;
         v.locale = Busy() ? view.locale : ops->Locale();
-        MeterDisplay display = MeterDisplayFor(s, v.locale, now, 1, 0);
+        // Only staleness is read here: no text is laid out.
+        MeterDisplay display =
+            MeterDisplayFor(s, v.locale, [](std::wstring_view, TileFont, double) { return 0.0; }, now, 1, 0);
         std::map<uint64_t, size_t> configured;
         for (size_t i = 0; i < s.accounts.size(); i++) configured.try_emplace(s.accounts[i].historyId, i);
         for (const HistoryUiAccount& a : accounts) {

@@ -876,6 +876,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"quota-reset", L"Resets {when}", L"{when}重置"},
     {L"quota-unit", L"left", L"剩余"},
     {L"quota-unit", L"used", L"已用"},
+    {L"quota-unit-order", L"{number} {unit}", L"{unit} {number}"},
     {L"quota-value", L"Available", L"可用"},
     {L"quota-value", L"Unlimited", L"无限制"},
     {L"quota-value", L"Used up", L"已用完"},

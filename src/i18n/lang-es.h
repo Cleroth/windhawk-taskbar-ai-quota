@@ -1069,6 +1069,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"quota-reset", L"Resets {when}", L"Se reinicia {when}"},
     {L"quota-unit", L"left", L"restante"},
     {L"quota-unit", L"used", L"usado"},
+    {L"quota-unit-order", L"{number} {unit}", L"{number} {unit}"},
     {L"quota-value", L"Available", L"Disponible"},
     {L"quota-value", L"Unlimited", L"Ilimitado"},
     {L"quota-value", L"Used up", L"Agotado"},

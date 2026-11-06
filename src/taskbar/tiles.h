@@ -117,18 +117,35 @@ static void SetXamlToolTip(DependencyObject const& element, std::wstring const& 
     ToolTipService::SetToolTip(element, tip);
 }
 
-// Text width per DIP of font size, measured out of the tree in the frame's language, which the
-// tree won't pass down there; estimated if measuring fails.
-static double TileTextWidthPerPt(TextBlock const& text, I18nLocale const& locale) {
+// The taskbar's TileTextMeasure in the frame's language: a probe out of the tree, which the tree
+// won't give the language there. Text it measures nothing for counts an em a character, as wide as
+// any script draws one. Taskbar UI thread only, like the probe.
+static TileTextMeasure XamlTileTextMeasure(I18nLocale const& locale) {
+    TextBlock probe{nullptr};
     try {
-        SetXamlLanguage(text, locale);
-        text.Measure({INFINITY, INFINITY});
-        double width = text.DesiredSize().Width;
-        if (width > 0 && text.FontSize() > 0) return width / text.FontSize();
-        return std::max<size_t>(text.Text().size(), 1) * 0.62;
-    } catch (...) {
-        return 2.5;
-    }
+        probe = TextBlock{};
+        SetXamlLanguage(probe, locale);
+    } catch (...) {}
+    return [probe](std::wstring_view text, TileFont font, double size) {
+        const double ems = double(text.size()) * size;
+        if (!probe || text.empty()) return ems;
+        try {
+            if (font == TileFont::Display) {
+                probe.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));  // i18n-en
+            } else {
+                probe.ClearValue(TextBlock::FontFamilyProperty());
+            }
+            probe.FontWeight(font == TileFont::Text ? winrt::Windows::UI::Text::FontWeights::Normal() :
+                                                      winrt::Windows::UI::Text::FontWeights::SemiBold());
+            probe.FontSize(size);
+            probe.Text(winrt::hstring(text));
+            probe.Measure({INFINITY, INFINITY});
+            double width = probe.DesiredSize().Width;
+            return width > 0 ? width : ems;
+        } catch (...) {
+            return ems;
+        }
+    };
 }
 
 // Builds account `index`'s identity into `tile`: the provider logo (in its brand colors when
@@ -221,7 +238,7 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
         tile.text.TextLineBounds(TextLineBounds::Tight);
         tile.text.HorizontalAlignment(HorizontalAlignment::Center);
         tile.text.VerticalAlignment(VerticalAlignment::Center);
-        tile.textWidthPerPt = TileTextWidthPerPt(tile.text, display.locale);
+        tile.textWidthPerPt = display.measure(identityText.text, TileFont::Display, 10) / 10;
         if (!ring) {
             // Shrinks to fit 26 DIPs, then clips.
             tile.text.FontSize(std::clamp(26 / tile.textWidthPerPt, 8.0, 12.0));
@@ -455,28 +472,17 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     numberRow.Children().Append(tile.headlineKey);
     // The key follows the number; the row reserves "100%" and the widest key so the tile keeps
     // its width as values change.
-    tile.headline.Text(L"100%");
-    double reserve = std::ceil(TileTextWidthPerPt(tile.headline, display.locale) * fontSize) + 3;
-    tile.headline.Text(L"");
-    double keyWidth = 0;
-    for (I18nKey key : kQuotaKeys) {
-        tile.headlineKey.Text(I18nText(display.locale, key));
-        keyWidth = std::max(keyWidth, TileTextWidthPerPt(tile.headlineKey, display.locale) * keySize);
-    }
-    tile.headlineKey.Text(L"");
-    numberRow.MinWidth(reserve + std::ceil(keyWidth));
+    double reserve = std::ceil(display.measure(L"100%", TileFont::Display, fontSize)) + 3;
+    numberRow.MinWidth(reserve + std::ceil(WidestQuotaKey(display.locale, display.measure, TileFont::Text, keySize)));
     headline.Children().Append(numberRow);
     if (display.headlineCountdown) {
-        // Behind a reset arrow; reserves its hours-and-minutes form, so minute ticks keep the
-        // tile's width.
+        // Behind a reset arrow; reserves its widest form, so the tile keeps its width.
         tile.countdown = TextBlock{};
         tile.countdown.FontSize(keySize);
         tile.countdown.Opacity(0.7);
         tile.countdown.TextLineBounds(TextLineBounds::Tight);
         tile.countdown.HorizontalAlignment(HorizontalAlignment::Left);
-        tile.countdown.Text(HeadlineCountdownReserve(display.locale));
-        tile.countdown.MinWidth(std::ceil(TileTextWidthPerPt(tile.countdown, display.locale) * keySize));
-        tile.countdown.Text(L"");
+        tile.countdown.MinWidth(std::ceil(HeadlineCountdownReserve(display.locale, display.measure, keySize)));
         headline.Children().Append(tile.countdown);
     } else {
         meters.Orientation(Orientation::Horizontal);
@@ -577,18 +583,8 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             // Each shown cell in its place; keys reserve the widest key and numbers "100%" at
             // their fonts, so the tile keeps its width as numbers change. Spacing goes only
             // between rows and columns in use.
-            TextBlock keyProbe, valueProbe;
-            keyProbe.FontSize(meters.matrixKeyFont);
-            double keyWidth = 0;
-            for (I18nKey key : kQuotaKeys) {
-                keyProbe.Text(I18nText(display.locale, key));
-                keyWidth = std::max(keyWidth, TileTextWidthPerPt(keyProbe, display.locale) * meters.matrixKeyFont);
-            }
-            valueProbe.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));  // i18n-en
-            valueProbe.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-            valueProbe.FontSize(meters.matrixFont);
-            valueProbe.Text(L"100%");
-            double valueWidth = TileTextWidthPerPt(valueProbe, display.locale) * meters.matrixFont;
+            double keyWidth = WidestQuotaKey(display.locale, display.measure, TileFont::Text, meters.matrixKeyFont);
+            double valueWidth = display.measure(L"100%", TileFont::Display, meters.matrixFont);
             int rows = 1, columns = 1;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!tile.matrixCells[w]) continue;
@@ -718,9 +714,9 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                 }
                 tile.warn.Margin({0, meters.ringWarnTop, -3, 0});
             } else if (tile.headline && tile.headlineKey) {
-                // A gauge's number and key at their fonts and centres.
+                // A gauge's number at its font, and both at their centres; the key's font follows
+                // the key (below).
                 tile.headline.FontSize(meters.faceFont);
-                tile.headlineKey.FontSize(meters.faceKeyFont);
                 double middle = meters.faceHeight / 2;
                 if (auto shift = tile.headline.RenderTransform().try_as<TranslateTransform>()) {
                     shift.Y(meters.faceNumberCenter - middle);
@@ -869,12 +865,15 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     }
 
     if (tile.headlineKey) {
-        std::wstring headline = meters.headline + L"\n" + meters.headlineKey + L"\n" + meters.headlineCountdown;
+        // A gauge's key font fits its key, so it follows the text.
+        std::wstring headline = meters.headline + L"\n" + meters.headlineKey + L"\n" + meters.headlineCountdown + L"\n" +
+                                std::to_wstring(meters.faceKeyFont);
         if (headline != ap.headline || meters.headlineColor != ap.headlineColor) {
             if (tile.headline) {
                 tile.headline.Text(meters.headline);
                 tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
             }
+            if (face) tile.headlineKey.FontSize(meters.faceKeyFont);
             tile.headlineKey.Text(meters.headlineKey);
             if (tile.countdown) tile.countdown.Text(meters.headlineCountdown);
             ap.headline = std::move(headline);

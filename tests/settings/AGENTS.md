@@ -84,12 +84,18 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   wrapped name, Copy version info as wide as its widest state, narrow cards' sliders and color
   cards. Its cases are also the localization review renders'.
   `fixtures/i18n-taskbar.inc`: the meter model's localized text on the production catalogs: the
-  quota keys and the headline countdown's forms and width reserve in zh-Hans, ru and the
-  pseudo-locale, the preview strip drawing them (the matrix's localized key reserve), an account
+  quota keys and the headline countdown's forms and width reserve (the widest of every form) in
+  zh-Hans, ru and the pseudo-locale, the preview strip drawing them (the matrix's localized key
+  reserve); measured taskbar text on synthetic measures (`TestMeasure`: 0.6 em a character, the
+  meter fixtures' widths; `TestWideMeasure`: CJK an em): the bar key column, sparkline key and
+  extra usage placement, the gauge key shrinking to clear the arc's ends, and the preview strip in
+  every language (keys inside their column, matrix numbers past their key and gap, a countdown
+  tile as wide in every state); an account
   error's text per language with its English log rendering, the Accounts page's state for the
   coded error, the details flyout's extra quota names (plural forms around the reported name)
-  and the extra quotas' merging, the visual test samples' text, and the flyout's plural and
-  nested templates (free resets, the outage line, a reset line, a retry, a Copilot amount).
+  and the extra quotas' merging, the order of a number and its unit per language, the visual
+  test samples' text, and the flyout's plural and nested templates (free resets, the outage line,
+  a reset line, a retry, a Copilot amount).
   `fixtures/i18n-errors.inc`: every coded account error's English in both forms, coded errors and
   their causes (provider text, HTTP statuses, response shapes) in other languages with the English
   log rendering, threshold notifications' titles, bodies and toast XML (`fetch/notifications.h`'s
@@ -181,9 +187,12 @@ the tests one at a time; a failed group stops the run. No build overlaps a test.
   DPI, Layout's other style sections at the minimum width
   (`render-i18n-layout-<spark|ring|headline|matrix>-<tag>-light-96-min`), every dropdown's and
   menu's popup rows under their field's value (`render-i18n-popups-<tag>-light-96`), and in
-  zh-Hans and the pseudo-locale a preview strip
-  sheet of the taskbar's localized text (keys, the headline's countdown, chart and matrix keys;
-  `render-i18n-preview-sheet-<tag>-light-96/144`), and the Display page under de-DE's number
+  those languages and English (`en`, to compare) a preview strip sheet of the taskbar's
+  localized text in every tile style (bar keys at two sizes, stacked and vertical, rings, pies,
+  the square, the headline's key and countdown, gauges at three sizes, chart keys and the extra
+  usage corner, matrix keys; `render-i18n-preview-sheet-<tag>-light-96/144`) and the Layout
+  page's tile style gallery alone at the default and the minimum width
+  (`render-i18n-gallery-<tag>-light-96/144`, `-min`), and the Display page under de-DE's number
   format in English and German (`render-i18n-display-<en|de>-de-DE-light-96`). `render-backdrop-*`
   (Accounts, Layout, Display) and
   `render-history-backdrop-*` (light and dark, 144 DPI) draw the windows over a stand-in backdrop

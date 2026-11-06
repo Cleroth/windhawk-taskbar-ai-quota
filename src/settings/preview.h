@@ -137,7 +137,27 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                                                   const std::vector<OutageLevel>* testOutages = nullptr) {
     using Op = SettingsPreviewOp;
     SettingsPreviewStrip strip;
-    MeterDisplay display = MeterDisplayFor(settings, locale, now, scale, taskbarHeight);
+    // Text as XAML lays it out: natural line height, width rounded up to device pixels.
+    struct Measured {
+        float width, height, baseline, cap;
+    };
+    auto measure = [&](std::wstring_view s, const UiTextStyle& style) {
+        IDWriteTextLayout* layout = UiLayout(g, s, style, 100000, false);
+        DWRITE_LINE_METRICS line{};
+        UINT32 lines = 0;
+        layout->GetLineMetrics(&line, 1, &lines);
+        return Measured{std::ceil(UiLayoutSize(layout).width * scale - 0.01f) / scale, line.height,
+                        line.baseline, UiFontMetricsFor(g, style).capHeight};
+    };
+    // The meter model's text in the fonts the taskbar's XAML resolves (the file comment).
+    MeterDisplay display = MeterDisplayFor(
+        settings, locale,
+        [&](std::wstring_view s, TileFont font, double size) {
+            return double(measure(s, {font == TileFont::Display ? UiFamily::Display : UiFamily::Taskbar, float(size), 0,
+                                      font == TileFont::Text ? DWRITE_FONT_WEIGHT_NORMAL : DWRITE_FONT_WEIGHT_SEMI_BOLD})
+                              .width);
+        },
+        now, scale, taskbarHeight);
     std::vector<AccountConfig> accounts;
     std::vector<AccountData> data;
     BuildVisualTestSnapshot(display, &accounts, &data);
@@ -167,18 +187,6 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
     const TilePalette palette = TilePaletteFor(light);
     const PaceMarkColors pace = PaceMarkColorsFor(display.paceTickColor, light);
 
-    // Text as XAML lays it out: natural line height, width rounded up to device pixels.
-    struct Measured {
-        float width, height, baseline, cap;
-    };
-    auto measure = [&](std::wstring_view s, const UiTextStyle& style) {
-        IDWriteTextLayout* layout = UiLayout(g, s, style, 100000, false);
-        DWRITE_LINE_METRICS line{};
-        UINT32 lines = 0;
-        layout->GetLineMetrics(&line, 1, &lines);
-        return Measured{std::ceil(UiLayoutSize(layout).width * scale - 0.01f) / scale, line.height,
-                        line.baseline, UiFontMetricsFor(g, style).capHeight};
-    };
     auto add = [](std::vector<Op>& ops, Op op) { ops.push_back(std::move(op)); };
     auto rect = [&](std::vector<Op>& ops, D2D1_RECT_F r, float radius, uint32_t color, int hover = -1) {
         Op op;
@@ -324,7 +332,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             const UiTextStyle labelStyle{UiFamily::Taskbar, float(std::clamp(settings.labelFontSize, 6, 24)), 0,
                                          DWRITE_FONT_WEIGHT_NORMAL};
             const UiTextStyle textStyle{UiFamily::Taskbar, textSize, 0, DWRITE_FONT_WEIGHT_NORMAL};
-            const float keyColumn = std::ceil(textSize * 1.4f) + 3;
+            const float keyColumn = float(display.barKeyColumn);
             const BarGeometry geometry = BarGeometryFor(display);
             const float timeSize = float(geometry.timeGap + geometry.timeThickness);
             const float itemWidth = (vertical ? float(th) + timeSize : float(len)) + (keys ? keyColumn : 0);
@@ -659,9 +667,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 float cellsLeft = x0 + padLeft + idWidth + 6;
                 UiTextStyle numberStyle{UiFamily::Display, float(meters.matrixFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
                 UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.matrixKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL};
-                float keyReserve = 0;
-                for (I18nKey k : kQuotaKeys) keyReserve = std::max(keyReserve, measure(I18nText(locale, k), keyStyle).width);
-                keyReserve = std::ceil(keyReserve);
+                float keyReserve = float(std::ceil(WidestQuotaKey(locale, display.measure, TileFont::Text, keyStyle.size)));
                 float numberReserve = std::ceil(measure(L"100%", numberStyle).width);
                 std::array<float, 2> numberWidths{numberReserve, numberReserve};
                 float cap = measure(L"0", numberStyle).cap;
@@ -706,15 +712,15 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 UiTextStyle keyStyle{UiFamily::Taskbar, fontSize * float(kHeadlineKeyScale), 0, DWRITE_FONT_WEIGHT_NORMAL};
                 Measured number = measure(meters.headline, numberStyle);
                 Measured key = measure(meters.headlineKey, keyStyle);
-                float keyReserve = 0;
-                for (I18nKey k : kQuotaKeys) keyReserve = std::max(keyReserve, measure(I18nText(locale, k), keyStyle).width);
+                float keyReserve = float(WidestQuotaKey(locale, display.measure, TileFont::Text, keyStyle.size));
                 float rowWidth = std::max(std::ceil(measure(L"100%", numberStyle).width) + 3 + std::ceil(keyReserve),
                                           number.width + 3 + key.width);
                 float rowHeight = std::max(number.cap, meters.headlineKey.empty() ? 0.0f : key.cap);
                 const float length = float(display.headlineBarLength), thick = float(display.headlineBarThickness);
                 const bool countdown = display.headlineCountdown;
                 Measured remaining = measure(meters.headlineCountdown, keyStyle);
-                float segments = countdown ? std::max(std::ceil(measure(HeadlineCountdownReserve(locale), keyStyle).width),
+                float segments = countdown ? std::max(float(std::ceil(HeadlineCountdownReserve(locale, display.measure,
+                                                                                                keyStyle.size))),
                                                       remaining.width) :
                                  count     ? count * length + (count - 1) * gap : 0;
                 float panelHeight = rowHeight + (countdown ? 3 + remaining.cap : count ? 3 + thick : 0);

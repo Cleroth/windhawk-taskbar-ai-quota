@@ -22,8 +22,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     // current regional number format: no width measured at build holds a separator, so a change
     // shows from this update on (the flyout's too).
     state.buildLocale = I18nLocale(state.buildLocale.Language(), ReadNumberFormat());
-    MeterDisplay display = MeterDisplayFor(settings, state.buildLocale, NowUnixMs(), state.rasterizationScale,
-                                           state.taskbarHeight, state.sideWidth);
+    MeterDisplay display = MeterDisplayFor(settings, state.buildLocale, XamlTileTextMeasure(state.buildLocale),
+                                           NowUnixMs(), state.rasterizationScale, state.taskbarHeight,
+                                           state.sideWidth);
     ULONGLONG now = display.now;
     if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, &data);
     if (data.size() != accounts.size()) return;

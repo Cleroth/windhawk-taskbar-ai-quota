@@ -222,7 +222,9 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         popup.theme = LoadFlyoutTheme();
         Border card = BuildFlyoutCard(state, provider, state.buildVisualTestMode);
         // The card fits the screen beyond the taskbar, less the gap and a margin; its quota rows
-        // scroll past that. A taskbar down a side has the screen's height beside it.
+        // scroll past that. A taskbar down a side has the screen's height beside it. Its width,
+        // grown past kFlyoutCardWidth for a long value (UpdateAccountFlyout), stays within the
+        // screen's less a margin each side.
         RECT taskbar{};
         MONITORINFO monitor{sizeof(monitor)};
         double scale = xamlRoot.RasterizationScale();
@@ -234,6 +236,8 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
             if (roomPx < screenPx / 2) roomPx = screenPx;
             double roomDips = roomPx / scale - kFlyoutTaskbarGap - kFlyoutScreenMargin;
             card.MaxHeight(std::max(roomDips, 200.0));
+            double widthDips = (monitor.rcMonitor.right - monitor.rcMonitor.left) / scale - 2 * kFlyoutScreenMargin;
+            card.MaxWidth(std::max(widthDips, kFlyoutCardWidth));
         }
         popup.card = card;
         SettleFlyoutMaterial(fo);

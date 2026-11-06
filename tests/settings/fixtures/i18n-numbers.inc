@@ -124,7 +124,7 @@ static void RunI18nNumberTests() {
         data.extraLimitAmount = 50;
         auto bar = [&](const I18nLocale& locale, std::wstring provider) {
             MeterDisplay display = MeterDisplayFor(With([](Settings& s) { s.showExtraBarAmounts = true; }), locale,
-                                                   kNow, 1, 48);
+                                                   TestMeasure, kNow, 1, 48);
             return AccountMeterState(display, BarLayout::Stacked, Account(provider), data, 0, 0).quotas[3].text;
         };
         CHECK_TEXT(bar(de, L"anthropic"), L"$12,50");

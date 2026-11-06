@@ -928,6 +928,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"quota-reset", L"Resets {when}", L"リセット: {when}"},
     {L"quota-unit", L"left", L"残り"},
     {L"quota-unit", L"used", L"使用済み"},
+    {L"quota-unit-order", L"{number} {unit}", L"{unit} {number}"},
     {L"quota-value", L"Available", L"利用可能"},
     {L"quota-value", L"Unlimited", L"無制限"},
     {L"quota-value", L"Used up", L"使い切り"},

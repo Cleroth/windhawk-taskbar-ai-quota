@@ -17,8 +17,14 @@ static float TestTextWidth(PCWSTR text, UiFont font) {
     return std::ceil(UiLayoutSize(UiLayout(TestGraphics(), text, UiTextStyleFor(font), 10000, false)).width);
 }
 
+// The meter model's text widths in the fixtures: each character 0.6 of the font size, in any
+// font, the widths their expected values are written for.
+static double TestMeasure(std::wstring_view text, TileFont, double size) {
+    return double(text.size()) * 0.6 * size;
+}
+
 static MeterDisplay Display(const Settings& settings = {}, double scale = 1, double taskbar = 48) {
-    return MeterDisplayFor(settings, I18nLocale(), kNow, scale, taskbar);
+    return MeterDisplayFor(settings, I18nLocale(), TestMeasure, kNow, scale, taskbar);
 }
 
 static AccountConfig Account(std::wstring provider = L"anthropic", std::wstring label = L"A",

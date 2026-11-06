@@ -1045,6 +1045,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"quota-reset", L"Resets {when}", L"Сброс {when}"},
     {L"quota-unit", L"left", L"осталось"},
     {L"quota-unit", L"used", L"использовано"},
+    {L"quota-unit-order", L"{number} {unit}", L"{number} {unit}"},
     {L"quota-value", L"Available", L"Доступно"},
     {L"quota-value", L"Unlimited", L"Без лимита"},
     {L"quota-value", L"Used up", L"Исчерпано"},

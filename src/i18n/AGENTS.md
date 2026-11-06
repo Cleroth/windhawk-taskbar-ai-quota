@@ -114,6 +114,8 @@ in `tests/settings/extract.py`'s `I18N`.
 - Compact text (taskbar keys and labels, tile text, segmented controls, chart axes, buttons) has
   fixed room: stay as short as the English and abbreviate rather than overflow. Nothing changes
   case automatically: write the case shown.
+- `quota-unit-order` orders the details flyout's number and its unit; only the arguments' order
+  shows, their spacing is the layout's.
 
 ## Checker
 

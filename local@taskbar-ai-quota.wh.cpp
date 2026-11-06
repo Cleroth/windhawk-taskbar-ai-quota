@@ -1636,6 +1636,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"quota-reset", L"Resets {when}", L"Reset {when}"},
     {L"quota-unit", L"left", L"übrig"},
     {L"quota-unit", L"used", L"verbraucht"},
+    {L"quota-unit-order", L"{number} {unit}", L"{number} {unit}"},
     {L"quota-value", L"Available", L"Verfügbar"},
     {L"quota-value", L"Unlimited", L"Unbegrenzt"},
     {L"quota-value", L"Used up", L"Aufgebraucht"},
@@ -2867,6 +2868,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"quota-reset", L"Resets {when}", L"Se reinicia {when}"},
     {L"quota-unit", L"left", L"restante"},
     {L"quota-unit", L"used", L"usado"},
+    {L"quota-unit-order", L"{number} {unit}", L"{number} {unit}"},
     {L"quota-value", L"Available", L"Disponible"},
     {L"quota-value", L"Unlimited", L"Ilimitado"},
     {L"quota-value", L"Used up", L"Agotado"},
@@ -4126,6 +4128,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"quota-reset", L"Resets {when}", L"Réinitialisation {when}"},
     {L"quota-unit", L"left", L"restant"},
     {L"quota-unit", L"used", L"utilisé"},
+    {L"quota-unit-order", L"{number} {unit}", L"{number} {unit}"},
     {L"quota-value", L"Available", L"Disponible"},
     {L"quota-value", L"Unlimited", L"Illimité"},
     {L"quota-value", L"Used up", L"Épuisé"},
@@ -5216,6 +5219,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"quota-reset", L"Resets {when}", L"リセット: {when}"},
     {L"quota-unit", L"left", L"残り"},
     {L"quota-unit", L"used", L"使用済み"},
+    {L"quota-unit-order", L"{number} {unit}", L"{unit} {number}"},
     {L"quota-value", L"Available", L"利用可能"},
     {L"quota-value", L"Unlimited", L"無制限"},
     {L"quota-value", L"Used up", L"使い切り"},
@@ -6420,6 +6424,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"quota-reset", L"Resets {when}", L"Reinicia {when}"},
     {L"quota-unit", L"left", L"restante"},
     {L"quota-unit", L"used", L"usado"},
+    {L"quota-unit-order", L"{number} {unit}", L"{number} {unit}"},
     {L"quota-value", L"Available", L"Disponível"},
     {L"quota-value", L"Unlimited", L"Ilimitado"},
     {L"quota-value", L"Used up", L"Esgotado"},
@@ -7626,6 +7631,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"quota-reset", L"Resets {when}", L"Сброс {when}"},
     {L"quota-unit", L"left", L"осталось"},
     {L"quota-unit", L"used", L"использовано"},
+    {L"quota-unit-order", L"{number} {unit}", L"{number} {unit}"},
     {L"quota-value", L"Available", L"Доступно"},
     {L"quota-value", L"Unlimited", L"Без лимита"},
     {L"quota-value", L"Used up", L"Исчерпано"},
@@ -8665,6 +8671,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"quota-reset", L"Resets {when}", L"{when}重置"},
     {L"quota-unit", L"left", L"剩余"},
     {L"quota-unit", L"used", L"已用"},
+    {L"quota-unit-order", L"{number} {unit}", L"{unit} {number}"},
     {L"quota-value", L"Available", L"可用"},
     {L"quota-value", L"Unlimited", L"无限制"},
     {L"quota-value", L"Used up", L"已用完"},
@@ -10336,6 +10343,8 @@ struct FlyoutQuotaRow {
     FrameworkElement labels{nullptr};
     FrameworkElement details{nullptr};
     TextBlock name{nullptr};
+    // The number, its over-pace arrow and its unit, on one line.
+    FrameworkElement value{nullptr};
     TextBlock number{nullptr};
     TextBlock unit{nullptr};
     FrameworkElement trend{nullptr};
@@ -10386,6 +10395,9 @@ struct FlyoutPopup {
     // (SettleFlyoutMaterial).
     winrt::Windows::UI::Composition::Visual materialVisual{nullptr};
 
+    // The header row, and its tooltip's text (empty: none).
+    FrameworkElement header{nullptr};
+    std::wstring headerTip;
     TextBlock title{nullptr};
     FrameworkElement staleMarker{nullptr};
     // The provider status line under the header, its button (opening the status page; its tooltip
@@ -17697,17 +17709,18 @@ static constexpr double kHeadlineKeyScale = 9.0 / 14;
 // HeadlineCountdownReserve for it.
 static constexpr PCWSTR kHeadlineCountdownArrow = L"\u21BB ";
 
-// The countdown's hours-and-minutes form at zeros, behind the arrow, in the locale: the width a
-// headline tile reserves, so minute ticks keep it.
-static std::wstring HeadlineCountdownReserve(const I18nLocale& locale) {
-    return kHeadlineCountdownArrow + I18nText(locale, TrCtx(L"taskbar-countdown", L"{hours}h {minutes}m"),
-                                              {{L"hours", L"00"}, {L"minutes", L"00"}});
-}
+// Taskbar text styles: XAML's default font (Segoe UI Variable, its optical size following the
+// font size), regular or semibold, and the tiles' Display instance, semibold.
+enum class TileFont : uint8_t { Text, TextSemiBold, Display };
+// `text`'s width in DIPs in `font` at `size` DIPs, in the frame's language, as its renderer lays
+// it out: detached XAML probes on the taskbar (tiles.h), DirectWrite in the settings preview. Every
+// width of text the model and the renderers reserve or place comes from it.
+using TileTextMeasure = std::function<double(std::wstring_view text, TileFont font, double size)>;
 
 // Quota window keys on bar labels and tiles, compact in every language: each slot's, then
 // Antigravity's Gemini Argon weekly ("Ar" for "Fa"), OpenAI's credits ("Cr" for "Ex"), and GitHub
 // Copilot's monthly AI credits and OpenCode Go's monthly ("Mo" for "Ex"). QuotaKey picks an
-// account's; tiles reserve the widest of them all.
+// account's; bars and tiles reserve the widest of them all (WidestQuotaKey).
 static constexpr I18nKey kQuotaKeys[] = {
     TrCtx(L"quota-key-2-chars", L"5h"), TrCtx(L"quota-key-2-chars", L"7d"), TrCtx(L"quota-key-2-chars", L"Fa"),
     TrCtx(L"quota-key-2-chars", L"Ex"), TrCtx(L"quota-key-2-chars", L"Ar"), TrCtx(L"quota-key-2-chars", L"Cr"),
@@ -17720,6 +17733,32 @@ static std::wstring QuotaKey(const I18nLocale& locale, std::wstring_view provide
     if (slot == kExtraUsageBar && provider == L"openai") key = 5;
     if (slot == kExtraUsageBar && (provider == L"copilot" || provider == L"opencode")) key = 6;
     return I18nText(locale, kQuotaKeys[key]);
+}
+
+static double WidestQuotaKey(const I18nLocale& locale, const TileTextMeasure& measure, TileFont font, double size) {
+    double widest = 0;
+    for (I18nKey key : kQuotaKeys) widest = std::max(widest, measure(I18nText(locale, key), font, size));
+    return widest;
+}
+
+// The width a headline tile reserves for its countdown in regular text at `size` DIPs: its widest
+// form behind the arrow (every timed form with two-digit numbers, now and no reset), so the tile
+// keeps its width as the countdown ticks or changes state.
+static double HeadlineCountdownReserve(const I18nLocale& locale, const TileTextMeasure& measure, double size) {
+    const std::wstring forms[] = {
+        I18nText(locale, TrCtx(L"taskbar-countdown", L"{days}d {hours}h"), {{L"days", L"00"}, {L"hours", L"00"}}),
+        I18nText(locale, TrCtx(L"taskbar-countdown", L"{days}d"), {{L"days", L"00"}}),
+        I18nText(locale, TrCtx(L"taskbar-countdown", L"{hours}h {minutes}m"), {{L"hours", L"00"}, {L"minutes", L"00"}}),
+        I18nText(locale, TrCtx(L"taskbar-countdown", L"{hours}h"), {{L"hours", L"00"}}),
+        I18nText(locale, TrCtx(L"taskbar-countdown", L"{minutes}m"), {{L"minutes", L"00"}}),
+        I18nText(locale, TrCtx(L"taskbar-countdown", L"now")),
+        I18nText(locale, TrCtx(L"taskbar-countdown", L"no reset")),
+    };
+    double widest = 0;
+    for (const std::wstring& form : forms) {
+        widest = std::max(widest, measure(kHeadlineCountdownArrow + form, TileFont::Text, size));
+    }
+    return widest;
 }
 
 // An extra quota's name in the details flyout: as reported, then the length of the window it was
@@ -17781,9 +17820,8 @@ static ULONGLONG SparklineAroundMs(SparklineSpan span) {
     }
 }
 // Chart text, 3 DIPs in from the plot's edges: the weekly chart's extra usage, its key, then the
-// number, kSparkExtraKeyGap DIPs apart. Text placement estimates widths at kSparkTextWidthShare
-// of the font size per character, generously.
-static constexpr double kSparkExtraKeyGap = 2, kSparkTextInset = 3, kSparkTextWidthShare = 0.6;
+// number, kSparkExtraKeyGap DIPs apart.
+static constexpr double kSparkExtraKeyGap = 2, kSparkTextInset = 3;
 // Sparkline fills' and guides' alpha over their usage or pace color.
 static constexpr uint32_t kSparkAreaAlpha = 0x47000000, kSparkGuideAlpha = 0x80000000;
 
@@ -17975,8 +18013,10 @@ static constexpr TileArc kSegmentedArcs[kQuotaBarCount][kQuotaBarCount] = {
     {{190, 70}, {280, 70}, {10, 70}, {100, 70}},
 };
 static constexpr TileArc kConcentricArc{270, 360};
-// A gauge's arc: open at the bottom, filling clockwise from its lower left.
+// A gauge's arc: open at the bottom, filling clockwise from its lower left. Its key's smallest
+// font, and its clearance from the arc's ends, in DIPs.
 static constexpr TileArc kGaugeArc{135, 270};
+static constexpr double kGaugeKeyFontMin = 6, kGaugeKeyClear = 2;
 // A rounded square's centreline corner radius, as a share of its size.
 static constexpr double kTileSquareCornerShare = 0.22;
 // Ring, square and pie pace ticks: a core over a halo, square ended, reaching past the meter.
@@ -18233,10 +18273,14 @@ static BadgeColors BadgeColorsFor(COLORREF color, bool light) {
 struct MeterDisplay {
     ULONGLONG now;
     I18nLocale locale;        // The keys' and the countdown's language.
+    TileTextMeasure measure;  // Text widths in that language, as the renderer lays text out.
     BarMode barMode;
     int barLength;            // 10-500 DIPs.
     int barThickness;         // 2-50 DIPs.
     int barGap;               // 0-500 DIPs.
+    // Bars' quota key column, while keys show (else 0): the widest key at the percent font,
+    // rounded up to a whole DIP, then 3 DIPs before the bar.
+    double barKeyColumn;
     BarStyle barStyle;
     int ringSize;             // kRingSizeMin-kRingSizeMax DIPs.
     int ringThickness;        // kRingThicknessMin-kRingThicknessMax DIPs.
@@ -18283,16 +18327,12 @@ struct MeterDisplay {
     double sideWidth;
 };
 
-// A bar label column's width beside stacked or vertical bars, at the percent font size.
-static double BarLabelColumnWidth(int percentFontSize) {
-    return std::ceil(percentFontSize * 1.4) + 3.0;
-}
-
-// `locale`: the frame's language. `taskbarHeight`: the taskbar's height in DIPs, 0 if unknown (or
-// on a side); tiles leave 4 DIPs above and below them. `sideWidth`: MeterDisplay::sideWidth.
-static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& locale, ULONGLONG now,
-                                    double rasterizationScale, double taskbarHeight,
-                                    double sideWidth = 0) {
+// `locale`: the frame's language, `measure` its text widths. `taskbarHeight`: the taskbar's height
+// in DIPs, 0 if unknown (or on a side); tiles leave 4 DIPs above and below them. `sideWidth`:
+// MeterDisplay::sideWidth.
+static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& locale,
+                                    const TileTextMeasure& measure, ULONGLONG now, double rasterizationScale,
+                                    double taskbarHeight, double sideWidth = 0) {
     int yellow = std::clamp(settings.yellowThreshold, 0, 100);
     int orange = std::clamp(settings.orangeThreshold, yellow, 100);
     sideWidth = std::isfinite(sideWidth) ? std::max(sideWidth, 0.0) : 0.0;
@@ -18302,6 +18342,8 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& 
         return sideWidth > 0 ? std::max(minimum, std::min(value, across - (int)std::ceil(reserved))) : value;
     };
     bool stacked = settings.barLayout == BarLayout::Stacked;
+    double keyColumn = settings.showBarLabels && !IsTileLayout(settings.barLayout) ?
+        std::ceil(WidestQuotaKey(locale, measure, TileFont::Text, std::clamp(settings.percentFontSize, 6, 24))) + 3 : 0;
     double readingScale =
         std::clamp(settings.sparklineReadingScale, kSparklineReadingScaleMin, kSparklineReadingScaleMax) / 100.0;
     // A chart's current reading reaches past its sides by its mark (as kSparkOverflow); beyond
@@ -18310,12 +18352,13 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& 
     return {
         .now = now,
         .locale = locale,
+        .measure = measure,
         .barMode = settings.barMode,
-        .barLength = stacked ? fit(std::clamp(settings.barLength, 10, 500), 10,
-                                   settings.showBarLabels ? BarLabelColumnWidth(settings.percentFontSize) : 0) :
+        .barLength = stacked ? fit(std::clamp(settings.barLength, 10, 500), 10, keyColumn) :
                                std::clamp(settings.barLength, 10, 500),
         .barThickness = std::clamp(settings.barThickness, 2, 50),
         .barGap = std::clamp(settings.barGap, 0, 500),
+        .barKeyColumn = keyColumn,
         .barStyle = settings.barStyle == BarStyle::Rail ? BarStyle::Rail : BarStyle::Track,
         .ringSize = fit(std::clamp(settings.ringSize, kRingSizeMin, kRingSizeMax), kRingSizeMin),
         .ringThickness = std::clamp(settings.ringThickness, kRingThicknessMin, kRingThicknessMax),
@@ -19141,9 +19184,32 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         // Three digits fit across the hole; the key sits in the opening, between the arc's ends.
         const TileRingGeometry& g = meters.ring;
         meters.faceFont = std::clamp(std::min(g.size * 0.375, (2 * g.hole - 2) / 1.75), 7.0, 16.0);
-        meters.faceKeyFont = std::max(6.0, meters.faceFont * kHeadlineKeyScale);
+        meters.faceKeyFont = std::max(kGaugeKeyFontMin, meters.faceFont * kHeadlineKeyScale);
         meters.faceNumberCenter = g.size / 2 - 0.5;
         meters.faceKeyCenter = g.size / 2 + g.radius * 0.75;
+        // A key too wide for the opening shrinks a quarter DIP at a time, measured at each size,
+        // down to kGaugeKeyFontMin, until it keeps kGaugeKeyClear DIPs from the arc's ends on
+        // either side. Over the key's line, from an em above its baseline down to it, the opening
+        // is narrowest where the arc's inner edge ends: below that the ends are cut along the
+        // radius, above it the inner edge closes in.
+        if (top >= 0) {
+            const double inner = g.radius - g.stroke / 2, outer = g.radius + g.stroke / 2;
+            const double end = (kGaugeArc.start + kGaugeArc.sweep - 360) * std::numbers::pi / 180;
+            const std::wstring key = QuotaKey(display.locale, account.provider, top);
+            // Whether the key clears the arc's ends at `size`, by half the opening's width over
+            // its line at that size, from the face's middle.
+            auto fits = [&](double size) {
+                double baseline = meters.faceKeyCenter - g.size / 2 + size * kTileCapShare / 2;
+                double y = std::clamp(inner * std::sin(end), baseline - size, baseline);
+                double room = y >= outer * std::sin(end) ? g.size / 2 :
+                              y >= inner * std::sin(end) ? y / std::tan(end) :
+                                                           std::sqrt(std::max(inner * inner - y * y, 0.0));
+                return display.measure(key, TileFont::Text, size) / 2 + kGaugeKeyClear <= room;
+            };
+            double size = meters.faceKeyFont;
+            while (size > kGaugeKeyFontMin && !fits(size)) size = std::max(size - 0.25, kGaugeKeyFontMin);
+            meters.faceKeyFont = size;
+        }
     }
     if (ring) {
         if (badgeChars) {
@@ -19535,20 +19601,21 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 if (wu.pct >= 0) reading(width - mark, yAt(wu.pct));
             }
 
-            // Text, in boxes estimated from its length: the key at the right, the weekly chart's
-            // extra usage at the left, on the top or bottom edge.
+            // Text, in boxes as wide as it measures and a cap height tall: the key at the right,
+            // the weekly chart's extra usage at the left, on the top or bottom edge.
             struct TextBox {
                 double left, right;
                 bool top;
             };
-            double cap = meters.sparkKeyFont * kTileCapShare, inset = kSparkTextInset;
+            const double font = meters.sparkKeyFont, cap = font * kTileCapShare, inset = kSparkTextInset;
             auto boxTop = [&](TextBox box) { return box.top ? inset : height - inset - cap; };
-            double keyLeft = width - inset - m.key.size() * meters.sparkKeyFont * kSparkTextWidthShare;
+            double keyLeft = width - inset - display.measure(m.key, TileFont::TextSemiBold, font);
             double extraRight = inset;
             if (w == kWeeklyBar && !meters.sparkExtraText.empty()) {
-                double chars = double(meters.sparkExtraKey.size() + meters.sparkExtraText.size());
-                extraRight += chars * meters.sparkKeyFont * kSparkTextWidthShare +
-                              (meters.sparkExtraKey.empty() ? 0 : kSparkExtraKeyGap);
+                extraRight += display.measure(meters.sparkExtraText, TileFont::TextSemiBold, font);
+                if (!meters.sparkExtraKey.empty()) {
+                    extraRight += display.measure(meters.sparkExtraKey, TileFont::Text, font) + kSparkExtraKeyGap;
+                }
             }
             // Text moves to the plot's other edge, clear of the current reading's mark: the key
             // from the bottom-right corner to the top-right, the extra usage from the top-left to
@@ -19840,18 +19907,35 @@ static void SetXamlToolTip(DependencyObject const& element, std::wstring const& 
     ToolTipService::SetToolTip(element, tip);
 }
 
-// Text width per DIP of font size, measured out of the tree in the frame's language, which the
-// tree won't pass down there; estimated if measuring fails.
-static double TileTextWidthPerPt(TextBlock const& text, I18nLocale const& locale) {
+// The taskbar's TileTextMeasure in the frame's language: a probe out of the tree, which the tree
+// won't give the language there. Text it measures nothing for counts an em a character, as wide as
+// any script draws one. Taskbar UI thread only, like the probe.
+static TileTextMeasure XamlTileTextMeasure(I18nLocale const& locale) {
+    TextBlock probe{nullptr};
     try {
-        SetXamlLanguage(text, locale);
-        text.Measure({INFINITY, INFINITY});
-        double width = text.DesiredSize().Width;
-        if (width > 0 && text.FontSize() > 0) return width / text.FontSize();
-        return std::max<size_t>(text.Text().size(), 1) * 0.62;
-    } catch (...) {
-        return 2.5;
-    }
+        probe = TextBlock{};
+        SetXamlLanguage(probe, locale);
+    } catch (...) {}
+    return [probe](std::wstring_view text, TileFont font, double size) {
+        const double ems = double(text.size()) * size;
+        if (!probe || text.empty()) return ems;
+        try {
+            if (font == TileFont::Display) {
+                probe.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));  // i18n-en
+            } else {
+                probe.ClearValue(TextBlock::FontFamilyProperty());
+            }
+            probe.FontWeight(font == TileFont::Text ? winrt::Windows::UI::Text::FontWeights::Normal() :
+                                                      winrt::Windows::UI::Text::FontWeights::SemiBold());
+            probe.FontSize(size);
+            probe.Text(winrt::hstring(text));
+            probe.Measure({INFINITY, INFINITY});
+            double width = probe.DesiredSize().Width;
+            return width > 0 ? width : ems;
+        } catch (...) {
+            return ems;
+        }
+    };
 }
 
 // Builds account `index`'s identity into `tile`: the provider logo (in its brand colors when
@@ -19944,7 +20028,7 @@ static Grid BuildTileIdentity(std::vector<AccountConfig> const& accounts, size_t
         tile.text.TextLineBounds(TextLineBounds::Tight);
         tile.text.HorizontalAlignment(HorizontalAlignment::Center);
         tile.text.VerticalAlignment(VerticalAlignment::Center);
-        tile.textWidthPerPt = TileTextWidthPerPt(tile.text, display.locale);
+        tile.textWidthPerPt = display.measure(identityText.text, TileFont::Display, 10) / 10;
         if (!ring) {
             // Shrinks to fit 26 DIPs, then clips.
             tile.text.FontSize(std::clamp(26 / tile.textWidthPerPt, 8.0, 12.0));
@@ -20178,28 +20262,17 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     numberRow.Children().Append(tile.headlineKey);
     // The key follows the number; the row reserves "100%" and the widest key so the tile keeps
     // its width as values change.
-    tile.headline.Text(L"100%");
-    double reserve = std::ceil(TileTextWidthPerPt(tile.headline, display.locale) * fontSize) + 3;
-    tile.headline.Text(L"");
-    double keyWidth = 0;
-    for (I18nKey key : kQuotaKeys) {
-        tile.headlineKey.Text(I18nText(display.locale, key));
-        keyWidth = std::max(keyWidth, TileTextWidthPerPt(tile.headlineKey, display.locale) * keySize);
-    }
-    tile.headlineKey.Text(L"");
-    numberRow.MinWidth(reserve + std::ceil(keyWidth));
+    double reserve = std::ceil(display.measure(L"100%", TileFont::Display, fontSize)) + 3;
+    numberRow.MinWidth(reserve + std::ceil(WidestQuotaKey(display.locale, display.measure, TileFont::Text, keySize)));
     headline.Children().Append(numberRow);
     if (display.headlineCountdown) {
-        // Behind a reset arrow; reserves its hours-and-minutes form, so minute ticks keep the
-        // tile's width.
+        // Behind a reset arrow; reserves its widest form, so the tile keeps its width.
         tile.countdown = TextBlock{};
         tile.countdown.FontSize(keySize);
         tile.countdown.Opacity(0.7);
         tile.countdown.TextLineBounds(TextLineBounds::Tight);
         tile.countdown.HorizontalAlignment(HorizontalAlignment::Left);
-        tile.countdown.Text(HeadlineCountdownReserve(display.locale));
-        tile.countdown.MinWidth(std::ceil(TileTextWidthPerPt(tile.countdown, display.locale) * keySize));
-        tile.countdown.Text(L"");
+        tile.countdown.MinWidth(std::ceil(HeadlineCountdownReserve(display.locale, display.measure, keySize)));
         headline.Children().Append(tile.countdown);
     } else {
         meters.Orientation(Orientation::Horizontal);
@@ -20300,18 +20373,8 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
             // Each shown cell in its place; keys reserve the widest key and numbers "100%" at
             // their fonts, so the tile keeps its width as numbers change. Spacing goes only
             // between rows and columns in use.
-            TextBlock keyProbe, valueProbe;
-            keyProbe.FontSize(meters.matrixKeyFont);
-            double keyWidth = 0;
-            for (I18nKey key : kQuotaKeys) {
-                keyProbe.Text(I18nText(display.locale, key));
-                keyWidth = std::max(keyWidth, TileTextWidthPerPt(keyProbe, display.locale) * meters.matrixKeyFont);
-            }
-            valueProbe.FontFamily(FontFamily(L"Segoe UI Variable Display, Segoe UI"));  // i18n-en
-            valueProbe.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-            valueProbe.FontSize(meters.matrixFont);
-            valueProbe.Text(L"100%");
-            double valueWidth = TileTextWidthPerPt(valueProbe, display.locale) * meters.matrixFont;
+            double keyWidth = WidestQuotaKey(display.locale, display.measure, TileFont::Text, meters.matrixKeyFont);
+            double valueWidth = display.measure(L"100%", TileFont::Display, meters.matrixFont);
             int rows = 1, columns = 1;
             for (int w = 0; w < kQuotaBarCount; w++) {
                 if (!tile.matrixCells[w]) continue;
@@ -20441,9 +20504,9 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                 }
                 tile.warn.Margin({0, meters.ringWarnTop, -3, 0});
             } else if (tile.headline && tile.headlineKey) {
-                // A gauge's number and key at their fonts and centres.
+                // A gauge's number at its font, and both at their centres; the key's font follows
+                // the key (below).
                 tile.headline.FontSize(meters.faceFont);
-                tile.headlineKey.FontSize(meters.faceKeyFont);
                 double middle = meters.faceHeight / 2;
                 if (auto shift = tile.headline.RenderTransform().try_as<TranslateTransform>()) {
                     shift.Y(meters.faceNumberCenter - middle);
@@ -20592,12 +20655,15 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     }
 
     if (tile.headlineKey) {
-        std::wstring headline = meters.headline + L"\n" + meters.headlineKey + L"\n" + meters.headlineCountdown;
+        // A gauge's key font fits its key, so it follows the text.
+        std::wstring headline = meters.headline + L"\n" + meters.headlineKey + L"\n" + meters.headlineCountdown + L"\n" +
+                                std::to_wstring(meters.faceKeyFont);
         if (headline != ap.headline || meters.headlineColor != ap.headlineColor) {
             if (tile.headline) {
                 tile.headline.Text(meters.headline);
                 tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
             }
+            if (face) tile.headlineKey.FontSize(meters.faceKeyFont);
             tile.headlineKey.Text(meters.headlineKey);
             if (tile.countdown) tile.countdown.Text(meters.headlineCountdown);
             ap.headline = std::move(headline);
@@ -21002,6 +21068,11 @@ struct FlyoutDisplay {
     I18nLocale locale;  // The grid's language
 };
 
+// The card's width, the widest its title grows before it's cut, and the widest a quota row's name
+// grows before it wraps (DIP).
+static constexpr double kFlyoutCardWidth = 420;
+static constexpr double kFlyoutTitleMaxWidth = 170;
+static constexpr double kFlyoutNameMaxWidth = 160;
 // Quota rows' details cell margins (DIP).
 static constexpr double kFlyoutDetailsLeft = 12;
 static constexpr double kFlyoutDetailsRight = 16;
@@ -21064,8 +21135,12 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     const I18nLocale& locale = state.buildLocale;
     FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");  // i18n-en
     FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");  // i18n-en
-    auto makeText = [](double size, Brush const& brush) {
+    // The presenter's font (ShowAccountFlyout), set on the text itself: UpdateAccountFlyout
+    // measures the card before it is presented.
+    FontFamily textFont(L"Segoe UI Variable Text, Segoe UI");  // i18n-en
+    auto makeText = [&](double size, Brush const& brush) {
         TextBlock text;
+        text.FontFamily(textFont);
         text.FontSize(size);
         text.Foreground(brush);
         text.TextWrapping(TextWrapping::Wrap);
@@ -21129,10 +21204,13 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     };
 
     // Header: logo (in its brand colors when chosen, except in high contrast), account label,
-    // provider, stale marker and plan chip.
+    // provider, stale marker and plan chip; its tooltip holds them whole when they're cut
+    // (UpdateAccountFlyout), so it takes the pointer.
     Grid header;
     header.Padding({16, 12, 16, 12});
+    header.Background(FlyoutBrush(winrt::Windows::UI::Colors::Transparent()));
     for (int column = 0; column < 5; column++) addColumn(header, column == 2 ? kStar : kAuto);
+    popup.header = header;
     try {
         LogoBrands brands;
         {
@@ -21156,7 +21234,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     popup.title.FontFamily(displayFont);
     popup.title.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
     popup.title.LineHeight(24);
-    popup.title.MaxWidth(170);
+    popup.title.MaxWidth(kFlyoutTitleMaxWidth);
     popup.title.VerticalAlignment(VerticalAlignment::Center);
     singleLine(popup.title);
     Grid::SetColumn(popup.title, 1);
@@ -21267,6 +21345,11 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     rowsScroller.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
     rowsScroller.Content(rowsGrid);
     appendSection(rowsScroller, kStar);
+    // The number and its unit ("45%", "used") in the language's order: its template's arguments'
+    // order counts, the gap between them stays 4 DIPs.
+    const std::wstring order = I18nText(locale, TrCtx(L"quota-unit-order", L"{number} {unit}"),
+                                        {{L"number", L"\x1"}, {L"unit", L"\x2"}});
+    const bool unitFirst = order.find(L'\x2') < order.find(L'\x1');
     auto addRow = [&](FlyoutQuotaRow& row, bool charted) {
         int gridRow = (int)rowsGrid.RowDefinitions().Size();
         RowDefinition rowDefinition;
@@ -21290,11 +21373,13 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         row.name = makeText(13, theme.text);
         row.name.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
         row.name.LineHeight(17);
+        row.name.MaxWidth(kFlyoutNameMaxWidth);
         names.Children().Append(row.name);
 
         StackPanel value;
         value.Orientation(Orientation::Horizontal);
         value.Margin({0, 1, 0, 0});
+        row.value = value;
         row.number = makeText(26, theme.text);
         row.number.FontFamily(displayFont);
         row.number.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
@@ -21302,7 +21387,6 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         row.number.LineStackingStrategy(LineStackingStrategy::BlockLineHeight);
         row.number.CharacterSpacing(-19);
         row.number.TextWrapping(TextWrapping::NoWrap);
-        value.Children().Append(row.number);
 
         Grid arrow;
         arrow.Width(16);
@@ -21325,16 +21409,19 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         trend.IsHitTestVisible(false);
         trend.Child(arrow);
         collapsed(trend);
-        value.Children().Append(trend);
         row.trend = trend;
 
         row.unit = makeText(12.5, theme.mutedText);
         row.unit.LineHeight(16);
         row.unit.LineStackingStrategy(LineStackingStrategy::BlockLineHeight);
         row.unit.TextWrapping(TextWrapping::NoWrap);
-        row.unit.Margin({4, 0, 0, 3});
+        row.unit.Margin(unitFirst ? Thickness{0, 0, 4, 3} : Thickness{4, 0, 0, 3});
         row.unit.VerticalAlignment(VerticalAlignment::Bottom);
-        value.Children().Append(row.unit);
+        // The over-pace arrow follows the number.
+        if (unitFirst) value.Children().Append(row.unit);
+        value.Children().Append(row.number);
+        value.Children().Append(trend);
+        if (!unitFirst) value.Children().Append(row.unit);
         names.Children().Append(value);
         rowsGrid.Children().Append(names);
 
@@ -21476,13 +21563,10 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     for (FlyoutQuotaRow& row : popup.rows) addRow(row, true);
     if (provider == L"anthropic" || provider == L"openai" || provider == L"antigravity") {
         popup.extraRows.resize(kMaxExtraQuotas);
-        for (FlyoutQuotaRow& row : popup.extraRows) {
-            addRow(row, false);
-            row.name.MaxWidth(160);  // Long limit names wrap.
-        }
+        for (FlyoutQuotaRow& row : popup.extraRows) addRow(row, false);
     }
 
-    // Chart legend: line keys, then the data source.
+    // Chart legend: line keys, then the data source, wrapping in the rest of the row.
     Grid legendGrid;
     addColumn(legendGrid, kAuto);
     addColumn(legendGrid, kStar);
@@ -21512,7 +21596,6 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     }
     legendGrid.Children().Append(keys);
     TextBlock source = makeText(11, theme.mutedText);
-    singleLine(source);
     source.Text(I18nText(locale, TrCtx(L"flyout-legend", L"from local history")));
     source.TextAlignment(TextAlignment::Right);
     source.VerticalAlignment(VerticalAlignment::Center);
@@ -21541,9 +21624,10 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     popup.notes = notesSection;
     appendSection(notesSection, kAuto);
 
-    // Footer: update status and actions.
+    // Footer: update status, wrapping beside the actions (the footer grows from 40 DIPs to hold
+    // it), and the actions.
     Grid footer;
-    footer.Height(40);
+    footer.MinHeight(40);
     footer.Padding({16, 0, 6, 0});
     footer.Background(theme.footer);
     footer.BorderBrush(theme.separator);
@@ -21553,7 +21637,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     addColumn(footer, kAuto);
     popup.updated = makeText(12, theme.mutedText);
     popup.updated.VerticalAlignment(VerticalAlignment::Center);
-    singleLine(popup.updated);
+    popup.updated.Margin({0, 4, 0, 4});
     footer.Children().Append(popup.updated);
 
     StackPanel buttons;
@@ -21615,7 +21699,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     // The flyout shows outside the tree: its card takes the language itself.
     Border card;
     SetXamlLanguage(card, locale);
-    card.Width(420);
+    card.Width(kFlyoutCardWidth);
     card.CornerRadius({8, 8, 8, 8});
     card.BorderThickness({1, 1, 1, 1});
     card.BorderBrush(theme.cardBorder);
@@ -22024,7 +22108,10 @@ static void UpdateAccountFlyout(
 
         show(popup.legend, anyChart);
         // With charts the details column fits the fixed-width chart and names take the rest;
-        // otherwise names fit their widest entry and bars take the rest.
+        // otherwise names fit their widest entry and bars take the rest. Names wrap past
+        // kFlyoutNameMaxWidth or their column, a number and its unit never: with charts the card
+        // grows past its width for one that its names column can't hold (a long unit, a word for
+        // the number).
         if (popup.namesColumn && popup.detailsColumn &&
             (popup.namesColumn.Width().GridUnitType == GridUnitType::Star) != anyChart) {
             popup.namesColumn.Width(anyChart ? GridLength{1, GridUnitType::Star} :
@@ -22033,6 +22120,37 @@ static void UpdateAccountFlyout(
                 GridLength{kFlyoutDetailsLeft + kFlyoutChartWidth + kFlyoutDetailsRight,
                            GridUnitType::Pixel} :
                 GridLength{1, GridUnitType::Star});
+        }
+        double cardWidth = kFlyoutCardWidth;
+        for (size_t i = 0; anyChart && i < kMainRows + popup.extraRows.size(); i++) {
+            FlyoutQuotaRow& row = i < kMainRows ? popup.rows[i] : popup.extraRows[i - kMainRows];
+            if (!row.labels || !row.value || row.labels.Visibility() != Visibility::Visible) continue;
+            row.value.Measure({INFINITY, INFINITY});
+            double names = row.labels.Margin().Left + row.value.DesiredSize().Width;
+            cardWidth = std::max(cardWidth, std::ceil(names) + kFlyoutDetailsLeft + kFlyoutChartWidth +
+                                                kFlyoutDetailsRight + 2);
+        }
+        if (popup.card.Width() != cardWidth) popup.card.Width(cardWidth);
+
+        // The header's texts whole in its tooltip while the label passes its cap or the row the
+        // card's width.
+        if (popup.header) {
+            TileTextMeasure measure = XamlTileTextMeasure(locale);
+            popup.header.Measure({INFINITY, INFINITY});
+            bool cut = measure(account.label, TileFont::Display, 20) > kFlyoutTitleMaxWidth ||
+                       popup.header.DesiredSize().Width > cardWidth - 2;
+            std::wstring tip = !cut        ? L"" :
+                               plan.empty() ? account.label + L" \u00B7 " + ProviderDisplayName(account.provider) :
+                                              account.label + L" \u00B7 " + ProviderDisplayName(account.provider) +
+                                                  L" \u00B7 " + plan;
+            if (tip != popup.headerTip) {
+                if (tip.empty()) {
+                    ToolTipService::SetToolTip(popup.header, nullptr);
+                } else {
+                    SetXamlToolTip(popup.header, tip, locale);
+                }
+                popup.headerTip = std::move(tip);
+            }
         }
 
         std::wstring freeResets;
@@ -22326,7 +22444,9 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         popup.theme = LoadFlyoutTheme();
         Border card = BuildFlyoutCard(state, provider, state.buildVisualTestMode);
         // The card fits the screen beyond the taskbar, less the gap and a margin; its quota rows
-        // scroll past that. A taskbar down a side has the screen's height beside it.
+        // scroll past that. A taskbar down a side has the screen's height beside it. Its width,
+        // grown past kFlyoutCardWidth for a long value (UpdateAccountFlyout), stays within the
+        // screen's less a margin each side.
         RECT taskbar{};
         MONITORINFO monitor{sizeof(monitor)};
         double scale = xamlRoot.RasterizationScale();
@@ -22338,6 +22458,8 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
             if (roomPx < screenPx / 2) roomPx = screenPx;
             double roomDips = roomPx / scale - kFlyoutTaskbarGap - kFlyoutScreenMargin;
             card.MaxHeight(std::max(roomDips, 200.0));
+            double widthDips = (monitor.rcMonitor.right - monitor.rcMonitor.left) / scale - 2 * kFlyoutScreenMargin;
+            card.MaxWidth(std::max(widthDips, kFlyoutCardWidth));
         }
         popup.card = card;
         SettleFlyoutMaterial(fo);
@@ -22579,8 +22701,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 }
             } catch (...) {}
         }
-        MeterDisplay display = MeterDisplayFor(settings, locale, NowUnixMs(), state.rasterizationScale,
-                                               state.taskbarHeight, state.sideWidth);
+        MeterDisplay display = MeterDisplayFor(settings, locale, XamlTileTextMeasure(locale), NowUnixMs(),
+                                               state.rasterizationScale, state.taskbarHeight, state.sideWidth);
         // Down a side taskbar: accounts stack, and each fits its width (stackAccount).
         bool side = display.sideWidth > 0;
         if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, nullptr);
@@ -22870,7 +22992,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                     if (showBarLabels) {
                         ColumnDefinition labelColumn;
-                        labelColumn.Width({BarLabelColumnWidth(percentFontSize), GridUnitType::Pixel});
+                        labelColumn.Width({display.barKeyColumn, GridUnitType::Pixel});
                         ColumnDefinition trackColumn;
                         trackColumn.Width({(double)(verticalBars ? barThickness : barLength),
                                            GridUnitType::Pixel});
@@ -23442,8 +23564,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     // current regional number format: no width measured at build holds a separator, so a change
     // shows from this update on (the flyout's too).
     state.buildLocale = I18nLocale(state.buildLocale.Language(), ReadNumberFormat());
-    MeterDisplay display = MeterDisplayFor(settings, state.buildLocale, NowUnixMs(), state.rasterizationScale,
-                                           state.taskbarHeight, state.sideWidth);
+    MeterDisplay display = MeterDisplayFor(settings, state.buildLocale, XamlTileTextMeasure(state.buildLocale),
+                                           NowUnixMs(), state.rasterizationScale, state.taskbarHeight,
+                                           state.sideWidth);
     ULONGLONG now = display.now;
     if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, &data);
     if (data.size() != accounts.size()) return;
@@ -33582,7 +33705,27 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                                                   const std::vector<OutageLevel>* testOutages = nullptr) {
     using Op = SettingsPreviewOp;
     SettingsPreviewStrip strip;
-    MeterDisplay display = MeterDisplayFor(settings, locale, now, scale, taskbarHeight);
+    // Text as XAML lays it out: natural line height, width rounded up to device pixels.
+    struct Measured {
+        float width, height, baseline, cap;
+    };
+    auto measure = [&](std::wstring_view s, const UiTextStyle& style) {
+        IDWriteTextLayout* layout = UiLayout(g, s, style, 100000, false);
+        DWRITE_LINE_METRICS line{};
+        UINT32 lines = 0;
+        layout->GetLineMetrics(&line, 1, &lines);
+        return Measured{std::ceil(UiLayoutSize(layout).width * scale - 0.01f) / scale, line.height,
+                        line.baseline, UiFontMetricsFor(g, style).capHeight};
+    };
+    // The meter model's text in the fonts the taskbar's XAML resolves (the file comment).
+    MeterDisplay display = MeterDisplayFor(
+        settings, locale,
+        [&](std::wstring_view s, TileFont font, double size) {
+            return double(measure(s, {font == TileFont::Display ? UiFamily::Display : UiFamily::Taskbar, float(size), 0,
+                                      font == TileFont::Text ? DWRITE_FONT_WEIGHT_NORMAL : DWRITE_FONT_WEIGHT_SEMI_BOLD})
+                              .width);
+        },
+        now, scale, taskbarHeight);
     std::vector<AccountConfig> accounts;
     std::vector<AccountData> data;
     BuildVisualTestSnapshot(display, &accounts, &data);
@@ -33612,18 +33755,6 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
     const TilePalette palette = TilePaletteFor(light);
     const PaceMarkColors pace = PaceMarkColorsFor(display.paceTickColor, light);
 
-    // Text as XAML lays it out: natural line height, width rounded up to device pixels.
-    struct Measured {
-        float width, height, baseline, cap;
-    };
-    auto measure = [&](std::wstring_view s, const UiTextStyle& style) {
-        IDWriteTextLayout* layout = UiLayout(g, s, style, 100000, false);
-        DWRITE_LINE_METRICS line{};
-        UINT32 lines = 0;
-        layout->GetLineMetrics(&line, 1, &lines);
-        return Measured{std::ceil(UiLayoutSize(layout).width * scale - 0.01f) / scale, line.height,
-                        line.baseline, UiFontMetricsFor(g, style).capHeight};
-    };
     auto add = [](std::vector<Op>& ops, Op op) { ops.push_back(std::move(op)); };
     auto rect = [&](std::vector<Op>& ops, D2D1_RECT_F r, float radius, uint32_t color, int hover = -1) {
         Op op;
@@ -33769,7 +33900,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             const UiTextStyle labelStyle{UiFamily::Taskbar, float(std::clamp(settings.labelFontSize, 6, 24)), 0,
                                          DWRITE_FONT_WEIGHT_NORMAL};
             const UiTextStyle textStyle{UiFamily::Taskbar, textSize, 0, DWRITE_FONT_WEIGHT_NORMAL};
-            const float keyColumn = std::ceil(textSize * 1.4f) + 3;
+            const float keyColumn = float(display.barKeyColumn);
             const BarGeometry geometry = BarGeometryFor(display);
             const float timeSize = float(geometry.timeGap + geometry.timeThickness);
             const float itemWidth = (vertical ? float(th) + timeSize : float(len)) + (keys ? keyColumn : 0);
@@ -34104,9 +34235,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 float cellsLeft = x0 + padLeft + idWidth + 6;
                 UiTextStyle numberStyle{UiFamily::Display, float(meters.matrixFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
                 UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.matrixKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL};
-                float keyReserve = 0;
-                for (I18nKey k : kQuotaKeys) keyReserve = std::max(keyReserve, measure(I18nText(locale, k), keyStyle).width);
-                keyReserve = std::ceil(keyReserve);
+                float keyReserve = float(std::ceil(WidestQuotaKey(locale, display.measure, TileFont::Text, keyStyle.size)));
                 float numberReserve = std::ceil(measure(L"100%", numberStyle).width);
                 std::array<float, 2> numberWidths{numberReserve, numberReserve};
                 float cap = measure(L"0", numberStyle).cap;
@@ -34151,15 +34280,15 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 UiTextStyle keyStyle{UiFamily::Taskbar, fontSize * float(kHeadlineKeyScale), 0, DWRITE_FONT_WEIGHT_NORMAL};
                 Measured number = measure(meters.headline, numberStyle);
                 Measured key = measure(meters.headlineKey, keyStyle);
-                float keyReserve = 0;
-                for (I18nKey k : kQuotaKeys) keyReserve = std::max(keyReserve, measure(I18nText(locale, k), keyStyle).width);
+                float keyReserve = float(WidestQuotaKey(locale, display.measure, TileFont::Text, keyStyle.size));
                 float rowWidth = std::max(std::ceil(measure(L"100%", numberStyle).width) + 3 + std::ceil(keyReserve),
                                           number.width + 3 + key.width);
                 float rowHeight = std::max(number.cap, meters.headlineKey.empty() ? 0.0f : key.cap);
                 const float length = float(display.headlineBarLength), thick = float(display.headlineBarThickness);
                 const bool countdown = display.headlineCountdown;
                 Measured remaining = measure(meters.headlineCountdown, keyStyle);
-                float segments = countdown ? std::max(std::ceil(measure(HeadlineCountdownReserve(locale), keyStyle).width),
+                float segments = countdown ? std::max(float(std::ceil(HeadlineCountdownReserve(locale, display.measure,
+                                                                                                keyStyle.size))),
                                                       remaining.width) :
                                  count     ? count * length + (count - 1) * gap : 0;
                 float panelHeight = rowHeight + (countdown ? 3 + remaining.cap : count ? 3 + thick : 0);
@@ -39857,7 +39986,9 @@ struct HistoryController {
         ULONGLONG now = ops->Now();
         HistoryUiView v;
         v.locale = Busy() ? view.locale : ops->Locale();
-        MeterDisplay display = MeterDisplayFor(s, v.locale, now, 1, 0);
+        // Only staleness is read here: no text is laid out.
+        MeterDisplay display =
+            MeterDisplayFor(s, v.locale, [](std::wstring_view, TileFont, double) { return 0.0; }, now, 1, 0);
         std::map<uint64_t, size_t> configured;
         for (size_t i = 0; i < s.accounts.size(); i++) configured.try_emplace(s.accounts[i].historyId, i);
         for (const HistoryUiAccount& a : accounts) {

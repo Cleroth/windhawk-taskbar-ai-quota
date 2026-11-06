@@ -26,6 +26,11 @@ struct FlyoutDisplay {
     I18nLocale locale;  // The grid's language
 };
 
+// The card's width, the widest its title grows before it's cut, and the widest a quota row's name
+// grows before it wraps (DIP).
+static constexpr double kFlyoutCardWidth = 420;
+static constexpr double kFlyoutTitleMaxWidth = 170;
+static constexpr double kFlyoutNameMaxWidth = 160;
 // Quota rows' details cell margins (DIP).
 static constexpr double kFlyoutDetailsLeft = 12;
 static constexpr double kFlyoutDetailsRight = 16;
@@ -88,8 +93,12 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     const I18nLocale& locale = state.buildLocale;
     FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");  // i18n-en
     FontFamily iconFont(L"Segoe Fluent Icons, Segoe MDL2 Assets");  // i18n-en
-    auto makeText = [](double size, Brush const& brush) {
+    // The presenter's font (ShowAccountFlyout), set on the text itself: UpdateAccountFlyout
+    // measures the card before it is presented.
+    FontFamily textFont(L"Segoe UI Variable Text, Segoe UI");  // i18n-en
+    auto makeText = [&](double size, Brush const& brush) {
         TextBlock text;
+        text.FontFamily(textFont);
         text.FontSize(size);
         text.Foreground(brush);
         text.TextWrapping(TextWrapping::Wrap);
@@ -153,10 +162,13 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     };
 
     // Header: logo (in its brand colors when chosen, except in high contrast), account label,
-    // provider, stale marker and plan chip.
+    // provider, stale marker and plan chip; its tooltip holds them whole when they're cut
+    // (UpdateAccountFlyout), so it takes the pointer.
     Grid header;
     header.Padding({16, 12, 16, 12});
+    header.Background(FlyoutBrush(winrt::Windows::UI::Colors::Transparent()));
     for (int column = 0; column < 5; column++) addColumn(header, column == 2 ? kStar : kAuto);
+    popup.header = header;
     try {
         LogoBrands brands;
         {
@@ -180,7 +192,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     popup.title.FontFamily(displayFont);
     popup.title.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
     popup.title.LineHeight(24);
-    popup.title.MaxWidth(170);
+    popup.title.MaxWidth(kFlyoutTitleMaxWidth);
     popup.title.VerticalAlignment(VerticalAlignment::Center);
     singleLine(popup.title);
     Grid::SetColumn(popup.title, 1);
@@ -291,6 +303,11 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     rowsScroller.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
     rowsScroller.Content(rowsGrid);
     appendSection(rowsScroller, kStar);
+    // The number and its unit ("45%", "used") in the language's order: its template's arguments'
+    // order counts, the gap between them stays 4 DIPs.
+    const std::wstring order = I18nText(locale, TrCtx(L"quota-unit-order", L"{number} {unit}"),
+                                        {{L"number", L"\x1"}, {L"unit", L"\x2"}});
+    const bool unitFirst = order.find(L'\x2') < order.find(L'\x1');
     auto addRow = [&](FlyoutQuotaRow& row, bool charted) {
         int gridRow = (int)rowsGrid.RowDefinitions().Size();
         RowDefinition rowDefinition;
@@ -314,11 +331,13 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         row.name = makeText(13, theme.text);
         row.name.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
         row.name.LineHeight(17);
+        row.name.MaxWidth(kFlyoutNameMaxWidth);
         names.Children().Append(row.name);
 
         StackPanel value;
         value.Orientation(Orientation::Horizontal);
         value.Margin({0, 1, 0, 0});
+        row.value = value;
         row.number = makeText(26, theme.text);
         row.number.FontFamily(displayFont);
         row.number.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
@@ -326,7 +345,6 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         row.number.LineStackingStrategy(LineStackingStrategy::BlockLineHeight);
         row.number.CharacterSpacing(-19);
         row.number.TextWrapping(TextWrapping::NoWrap);
-        value.Children().Append(row.number);
 
         Grid arrow;
         arrow.Width(16);
@@ -349,16 +367,19 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         trend.IsHitTestVisible(false);
         trend.Child(arrow);
         collapsed(trend);
-        value.Children().Append(trend);
         row.trend = trend;
 
         row.unit = makeText(12.5, theme.mutedText);
         row.unit.LineHeight(16);
         row.unit.LineStackingStrategy(LineStackingStrategy::BlockLineHeight);
         row.unit.TextWrapping(TextWrapping::NoWrap);
-        row.unit.Margin({4, 0, 0, 3});
+        row.unit.Margin(unitFirst ? Thickness{0, 0, 4, 3} : Thickness{4, 0, 0, 3});
         row.unit.VerticalAlignment(VerticalAlignment::Bottom);
-        value.Children().Append(row.unit);
+        // The over-pace arrow follows the number.
+        if (unitFirst) value.Children().Append(row.unit);
+        value.Children().Append(row.number);
+        value.Children().Append(trend);
+        if (!unitFirst) value.Children().Append(row.unit);
         names.Children().Append(value);
         rowsGrid.Children().Append(names);
 
@@ -500,13 +521,10 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     for (FlyoutQuotaRow& row : popup.rows) addRow(row, true);
     if (provider == L"anthropic" || provider == L"openai" || provider == L"antigravity") {
         popup.extraRows.resize(kMaxExtraQuotas);
-        for (FlyoutQuotaRow& row : popup.extraRows) {
-            addRow(row, false);
-            row.name.MaxWidth(160);  // Long limit names wrap.
-        }
+        for (FlyoutQuotaRow& row : popup.extraRows) addRow(row, false);
     }
 
-    // Chart legend: line keys, then the data source.
+    // Chart legend: line keys, then the data source, wrapping in the rest of the row.
     Grid legendGrid;
     addColumn(legendGrid, kAuto);
     addColumn(legendGrid, kStar);
@@ -536,7 +554,6 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     }
     legendGrid.Children().Append(keys);
     TextBlock source = makeText(11, theme.mutedText);
-    singleLine(source);
     source.Text(I18nText(locale, TrCtx(L"flyout-legend", L"from local history")));
     source.TextAlignment(TextAlignment::Right);
     source.VerticalAlignment(VerticalAlignment::Center);
@@ -565,9 +582,10 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     popup.notes = notesSection;
     appendSection(notesSection, kAuto);
 
-    // Footer: update status and actions.
+    // Footer: update status, wrapping beside the actions (the footer grows from 40 DIPs to hold
+    // it), and the actions.
     Grid footer;
-    footer.Height(40);
+    footer.MinHeight(40);
     footer.Padding({16, 0, 6, 0});
     footer.Background(theme.footer);
     footer.BorderBrush(theme.separator);
@@ -577,7 +595,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     addColumn(footer, kAuto);
     popup.updated = makeText(12, theme.mutedText);
     popup.updated.VerticalAlignment(VerticalAlignment::Center);
-    singleLine(popup.updated);
+    popup.updated.Margin({0, 4, 0, 4});
     footer.Children().Append(popup.updated);
 
     StackPanel buttons;
@@ -639,7 +657,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     // The flyout shows outside the tree: its card takes the language itself.
     Border card;
     SetXamlLanguage(card, locale);
-    card.Width(420);
+    card.Width(kFlyoutCardWidth);
     card.CornerRadius({8, 8, 8, 8});
     card.BorderThickness({1, 1, 1, 1});
     card.BorderBrush(theme.cardBorder);
@@ -1048,7 +1066,10 @@ static void UpdateAccountFlyout(
 
         show(popup.legend, anyChart);
         // With charts the details column fits the fixed-width chart and names take the rest;
-        // otherwise names fit their widest entry and bars take the rest.
+        // otherwise names fit their widest entry and bars take the rest. Names wrap past
+        // kFlyoutNameMaxWidth or their column, a number and its unit never: with charts the card
+        // grows past its width for one that its names column can't hold (a long unit, a word for
+        // the number).
         if (popup.namesColumn && popup.detailsColumn &&
             (popup.namesColumn.Width().GridUnitType == GridUnitType::Star) != anyChart) {
             popup.namesColumn.Width(anyChart ? GridLength{1, GridUnitType::Star} :
@@ -1057,6 +1078,37 @@ static void UpdateAccountFlyout(
                 GridLength{kFlyoutDetailsLeft + kFlyoutChartWidth + kFlyoutDetailsRight,
                            GridUnitType::Pixel} :
                 GridLength{1, GridUnitType::Star});
+        }
+        double cardWidth = kFlyoutCardWidth;
+        for (size_t i = 0; anyChart && i < kMainRows + popup.extraRows.size(); i++) {
+            FlyoutQuotaRow& row = i < kMainRows ? popup.rows[i] : popup.extraRows[i - kMainRows];
+            if (!row.labels || !row.value || row.labels.Visibility() != Visibility::Visible) continue;
+            row.value.Measure({INFINITY, INFINITY});
+            double names = row.labels.Margin().Left + row.value.DesiredSize().Width;
+            cardWidth = std::max(cardWidth, std::ceil(names) + kFlyoutDetailsLeft + kFlyoutChartWidth +
+                                                kFlyoutDetailsRight + 2);
+        }
+        if (popup.card.Width() != cardWidth) popup.card.Width(cardWidth);
+
+        // The header's texts whole in its tooltip while the label passes its cap or the row the
+        // card's width.
+        if (popup.header) {
+            TileTextMeasure measure = XamlTileTextMeasure(locale);
+            popup.header.Measure({INFINITY, INFINITY});
+            bool cut = measure(account.label, TileFont::Display, 20) > kFlyoutTitleMaxWidth ||
+                       popup.header.DesiredSize().Width > cardWidth - 2;
+            std::wstring tip = !cut        ? L"" :
+                               plan.empty() ? account.label + L" \u00B7 " + ProviderDisplayName(account.provider) :
+                                              account.label + L" \u00B7 " + ProviderDisplayName(account.provider) +
+                                                  L" \u00B7 " + plan;
+            if (tip != popup.headerTip) {
+                if (tip.empty()) {
+                    ToolTipService::SetToolTip(popup.header, nullptr);
+                } else {
+                    SetXamlToolTip(popup.header, tip, locale);
+                }
+                popup.headerTip = std::move(tip);
+            }
         }
 
         std::wstring freeResets;

@@ -230,6 +230,8 @@ struct FlyoutQuotaRow {
     FrameworkElement labels{nullptr};
     FrameworkElement details{nullptr};
     TextBlock name{nullptr};
+    // The number, its over-pace arrow and its unit, on one line.
+    FrameworkElement value{nullptr};
     TextBlock number{nullptr};
     TextBlock unit{nullptr};
     FrameworkElement trend{nullptr};
@@ -280,6 +282,9 @@ struct FlyoutPopup {
     // (SettleFlyoutMaterial).
     winrt::Windows::UI::Composition::Visual materialVisual{nullptr};
 
+    // The header row, and its tooltip's text (empty: none).
+    FrameworkElement header{nullptr};
+    std::wstring headerTip;
     TextBlock title{nullptr};
     FrameworkElement staleMarker{nullptr};
     // The provider status line under the header, its button (opening the status page; its tooltip

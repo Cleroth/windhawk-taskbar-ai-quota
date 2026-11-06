@@ -14,7 +14,7 @@ static void RunDisplayTests() {
             s.showExtraBarAmounts = true; s.showStaleWarning = false; s.barGap = 7; s.barStyle = BarStyle::Rail;
             s.headlineFontSize = 18; s.headlineBarLength = 24; s.headlineBarThickness = 6;
         });
-        MeterDisplay d = MeterDisplayFor(settings, I18nLocale(), kNow, 1.25, 44);
+        MeterDisplay d = MeterDisplayFor(settings, I18nLocale(), TestMeasure, kNow, 1.25, 44);
         CHECK(d.now == kNow); CHECK(d.barMode == BarMode::Remaining);
         CHECK(d.barLength == 120); CHECK(d.barThickness == 6);
         CHECK(d.barGap == 7); CHECK(d.barStyle == BarStyle::Rail);
@@ -2001,7 +2001,7 @@ static void RunSnapshotTests() {
         // Built at the time it's drawn: a day or a month later the same accounts are stale.
         for (ULONGLONG now : {kNow, kNow + 24 * 60 * kMinute, kNow + 30ULL * 24 * 60 * kMinute}) {
             for (int poll : {2, 1440}) {
-                MeterDisplay display = MeterDisplayFor(With([&](Settings& s) { s.pollMinutes = poll; }), I18nLocale(), now, 1, 48);
+                MeterDisplay display = MeterDisplayFor(With([&](Settings& s) { s.pollMinutes = poll; }), I18nLocale(), TestMeasure, now, 1, 48);
                 std::vector<AccountConfig> accounts;
                 std::vector<AccountData> data;
                 BuildVisualTestSnapshot(display, &accounts, &data);
@@ -3556,7 +3556,7 @@ static void RunMatrixTests() {
 static void RunSideTests() {
     // A side taskbar's display: the default 48 DIP width leaves 40 DIPs across (4 each side).
     static constexpr auto side = [](const Settings& settings = {}, double width = 48) {
-        return MeterDisplayFor(settings, I18nLocale(), kNow, 1, 0, width);
+        return MeterDisplayFor(settings, I18nLocale(), TestMeasure, kNow, 1, 0, width);
     };
 
     Run("side taskbar: meter lengths across fit inside its width, never under their minimums", [] {
@@ -3567,8 +3567,9 @@ static void RunSideTests() {
         CHECK_NEAR(d.sideWidth, 48); CHECK_NEAR(d.tileHeight, 40);
         CHECK(d.barLength == 40); CHECK(d.sparklineWidth == 40); CHECK(d.ringSize == 40);
         CHECK(side(With([](Settings& s) { s.ringSize = 32; })).ringSize == 32);
-        // Quota keys take their column (9 DIP text: ceil(12.6) + 3 = 16) out of the bars' room.
-        CHECK(side(With([](Settings& s) { s.barLayout = BarLayout::Stacked; s.showBarLabels = true; })).barLength == 24);
+        // Quota keys take their column (the widest key, two characters at 9 DIPs: ceil(10.8) + 3 =
+        // 14) out of the bars' room.
+        CHECK(side(With([](Settings& s) { s.barLayout = BarLayout::Stacked; s.showBarLabels = true; })).barLength == 26);
         // Vertical bars run down the taskbar: their length stays.
         CHECK(side(With([](Settings& s) { s.barLayout = BarLayout::Vertical; s.barLength = 120; })).barLength == 120);
         // Shorter settings stay as set; a narrow taskbar keeps each range's minimum.

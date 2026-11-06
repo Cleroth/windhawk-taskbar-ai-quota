@@ -454,10 +454,14 @@ static void RunLayoutTests() {
         CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left, FirstText(strip).rect.right + 3);
         CHECK_NEAR(strip.columns[0].right - strip.columns[0].left,
                    3 + FirstText(strip).rect.right - FirstText(strip).rect.left + 3 + 100 + 3);
-        // Quota keys add a ceil(9 * 1.4) + 3 DIP column before each track.
+        // Quota keys add a column before each track: the widest key in English, "Mo" at the 9 DIP
+        // percent font, rounded up to a whole DIP, then 3 DIPs.
         s.showBarLabels = true;
         strip = Strip(s);
-        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left - FirstText(strip).rect.right, 3 + 16);
+        const float mo = std::ceil(UiLayoutSize(UiLayout(TestGraphics(), L"Mo", {UiFamily::Taskbar, 9, 0,
+                                                                                DWRITE_FONT_WEIGHT_NORMAL},
+                                                         100000, false)).width);
+        CHECK_NEAR(OpsOfColor(strip, 0x46808080)[0].rect.left - FirstText(strip).rect.right, 3 + mo + 3);
         // Hidden labels: just the bars in the box.
         s = StackedSettings();
         s.labelPosition = LabelPosition::Hidden;

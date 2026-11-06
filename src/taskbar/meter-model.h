@@ -20,17 +20,18 @@ static constexpr double kHeadlineKeyScale = 9.0 / 14;
 // HeadlineCountdownReserve for it.
 static constexpr PCWSTR kHeadlineCountdownArrow = L"\u21BB ";
 
-// The countdown's hours-and-minutes form at zeros, behind the arrow, in the locale: the width a
-// headline tile reserves, so minute ticks keep it.
-static std::wstring HeadlineCountdownReserve(const I18nLocale& locale) {
-    return kHeadlineCountdownArrow + I18nText(locale, TrCtx(L"taskbar-countdown", L"{hours}h {minutes}m"),
-                                              {{L"hours", L"00"}, {L"minutes", L"00"}});
-}
+// Taskbar text styles: XAML's default font (Segoe UI Variable, its optical size following the
+// font size), regular or semibold, and the tiles' Display instance, semibold.
+enum class TileFont : uint8_t { Text, TextSemiBold, Display };
+// `text`'s width in DIPs in `font` at `size` DIPs, in the frame's language, as its renderer lays
+// it out: detached XAML probes on the taskbar (tiles.h), DirectWrite in the settings preview. Every
+// width of text the model and the renderers reserve or place comes from it.
+using TileTextMeasure = std::function<double(std::wstring_view text, TileFont font, double size)>;
 
 // Quota window keys on bar labels and tiles, compact in every language: each slot's, then
 // Antigravity's Gemini Argon weekly ("Ar" for "Fa"), OpenAI's credits ("Cr" for "Ex"), and GitHub
 // Copilot's monthly AI credits and OpenCode Go's monthly ("Mo" for "Ex"). QuotaKey picks an
-// account's; tiles reserve the widest of them all.
+// account's; bars and tiles reserve the widest of them all (WidestQuotaKey).
 static constexpr I18nKey kQuotaKeys[] = {
     TrCtx(L"quota-key-2-chars", L"5h"), TrCtx(L"quota-key-2-chars", L"7d"), TrCtx(L"quota-key-2-chars", L"Fa"),
     TrCtx(L"quota-key-2-chars", L"Ex"), TrCtx(L"quota-key-2-chars", L"Ar"), TrCtx(L"quota-key-2-chars", L"Cr"),
@@ -43,6 +44,32 @@ static std::wstring QuotaKey(const I18nLocale& locale, std::wstring_view provide
     if (slot == kExtraUsageBar && provider == L"openai") key = 5;
     if (slot == kExtraUsageBar && (provider == L"copilot" || provider == L"opencode")) key = 6;
     return I18nText(locale, kQuotaKeys[key]);
+}
+
+static double WidestQuotaKey(const I18nLocale& locale, const TileTextMeasure& measure, TileFont font, double size) {
+    double widest = 0;
+    for (I18nKey key : kQuotaKeys) widest = std::max(widest, measure(I18nText(locale, key), font, size));
+    return widest;
+}
+
+// The width a headline tile reserves for its countdown in regular text at `size` DIPs: its widest
+// form behind the arrow (every timed form with two-digit numbers, now and no reset), so the tile
+// keeps its width as the countdown ticks or changes state.
+static double HeadlineCountdownReserve(const I18nLocale& locale, const TileTextMeasure& measure, double size) {
+    const std::wstring forms[] = {
+        I18nText(locale, TrCtx(L"taskbar-countdown", L"{days}d {hours}h"), {{L"days", L"00"}, {L"hours", L"00"}}),
+        I18nText(locale, TrCtx(L"taskbar-countdown", L"{days}d"), {{L"days", L"00"}}),
+        I18nText(locale, TrCtx(L"taskbar-countdown", L"{hours}h {minutes}m"), {{L"hours", L"00"}, {L"minutes", L"00"}}),
+        I18nText(locale, TrCtx(L"taskbar-countdown", L"{hours}h"), {{L"hours", L"00"}}),
+        I18nText(locale, TrCtx(L"taskbar-countdown", L"{minutes}m"), {{L"minutes", L"00"}}),
+        I18nText(locale, TrCtx(L"taskbar-countdown", L"now")),
+        I18nText(locale, TrCtx(L"taskbar-countdown", L"no reset")),
+    };
+    double widest = 0;
+    for (const std::wstring& form : forms) {
+        widest = std::max(widest, measure(kHeadlineCountdownArrow + form, TileFont::Text, size));
+    }
+    return widest;
 }
 
 // An extra quota's name in the details flyout: as reported, then the length of the window it was
@@ -104,9 +131,8 @@ static ULONGLONG SparklineAroundMs(SparklineSpan span) {
     }
 }
 // Chart text, 3 DIPs in from the plot's edges: the weekly chart's extra usage, its key, then the
-// number, kSparkExtraKeyGap DIPs apart. Text placement estimates widths at kSparkTextWidthShare
-// of the font size per character, generously.
-static constexpr double kSparkExtraKeyGap = 2, kSparkTextInset = 3, kSparkTextWidthShare = 0.6;
+// number, kSparkExtraKeyGap DIPs apart.
+static constexpr double kSparkExtraKeyGap = 2, kSparkTextInset = 3;
 // Sparkline fills' and guides' alpha over their usage or pace color.
 static constexpr uint32_t kSparkAreaAlpha = 0x47000000, kSparkGuideAlpha = 0x80000000;
 
@@ -298,8 +324,10 @@ static constexpr TileArc kSegmentedArcs[kQuotaBarCount][kQuotaBarCount] = {
     {{190, 70}, {280, 70}, {10, 70}, {100, 70}},
 };
 static constexpr TileArc kConcentricArc{270, 360};
-// A gauge's arc: open at the bottom, filling clockwise from its lower left.
+// A gauge's arc: open at the bottom, filling clockwise from its lower left. Its key's smallest
+// font, and its clearance from the arc's ends, in DIPs.
 static constexpr TileArc kGaugeArc{135, 270};
+static constexpr double kGaugeKeyFontMin = 6, kGaugeKeyClear = 2;
 // A rounded square's centreline corner radius, as a share of its size.
 static constexpr double kTileSquareCornerShare = 0.22;
 // Ring, square and pie pace ticks: a core over a halo, square ended, reaching past the meter.
@@ -556,10 +584,14 @@ static BadgeColors BadgeColorsFor(COLORREF color, bool light) {
 struct MeterDisplay {
     ULONGLONG now;
     I18nLocale locale;        // The keys' and the countdown's language.
+    TileTextMeasure measure;  // Text widths in that language, as the renderer lays text out.
     BarMode barMode;
     int barLength;            // 10-500 DIPs.
     int barThickness;         // 2-50 DIPs.
     int barGap;               // 0-500 DIPs.
+    // Bars' quota key column, while keys show (else 0): the widest key at the percent font,
+    // rounded up to a whole DIP, then 3 DIPs before the bar.
+    double barKeyColumn;
     BarStyle barStyle;
     int ringSize;             // kRingSizeMin-kRingSizeMax DIPs.
     int ringThickness;        // kRingThicknessMin-kRingThicknessMax DIPs.
@@ -606,16 +638,12 @@ struct MeterDisplay {
     double sideWidth;
 };
 
-// A bar label column's width beside stacked or vertical bars, at the percent font size.
-static double BarLabelColumnWidth(int percentFontSize) {
-    return std::ceil(percentFontSize * 1.4) + 3.0;
-}
-
-// `locale`: the frame's language. `taskbarHeight`: the taskbar's height in DIPs, 0 if unknown (or
-// on a side); tiles leave 4 DIPs above and below them. `sideWidth`: MeterDisplay::sideWidth.
-static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& locale, ULONGLONG now,
-                                    double rasterizationScale, double taskbarHeight,
-                                    double sideWidth = 0) {
+// `locale`: the frame's language, `measure` its text widths. `taskbarHeight`: the taskbar's height
+// in DIPs, 0 if unknown (or on a side); tiles leave 4 DIPs above and below them. `sideWidth`:
+// MeterDisplay::sideWidth.
+static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& locale,
+                                    const TileTextMeasure& measure, ULONGLONG now, double rasterizationScale,
+                                    double taskbarHeight, double sideWidth = 0) {
     int yellow = std::clamp(settings.yellowThreshold, 0, 100);
     int orange = std::clamp(settings.orangeThreshold, yellow, 100);
     sideWidth = std::isfinite(sideWidth) ? std::max(sideWidth, 0.0) : 0.0;
@@ -625,6 +653,8 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& 
         return sideWidth > 0 ? std::max(minimum, std::min(value, across - (int)std::ceil(reserved))) : value;
     };
     bool stacked = settings.barLayout == BarLayout::Stacked;
+    double keyColumn = settings.showBarLabels && !IsTileLayout(settings.barLayout) ?
+        std::ceil(WidestQuotaKey(locale, measure, TileFont::Text, std::clamp(settings.percentFontSize, 6, 24))) + 3 : 0;
     double readingScale =
         std::clamp(settings.sparklineReadingScale, kSparklineReadingScaleMin, kSparklineReadingScaleMax) / 100.0;
     // A chart's current reading reaches past its sides by its mark (as kSparkOverflow); beyond
@@ -633,12 +663,13 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& 
     return {
         .now = now,
         .locale = locale,
+        .measure = measure,
         .barMode = settings.barMode,
-        .barLength = stacked ? fit(std::clamp(settings.barLength, 10, 500), 10,
-                                   settings.showBarLabels ? BarLabelColumnWidth(settings.percentFontSize) : 0) :
+        .barLength = stacked ? fit(std::clamp(settings.barLength, 10, 500), 10, keyColumn) :
                                std::clamp(settings.barLength, 10, 500),
         .barThickness = std::clamp(settings.barThickness, 2, 50),
         .barGap = std::clamp(settings.barGap, 0, 500),
+        .barKeyColumn = keyColumn,
         .barStyle = settings.barStyle == BarStyle::Rail ? BarStyle::Rail : BarStyle::Track,
         .ringSize = fit(std::clamp(settings.ringSize, kRingSizeMin, kRingSizeMax), kRingSizeMin),
         .ringThickness = std::clamp(settings.ringThickness, kRingThicknessMin, kRingThicknessMax),
@@ -1464,9 +1495,32 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         // Three digits fit across the hole; the key sits in the opening, between the arc's ends.
         const TileRingGeometry& g = meters.ring;
         meters.faceFont = std::clamp(std::min(g.size * 0.375, (2 * g.hole - 2) / 1.75), 7.0, 16.0);
-        meters.faceKeyFont = std::max(6.0, meters.faceFont * kHeadlineKeyScale);
+        meters.faceKeyFont = std::max(kGaugeKeyFontMin, meters.faceFont * kHeadlineKeyScale);
         meters.faceNumberCenter = g.size / 2 - 0.5;
         meters.faceKeyCenter = g.size / 2 + g.radius * 0.75;
+        // A key too wide for the opening shrinks a quarter DIP at a time, measured at each size,
+        // down to kGaugeKeyFontMin, until it keeps kGaugeKeyClear DIPs from the arc's ends on
+        // either side. Over the key's line, from an em above its baseline down to it, the opening
+        // is narrowest where the arc's inner edge ends: below that the ends are cut along the
+        // radius, above it the inner edge closes in.
+        if (top >= 0) {
+            const double inner = g.radius - g.stroke / 2, outer = g.radius + g.stroke / 2;
+            const double end = (kGaugeArc.start + kGaugeArc.sweep - 360) * std::numbers::pi / 180;
+            const std::wstring key = QuotaKey(display.locale, account.provider, top);
+            // Whether the key clears the arc's ends at `size`, by half the opening's width over
+            // its line at that size, from the face's middle.
+            auto fits = [&](double size) {
+                double baseline = meters.faceKeyCenter - g.size / 2 + size * kTileCapShare / 2;
+                double y = std::clamp(inner * std::sin(end), baseline - size, baseline);
+                double room = y >= outer * std::sin(end) ? g.size / 2 :
+                              y >= inner * std::sin(end) ? y / std::tan(end) :
+                                                           std::sqrt(std::max(inner * inner - y * y, 0.0));
+                return display.measure(key, TileFont::Text, size) / 2 + kGaugeKeyClear <= room;
+            };
+            double size = meters.faceKeyFont;
+            while (size > kGaugeKeyFontMin && !fits(size)) size = std::max(size - 0.25, kGaugeKeyFontMin);
+            meters.faceKeyFont = size;
+        }
     }
     if (ring) {
         if (badgeChars) {
@@ -1858,20 +1912,21 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 if (wu.pct >= 0) reading(width - mark, yAt(wu.pct));
             }
 
-            // Text, in boxes estimated from its length: the key at the right, the weekly chart's
-            // extra usage at the left, on the top or bottom edge.
+            // Text, in boxes as wide as it measures and a cap height tall: the key at the right,
+            // the weekly chart's extra usage at the left, on the top or bottom edge.
             struct TextBox {
                 double left, right;
                 bool top;
             };
-            double cap = meters.sparkKeyFont * kTileCapShare, inset = kSparkTextInset;
+            const double font = meters.sparkKeyFont, cap = font * kTileCapShare, inset = kSparkTextInset;
             auto boxTop = [&](TextBox box) { return box.top ? inset : height - inset - cap; };
-            double keyLeft = width - inset - m.key.size() * meters.sparkKeyFont * kSparkTextWidthShare;
+            double keyLeft = width - inset - display.measure(m.key, TileFont::TextSemiBold, font);
             double extraRight = inset;
             if (w == kWeeklyBar && !meters.sparkExtraText.empty()) {
-                double chars = double(meters.sparkExtraKey.size() + meters.sparkExtraText.size());
-                extraRight += chars * meters.sparkKeyFont * kSparkTextWidthShare +
-                              (meters.sparkExtraKey.empty() ? 0 : kSparkExtraKeyGap);
+                extraRight += display.measure(meters.sparkExtraText, TileFont::TextSemiBold, font);
+                if (!meters.sparkExtraKey.empty()) {
+                    extraRight += display.measure(meters.sparkExtraKey, TileFont::Text, font) + kSparkExtraKeyGap;
+                }
             }
             // Text moves to the plot's other edge, clear of the current reading's mark: the key
             // from the bottom-right corner to the top-right, the extra usage from the top-left to

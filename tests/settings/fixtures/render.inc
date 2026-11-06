@@ -556,8 +556,15 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
     const std::vector<Row> i18nRows = {
         {L"Bars, keys", labels},
         {L"Bars, keys, percent always", [&](Settings& s) { labels(s); always(s); }},
+        {L"Bars, keys at 14", [&](Settings& s) { labels(s); s.percentFontSize = 14; }},
         {L"Vertical bars, keys", [&](Settings& s) { labels(s); s.barLayout = BarLayout::Vertical; }},
+        {L"Vertical, keys, percent always",
+         [&](Settings& s) { labels(s); always(s); s.barLayout = BarLayout::Vertical; }},
         {L"Bars, keys, 32 DIP taskbar", labels, -1, 32},
+        {L"Segmented ring", [](Settings& s) { s.barLayout = BarLayout::SegmentedRing; }},
+        {L"Concentric rings", [](Settings& s) { s.barLayout = BarLayout::ConcentricRings; }},
+        {L"Clock pies", [](Settings& s) { s.barLayout = BarLayout::ClockPies; }},
+        {L"Rounded square", [](Settings& s) { s.barLayout = BarLayout::RoundedSquare; }},
         {L"Headline", [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; }},
         {L"Headline, countdown",
          [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.headlineCountdown = true; }},
@@ -569,8 +576,17 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         {L"Headline, countdown, 32 DIP taskbar",
          [](Settings& s) { s.barLayout = BarLayout::LogoHeadline; s.headlineCountdown = true; }, -1, 32},
         {L"Gauge %", [](Settings& s) { s.barLayout = BarLayout::Gauge; }},
+        {L"Gauge, ring 24", [](Settings& s) { s.barLayout = BarLayout::Gauge; s.ringSize = 24; }},
+        {L"Gauge, ring 40, thickness 6", [](Settings& s) {
+             s.barLayout = BarLayout::Gauge;
+             s.ringSize = 40;
+             s.ringThickness = 6;
+         }},
         {L"Usage graph", [](Settings& s) { s.barLayout = BarLayout::Sparkline; }},
         {L"Sparkline, text 12", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineTextSize = 12; }},
+        {L"Usage graph, extra percent",
+         [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.sparklineExtra = SparklineExtra::Percent; }},
+        {L"Usage graph, remaining", [](Settings& s) { s.barLayout = BarLayout::Sparkline; s.barMode = BarMode::Remaining; }},
         {L"Quota matrix", [](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; }},
         {L"Matrix, number 24", [](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; s.headlineFontSize = 24; }},
         {L"Matrix, 32 DIP taskbar", [](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; }, -1, 32},
@@ -606,14 +622,14 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
                              place(BarLayout::SegmentedRing, TaskbarPlacement::AfterShowDesktop), -1, 32});
     placementRows.push_back({L"Ring, before clock, 72 DIP", place(BarLayout::SegmentedRing, TaskbarPlacement::BeforeClock),
                              -1, 72});
-    // The Layout and Placement sheets' strips are the window's 680 DIPs; the Display sheet's fit
-    // four columns of stacked bars, so every value shows.
+    // The Layout and Placement sheets' strips are the window's 680 DIPs; the Display and I18n
+    // sheets' fit four columns of stacked bars, so every value shows.
     const bool display = sheet == PreviewSheet::Display;
     const std::vector<Row>& rows = display                         ? displayRows :
                                    sheet == PreviewSheet::Layout   ? layoutRows :
                                    sheet == PreviewSheet::I18n     ? i18nRows : placementRows;
     constexpr float kCaption = 170, kRowGap = 12;
-    const float kStrip = display ? 800 : 680;
+    const float kStrip = display || sheet == PreviewSheet::I18n ? 800 : 680;
     float height = kRowGap;
     for (const Row& row : rows) height += float(row.taskbar) + kRowGap;
     winrt::com_ptr<IWICBitmap> bitmap = RenderBitmap(wic, {kCaption + kStrip + kRowGap, height}, dpi);
@@ -639,6 +655,47 @@ static void RenderPreviewSheet(UiGraphics& g, IWICImagingFactory* wic, const std
         SettingsPaintPreview(target.get(), cache, g, theme, view, strip, pointer);
         y += float(row.taskbar) + kRowGap;
     }
+    winrt::check_hresult(target->EndDraw());
+    cache.Clear();
+    SaveRender(wic, bitmap.get(), path);
+    std::string narrow;
+    for (wchar_t c : path) narrow += c < 0x80 ? char(c) : '?';
+    std::cout << "RENDER " << narrow << '\n';
+}
+
+// The Layout page's tile style gallery alone, in `tag`'s language: its cards as the page lays
+// them out at `client` (each style's thumbnail by the production painter, its name under it).
+static void RenderGallerySheet(UiGraphics& g, IWICImagingFactory* wic, const std::wstring& path, UINT dpi,
+                               std::string_view tag, D2D1_SIZE_F client) {
+    SettingsView view = I18nLayoutLocalized(I18nLayoutView(BarLayout::Stacked), tag);
+    view.scale = float(dpi) / 96;
+    UiFrame frame;
+    SettingsUiBuildFrame(g, view, client, frame);
+    std::vector<UiItem> cards;
+    D2D1_RECT_F bounds{1e9f, 1e9f, -1e9f, -1e9f};
+    for (const UiItem& item : frame.content) {
+        if (item.kind != UiItemKind::Gallery) continue;
+        cards.push_back(item);
+        bounds = {std::min(bounds.left, item.rect.left), std::min(bounds.top, item.rect.top),
+                  std::max(bounds.right, item.rect.right), std::max(bounds.bottom, item.rect.bottom)};
+    }
+    CHECK(cards.size() == std::size(kSettingsTileStyles));
+    for (UiItem& card : cards) {
+        card.rect = {card.rect.left - bounds.left + 8, card.rect.top - bounds.top + 8, card.rect.right - bounds.left + 8,
+                     card.rect.bottom - bounds.top + 8};
+    }
+    const UiThemeInput theme = RenderThemes()[0].input;
+    winrt::com_ptr<IWICBitmap> bitmap =
+        RenderBitmap(wic, {bounds.right - bounds.left + 16, bounds.bottom - bounds.top + 16}, dpi);
+    winrt::com_ptr<ID2D1RenderTarget> target = RenderTarget(g, bitmap.get(), dpi);
+    UiTargetCache cache;
+    UiPalette palette = UiPaletteFor(theme);
+    UiCustomPaint custom = [&](const UiItem& item) {
+        SettingsPaintPreview(target.get(), cache, g, theme, view, item, {-1e9f, -1e9f});
+    };
+    target->BeginDraw();
+    target->Clear(palette.background);
+    UiPaintItems(target.get(), g, cache, palette, cards, {}, {0, 0}, view.scale, -1e9f, 1e9f, &custom);
     winrt::check_hresult(target->EndDraw());
     cache.Clear();
     SaveRender(wic, bitmap.get(), path);
@@ -1243,8 +1300,12 @@ static void RunRenders(const std::wstring& directory) {
                 g.locale = L"en-US";
             });
 
-            if (tag != "zh-Hans" && tag != "qps-ploc") continue;
-            // The taskbar's localized text on the preview strip, measured in the locale.
+        }
+        // The taskbar's localized text, measured in the locale, in English too for comparison: the
+        // preview strip sheet (every tile style) and the tile style gallery at the default and the
+        // window's minimum width.
+        for (std::string_view tag : {"en", "qps-ploc", "de", "ru", "ja", "zh-Hans"}) {
+            I18nLocale locale = I18nLayoutLocalized({}, tag).locale;
             for (UINT dpi : {96u, 144u}) {
                 std::string sheet = "render-i18n-preview-sheet-" + std::string(tag) + "-light-" + std::to_string(dpi) +
                                     ".png";
@@ -1254,6 +1315,15 @@ static void RunRenders(const std::wstring& directory) {
                     g.locale = L"en-US";
                     CHECK(true);
                 });
+                for (bool narrow : {false, true}) {
+                    std::string gallery = "render-i18n-gallery-" + std::string(tag) + "-light-" + std::to_string(dpi) +
+                                          (narrow ? "-min" : "") + ".png";
+                    Run(gallery, [&] {
+                        g.locale = locale.LocaleName();
+                        RenderGallerySheet(g, wic.get(), path(gallery), dpi, tag, narrow ? minClient : client);
+                        g.locale = L"en-US";
+                    });
+                }
             }
         }
         // A regional number format: the Display page whole under de-DE's decimal comma, in English and

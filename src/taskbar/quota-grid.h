@@ -53,8 +53,8 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 }
             } catch (...) {}
         }
-        MeterDisplay display = MeterDisplayFor(settings, locale, NowUnixMs(), state.rasterizationScale,
-                                               state.taskbarHeight, state.sideWidth);
+        MeterDisplay display = MeterDisplayFor(settings, locale, XamlTileTextMeasure(locale), NowUnixMs(),
+                                               state.rasterizationScale, state.taskbarHeight, state.sideWidth);
         // Down a side taskbar: accounts stack, and each fits its width (stackAccount).
         bool side = display.sideWidth > 0;
         if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, nullptr);
@@ -344,7 +344,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                     if (showBarLabels) {
                         ColumnDefinition labelColumn;
-                        labelColumn.Width({BarLabelColumnWidth(percentFontSize), GridUnitType::Pixel});
+                        labelColumn.Width({display.barKeyColumn, GridUnitType::Pixel});
                         ColumnDefinition trackColumn;
                         trackColumn.Width({(double)(verticalBars ? barThickness : barLength),
                                            GridUnitType::Pixel});

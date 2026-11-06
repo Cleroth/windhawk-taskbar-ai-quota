@@ -1,11 +1,23 @@
 // Localization of the taskbar's meter model and its coded errors on the production catalogs: the
 // quota keys and the headline countdown (its forms and its width reserve) in Simplified Chinese,
-// Russian and the pseudo-locale, the settings preview strip drawing them, an account error's
-// text per language with its English log rendering, and the Accounts page's state for the coded
-// error; the details flyout's extra quota names (plural forms around the reported name) with the
-// extra quotas' merging, the visual test samples' text, and the flyout's plural and nested
-// templates (free resets, the outage line, a reset line, a retry, a Copilot amount). Expected text
-// is written out by hand from the production catalogs and the pseudo-locale's rules.
+// Russian and the pseudo-locale, the settings preview strip drawing them, measured taskbar text
+// (the bar key column, sparkline text placement, the gauge key's fit, and in the preview strip in
+// every language keys inside their column, matrix numbers past their key and the countdown's
+// width holding every form), an account error's text per language with its English log
+// rendering, and the Accounts page's state for the coded error; the details flyout's extra quota
+// names (plural forms around the reported name) with the extra quotas' merging, the order of a
+// number and its unit, the visual test samples' text, and the flyout's plural and nested templates
+// (free resets, the outage line, a reset line, a retry, a Copilot amount). Expected text is
+// written out by hand from the production catalogs and the pseudo-locale's rules; widths from
+// synthetic measures (TestMeasure, TestWideMeasure) unless they come from DirectWrite.
+
+// Text widths with wide scripts: CJK characters (from U+2E80) an em, others 0.6 of the font size,
+// in any font.
+static double TestWideMeasure(std::wstring_view text, TileFont, double size) {
+    double ems = 0;
+    for (wchar_t c : text) ems += c >= 0x2E80 ? 1 : 0.6;
+    return ems * size;
+}
 
 // Every account's keys, slot by slot: an Anthropic account's four, then Antigravity's Argon weekly,
 // OpenAI's credits, GitHub Copilot's and OpenCode Go's monthly.
@@ -21,7 +33,7 @@ static std::vector<std::wstring> TestQuotaKeys(const I18nLocale& locale) {
 static std::wstring TestCountdown(const I18nLocale& locale, long long resetIn) {
     Settings settings;
     settings.headlineCountdown = true;
-    MeterDisplay display = MeterDisplayFor(settings, locale, kNow, 1, 48);
+    MeterDisplay display = MeterDisplayFor(settings, locale, TestMeasure, kNow, 1, 48);
     ULONGLONG reset = resetIn ? ULONGLONG((long long)kNow + resetIn) : 0;
     return First({50, reset, reset ? kWeeklyWindowMs : 0}, display, BarLayout::LogoHeadline).headlineCountdown;
 }
@@ -56,12 +68,12 @@ static void RunI18nTaskbarTests() {
         AccountData data = Fresh({30, 80, 10, 20});
         data.winWeek = {80, kNow + 3 * 24 * 60 * kMinute, kWeeklyWindowMs};
         Settings settings;
-        MeterDisplay zh = MeterDisplayFor(settings, TestLocale(L"zh-Hans"), kNow, 1, 48);
+        MeterDisplay zh = MeterDisplayFor(settings, TestLocale(L"zh-Hans"), TestMeasure, kNow, 1, 48);
         AccountMeters bars = AccountMeterState(zh, BarLayout::Stacked, Account(L"openai"), data, 0, 0);
         CHECK(bars.quotas[0].key == L"5h" && bars.quotas[1].key == L"7\u5929" && bars.quotas[3].key == L"\u79EF\u5206");
         AccountMeters headline = AccountMeterState(zh, BarLayout::LogoHeadline, Account(L"openai"), data, 0, 0);
         CHECK(headline.headline == L"80%" && headline.headlineKey == L"7\u5929");
-        MeterDisplay ru = MeterDisplayFor(settings, TestLocale(L"ru"), kNow, 1, 48);
+        MeterDisplay ru = MeterDisplayFor(settings, TestLocale(L"ru"), TestMeasure, kNow, 1, 48);
         AccountMeters matrix = AccountMeterState(ru, BarLayout::QuotaMatrix, Account(L"copilot"), data, 0, 0);
         CHECK(matrix.quotas[0].key == L"5\u0447" && matrix.quotas[3].key == L"\u041C\u0441");
         // OpenAI's credits in the weekly chart's corner: their key ("Cr").
@@ -70,7 +82,7 @@ static void RunI18nTaskbarTests() {
         data.extraUsage = {};
         Settings spark;
         spark.sparklineExtra = SparklineExtra::Amount;
-        MeterDisplay pseudo = MeterDisplayFor(spark, TestLocale(L"qps-ploc"), kNow, 1, 48);
+        MeterDisplay pseudo = MeterDisplayFor(spark, TestLocale(L"qps-ploc"), TestMeasure, kNow, 1, 48);
         AccountMeters chart = AccountMeterState(pseudo, BarLayout::Sparkline, Account(L"openai"), data, 0, 0);
         CHECK(chart.sparkExtraKey == L"[\u00C7\u0155 ]" && chart.sparkExtraText == L"400");
         CHECK(chart.quotas[1].key == L"[7\u00F0 ]");
@@ -105,13 +117,51 @@ static void RunI18nTaskbarTests() {
         CHECK(TestCountdown(pseudo, 0) == L"\u21BB [\u00F1\u00F6 \u0155\u00E9\u0161\u00E9\u0163 \u013C\u00F6]");
     });
 
-    Run("headline countdown reserve: the hours-and-minutes form at zeros in the language, English as the "
-        "sample it replaces", [] {
-        CHECK(HeadlineCountdownReserve({}) == L"\u21BB 00h 00m");
-        CHECK(HeadlineCountdownReserve(TestLocale(L"zh-Hans")) == L"\u21BB 00h 00m");
-        CHECK(HeadlineCountdownReserve(TestLocale(L"ru")) == L"\u21BB 00\u0447 00\u043C");
-        CHECK(HeadlineCountdownReserve(TestLocale(L"qps-ploc")) == L"\u21BB [00\u0125 00\u0271 \u013C]");
-        CHECK(HeadlineCountdownReserve(TestLocale(L"de")) == L"\u21BB 00h 00m");
+    Run("headline countdown reserve: the widest of every form behind the arrow in the language, each number "
+        "at two digits, in regular text at the key's size", [] {
+        std::vector<std::wstring> measured;
+        bool regular = true;
+        // One DIP a character, so the widest form is the longest.
+        TileTextMeasure count = [&](std::wstring_view text, TileFont font, double size) {
+            regular = regular && font == TileFont::Text && size == 9;
+            measured.emplace_back(text);
+            return double(text.size());
+        };
+        // Russian: 00д 00ч, 00д, 00ч 00м, 00ч, 00м, сейчас, без сброса; no reset the widest, 12
+        // characters with the arrow.
+        CHECK_NEAR(HeadlineCountdownReserve(TestLocale(L"ru"), count, 9), 12);
+        CHECK((measured == std::vector<std::wstring>{
+                               L"\u21BB 00\u0434 00\u0447", L"\u21BB 00\u0434", L"\u21BB 00\u0447 00\u043C",
+                               L"\u21BB 00\u0447", L"\u21BB 00\u043C",
+                               L"\u21BB \u0441\u0435\u0439\u0447\u0430\u0441",
+                               L"\u21BB \u0431\u0435\u0437 \u0441\u0431\u0440\u043E\u0441\u0430"}));
+        CHECK(regular);
+        // English: no reset's 10 characters outcount 00h 00m's 9; Japanese (リセットなし) 8, its
+        // hours-and-minutes form 9; the pseudo-locale's no reset ([ñö ŕéšéţ ļö]) 15.
+        measured.clear();
+        CHECK_NEAR(HeadlineCountdownReserve({}, count, 9), 10);
+        CHECK(measured.size() == 7 && measured[2] == L"\u21BB 00h 00m" && measured[5] == L"\u21BB now" &&
+              measured[6] == L"\u21BB no reset");
+        CHECK_NEAR(HeadlineCountdownReserve(TestLocale(L"ja"), count, 9), 9);
+        CHECK_NEAR(HeadlineCountdownReserve(TestLocale(L"qps-ploc"), count, 9), 15);
+        // As DirectWrite lays them out at the 9 DIP key font, the reserve and the widest form: in
+        // English the hours-and-minutes form, the reserve before every form counted.
+        for (const wchar_t* tag : {L"en", L"de", L"ru", L"ja", L"zh-Hans", L"qps-ploc"}) {
+            std::wstring widest;
+            double width = 0;
+            TileTextMeasure laid = [&](std::wstring_view text, TileFont, double size) {
+                double w = UiLayoutSize(UiLayout(TestGraphics(), text, {UiFamily::Taskbar, float(size), 0,
+                                                                        DWRITE_FONT_WEIGHT_NORMAL},
+                                                 100000, false)).width;
+                if (w > width) width = w, widest = text;
+                return w;
+            };
+            double reserve = HeadlineCountdownReserve(TestLocale(tag), laid, 9);
+            std::string narrow;
+            for (wchar_t c : widest) narrow += c < 0x80 ? char(c) : '?';
+            std::cout << "OBSERVE countdown reserve " << std::string(tag, tag + wcslen(tag)) << ": " << reserve
+                      << " DIP, " << narrow << '\n';
+        }
     });
 
     Run("preview strip in a language: bar keys, the headline's key and countdown and the matrix's keys as "
@@ -171,6 +221,203 @@ static void RunI18nTaskbarTests() {
         CHECK(english > 0 && chinese > english);
         std::cout << "OBSERVE matrix number offset: English " << english << " DIP, Chinese " << chinese
                   << " DIP; widest keys at 9 DIP: " << widestKey({}) << " / " << widestKey(zh) << '\n';
+    });
+
+    Run("bar key column: the widest key as measured at the percent font, rounded up to a DIP, then 3 DIPs; "
+        "none without keys or on tiles; a side taskbar's stacked bars give it their room", [] {
+        const Settings keys = With([](Settings& s) {
+            s.barLayout = BarLayout::Stacked;
+            s.showBarLabels = true;
+        });
+        auto column = [](const Settings& settings, const wchar_t* tag, const TileTextMeasure& measure = TestWideMeasure) {
+            return MeterDisplayFor(settings, TestLocale(tag), measure, kNow, 1, 48).barKeyColumn;
+        };
+        // English: every key two characters, 10.8 DIPs at 9: 11 + 3.
+        CHECK_NEAR(Display(keys).barKeyColumn, 14);
+        // 额外 and 积分, 追加: two em-wide characters, 18 DIPs: 21. Russian's Мс two narrow ones: 14.
+        // The pseudo-locale's five characters ([Ṁö ]): 27 + 3.
+        CHECK_NEAR(column(keys, L"zh-Hans"), 21);
+        CHECK_NEAR(column(keys, L"ja"), 21);
+        CHECK_NEAR(column(keys, L"ru"), 14);
+        CHECK_NEAR(column(keys, L"qps-ploc"), 30);
+        // At a 14 DIP percent font: 28 + 3; vertical bars alike.
+        Settings large = keys;
+        large.percentFontSize = 14;
+        CHECK_NEAR(column(large, L"zh-Hans"), 31);
+        large.barLayout = BarLayout::Vertical;
+        CHECK_NEAR(column(large, L"zh-Hans"), 31);
+        // Measured in regular text at the percent font: a key of 9.4 DIPs rounds up to 10.
+        bool regular = true;
+        TileTextMeasure fixed = [&](std::wstring_view, TileFont font, double size) {
+            regular = regular && font == TileFont::Text && size == 9;
+            return 9.4;
+        };
+        CHECK_NEAR(column(keys, L"de", fixed), 13);
+        CHECK(regular);
+        // Keys off, or a tile style: no column.
+        CHECK_NEAR(column(With([](Settings& s) { s.barLayout = BarLayout::Stacked; }), L"zh-Hans"), 0);
+        CHECK_NEAR(column(With([](Settings& s) {
+                              s.barLayout = BarLayout::QuotaMatrix;
+                              s.showBarLabels = true;
+                          }), L"zh-Hans"),
+                   0);
+        // Down a 48 DIP side taskbar (40 DIPs across): 100 DIP bars shrink to 40 - 21 in Chinese.
+        CHECK(MeterDisplayFor(keys, TestLocale(L"zh-Hans"), TestWideMeasure, kNow, 1, 0, 48).barLength == 19);
+    });
+
+    Run("sparkline text placement by measured width: a wide key or extra usage key moves where a narrower one "
+        "clears the current reading", [] {
+        // The default 48 x 32 chart, 8 DIP text (5.6 cap height), the ring 3.6 DIPs around the
+        // reading. Weekly alone, 10% at 62.5% of the window: the reading at (30, 27.25), the ring
+        // from x 26.4 to 33.6 across the bottom box (y 23.4 to 29). English "7d" (9.6 DIPs) from x
+        // 35.4: clear, kept at the bottom; Chinese 7天 (4.8 + 8 DIPs) from 32.2: hit, moved to
+        // the top.
+        auto weeklyKey = [](const wchar_t* tag) {
+            AccountData data = Fresh();
+            data.winWeek = {10, kNow + (ULONGLONG)std::llround(0.375 * kWeeklyWindowMs), kWeeklyWindowMs};
+            MeterDisplay display = MeterDisplayFor(With([](Settings& s) { s.barLayout = BarLayout::Sparkline; }),
+                                                   TestLocale(tag), TestWideMeasure, kNow, 1, 48);
+            return AccountMeterState(display, BarLayout::Sparkline, Account(L"anthropic", L"A", {false, true, false, false}),
+                                     data, 0, 0).quotas[kWeeklyBar];
+        };
+        CHECK(weeklyKey(L"en").key == L"7d" && !weeklyKey(L"en").sparkKeyTop);
+        CHECK(weeklyKey(L"zh-Hans").key == L"7\u5929" && weeklyKey(L"zh-Hans").sparkKeyTop);
+        // The extra usage's percentage and key on an 80 DIP weekly chart: "40%" (14.4 DIPs), the 2
+        // DIP gap and "Ex" (9.6) from x 3 to 29 in English; 额外 (16) to 35.4 in Chinese. 110% at
+        // 25% of the window, (20, 2), the ring from x 16.4: inside both, which move to the bottom
+        // edge (the key at its right end, from 64.2 in Chinese, never in the way); at 45%, (36, 2),
+        // from 32.4: past English's, inside Chinese's.
+        auto extraBottom = [](const wchar_t* tag, double share) {
+            AccountData data = Fresh();
+            data.winWeek = {110, kNow + (ULONGLONG)std::llround((1 - share) * kWeeklyWindowMs), kWeeklyWindowMs};
+            data.extraUsage = {40, kNow + 10 * 24 * 60 * kMinute, 30ULL * 24 * 60 * kMinute};
+            data.extraUsedAmount = 20;
+            data.extraLimitAmount = 50;
+            MeterDisplay display = MeterDisplayFor(With([](Settings& s) {
+                                                       s.barLayout = BarLayout::Sparkline;
+                                                       s.sparklineWidth = 80;
+                                                       s.sparklineExtra = SparklineExtra::Percent;
+                                                   }),
+                                                   TestLocale(tag), TestWideMeasure, kNow, 1, 48);
+            AccountMeters meters = AccountMeterState(display, BarLayout::Sparkline,
+                                                     Account(L"anthropic", L"A", {false, true, false, true}), data, 0, 0);
+            CHECK(meters.sparkExtraText == L"40%" && meters.sparkExtraKey == QuotaKey(TestLocale(tag), L"anthropic", 3));
+            return meters.sparkExtraBottom;
+        };
+        CHECK(extraBottom(L"en", 0.25) && extraBottom(L"zh-Hans", 0.25));
+        CHECK(!extraBottom(L"en", 0.45) && extraBottom(L"zh-Hans", 0.45));
+        // Each text measured in its own font: the key and the number semibold, the extra usage's
+        // key regular, all at the text size.
+        std::vector<std::pair<std::wstring, TileFont>> measured;
+        TileTextMeasure record = [&](std::wstring_view text, TileFont font, double size) {
+            if (size == 8) measured.emplace_back(text, font);
+            return TestMeasure(text, font, size);
+        };
+        AccountData data = Fresh();
+        data.winWeek = {10, kNow + 3 * 24 * 60 * kMinute, kWeeklyWindowMs};
+        data.extraUsage = {40, kNow + 10 * 24 * 60 * kMinute, 30ULL * 24 * 60 * kMinute};
+        MeterDisplay display = MeterDisplayFor(With([](Settings& s) {
+                                                   s.barLayout = BarLayout::Sparkline;
+                                                   s.sparklineExtra = SparklineExtra::Percent;
+                                               }),
+                                               TestLocale(L"de"), record, kNow, 1, 48);
+        AccountMeterState(display, BarLayout::Sparkline, Account(L"anthropic", L"A", {false, true, false, true}), data, 0, 0);
+        CHECK((measured == std::vector<std::pair<std::wstring, TileFont>>{
+                               {L"7T", TileFont::TextSemiBold}, {L"40%", TileFont::TextSemiBold}, {L"Ex", TileFont::Text}}));
+    });
+
+    Run("gauge key: shrinks from the key's font until it keeps 2 DIPs from the arc's ends, never under 6 DIPs", [] {
+        // The default 32 DIP gauge: a 3 DIP stroke at radius 14, its inner edge (12.5) ending 8.84
+        // DIPs below and beside the centre, where the opening is narrowest; the number at 12 DIPs,
+        // the key at 9/14 of it, 7.71. Fit: half the key's width and 2 within 8.84.
+        auto keyFont = [](const wchar_t* tag, std::array<double, kQuotaBarCount> pct,
+                          const TileTextMeasure& measure = TestWideMeasure) {
+            MeterDisplay display = MeterDisplayFor(With([](Settings& s) { s.barLayout = BarLayout::Gauge; }),
+                                                   TestLocale(tag), measure, kNow, 1, 48);
+            AccountMeters meters = AccountMeterState(display, BarLayout::Gauge,
+                                                     Account(L"anthropic", L"A", {true, true, false, true}), Fresh(pct), 0, 0);
+            return meters.faceKeyFont;
+        };
+        const double key = 12.0 * 9 / 14;
+        // Extra usage the most used. English "Ex", 9.26 DIPs: fits as it is.
+        CHECK_NEAR(keyFont(L"en", {10, 20, -1, 90}), key);
+        // 额外, two ems: 7.71 + 2 past 8.84; four quarter-DIP steps down, 6.71 + 2 fits.
+        CHECK_NEAR(keyFont(L"zh-Hans", {10, 20, -1, 90}), key - 1);
+        // Measured at each size, not scaled: with 3 DIPs more under 7 DIPs (16.43 at 6.71), it
+        // never fits and stops at 6.
+        CHECK_NEAR(keyFont(L"zh-Hans", {10, 20, -1, 90},
+                           [](std::wstring_view text, TileFont font, double size) {
+                               return TestWideMeasure(text, font, size) + (size < 7 ? 3 : 0);
+                           }),
+                   6);
+        // 7天, 1.6 ems (6.17 + 2): fits.
+        CHECK_NEAR(keyFont(L"zh-Hans", {10, 90, -1, 20}), key);
+        // The pseudo-locale's [Éẋ ], three ems: down to 6, where it still doesn't fit.
+        CHECK_NEAR(keyFont(L"qps-ploc", {10, 20, -1, 90}), 6);
+        // Without a reading, the key's font as it is.
+        CHECK_NEAR(keyFont(L"qps-ploc", {-1, -1, -1, -1}), key);
+    });
+
+    Run("preview strip in every language: bar keys inside their column, matrix numbers past their key and its "
+        "gap, the headline countdown's reserve holding every form", [] {
+        UiGraphics& g = TestGraphics();
+        auto width = [&](const SettingsPreviewOp& op) {
+            return UiLayoutSize(UiLayout(g, op.text, op.style, 100000, false)).width;
+        };
+        for (const wchar_t* tag : {L"en", L"de", L"ru", L"ja", L"zh-Hans", L"qps-ploc"}) {
+            const I18nLocale locale = TestLocale(tag);
+            std::vector<std::wstring> keys;
+            for (I18nKey key : kQuotaKeys) keys.push_back(I18nText(locale, key));
+            auto isKey = [&](const std::wstring& text) { return std::find(keys.begin(), keys.end(), text) != keys.end(); };
+            for (float scale : {1.0f, 1.5f}) {
+                // Each key's text (trailing-aligned in its box) as wide as its box at most.
+                for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
+                    for (int size : {9, 14}) {
+                        Settings s = With([&](Settings& s) {
+                            s.barLayout = layout;
+                            s.showBarLabels = true;
+                            s.percentFontSize = size;
+                        });
+                        int found = 0;
+                        for (const SettingsPreviewOp& op :
+                             SettingsPreviewLayout(g, s, locale, 48, scale, kNow, false, false, 0xFFFFFFFF).ops) {
+                            if (op.kind != SettingsPreviewOp::Kind::Text || !isKey(op.text) || op.style.size != size) continue;
+                            found++;
+                            CHECK(width(op) <= op.rect.right - op.rect.left + 0.01f);
+                        }
+                        CHECK(found == 10);
+                    }
+                }
+                // Matrix cells: the number at least the key's width and 3 DIPs past its left.
+                std::vector<SettingsPreviewOp> ops =
+                    SettingsPreviewLayout(g, With([](Settings& s) { s.barLayout = BarLayout::QuotaMatrix; }), locale, 48,
+                                          scale, kNow, false, false, 0xFFFFFFFF)
+                        .ops;
+                int cells = 0;
+                for (size_t i = 0; i + 1 < ops.size(); i++) {
+                    if (ops[i].kind != SettingsPreviewOp::Kind::Text || !isKey(ops[i].text)) continue;
+                    cells++;
+                    CHECK(ops[i + 1].rect.left >= ops[i].rect.left + width(ops[i]) + 3 - 0.01f);
+                }
+                CHECK(cells == 10);
+            }
+            // The headline countdown: an account's tile as wide without a reset time as with one.
+            Settings countdown = With([](Settings& s) {
+                s.barLayout = BarLayout::LogoHeadline;
+                s.headlineCountdown = true;
+            });
+            auto tileWidth = [&](ULONGLONG reset) {
+                std::vector<AccountConfig> accounts = {Account(L"anthropic", L"A", {true, false, false, false})};
+                std::vector<AccountData> data = {Fresh()};
+                data[0].win5h = {40, reset, reset ? kFiveHours : 0};
+                SettingsPreviewStrip strip = SettingsPreviewLayout(g, countdown, locale, 48, 1, kNow, false, false,
+                                                                   0xFFFFFFFF, &accounts, &data);
+                return strip.columns.at(0).right - strip.columns.at(0).left;
+            };
+            const float timed = tileWidth(kNow + 4 * 60 * kMinute + 30 * kMinute);
+            CHECK_NEAR(tileWidth(0), timed);
+            CHECK_NEAR(tileWidth(kNow - kMinute), timed);
+        }
     });
 
     Run("account errors: a coded error formats in the reader's language and logs in English; a message "
@@ -314,7 +561,7 @@ static void RunI18nTaskbarTests() {
         auto build = [](const I18nLocale& locale) {
             std::vector<AccountConfig> accounts;
             std::vector<AccountData> data;
-            BuildVisualTestSnapshot(MeterDisplayFor(Settings{}, locale, kNow, 1, 48), &accounts, &data);
+            BuildVisualTestSnapshot(MeterDisplayFor(Settings{}, locale, TestMeasure, kNow, 1, 48), &accounts, &data);
             return std::pair{accounts, data};
         };
         auto names = [](const AccountData& data, const I18nLocale& locale) {
@@ -338,6 +585,23 @@ static void RunI18nTaskbarTests() {
         CHECK(build({}).second[1].plan == L"Visual test");
         ProviderOutage outage = VisualTestOutage(L"openai", kNow);
         CHECK(outage.component == L"Codex API" && outage.title == L"Elevated error rates");
+    });
+
+    Run("details flyout: a number and its unit in each language's order, the unit first in Japanese and "
+        "Chinese", [] {
+        auto reading = [](const wchar_t* tag, const wchar_t* unit) {
+            return I18nText(TestLocale(tag), TrCtx(L"quota-unit-order", L"{number} {unit}"),
+                            {{L"number", L"45%"}, {L"unit", unit}});
+        };
+        CHECK(reading(L"en", L"used") == L"45% used");
+        // 使用済み 45%, 残り 45%; 已用 45%.
+        CHECK(reading(L"ja", L"\u4F7F\u7528\u6E08\u307F") == L"\u4F7F\u7528\u6E08\u307F 45%");
+        CHECK(reading(L"ja", L"\u6B8B\u308A") == L"\u6B8B\u308A 45%");
+        CHECK(reading(L"zh-Hans", L"\u5DF2\u7528") == L"\u5DF2\u7528 45%");
+        for (const wchar_t* tag : {L"de", L"es", L"fr", L"pt-BR", L"ru"}) CHECK(reading(tag, L"x") == L"45% x");
+        // The pseudo-locale keeps the English order inside its brackets.
+        std::wstring pseudo = reading(L"qps-ploc", L"x");
+        CHECK(pseudo.find(L"45%") < pseudo.find(L'x'));
     });
 
     Run("details flyout templates on the production catalogs: Russian free resets by plural form and with "
