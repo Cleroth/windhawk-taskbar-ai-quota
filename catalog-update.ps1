@@ -23,8 +23,10 @@ if (-not $sourceVersionMatch.Success) {
 }
 $sourceVersion = [version]$sourceVersionMatch.Groups[1].Value
 
-if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    throw 'git is not available'
+foreach ($tool in 'git', 'gh', 'python') {
+    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+        throw "$tool is not available"
+    }
 }
 
 if (-not $Verify) {
@@ -173,6 +175,27 @@ if ($LASTEXITCODE -ne 0) {
 }
 if ($changedFiles.Count -ne 1 -or $changedFiles[0] -ne $catalogPath) {
     throw "Catalog update must change exactly $catalogPath; found: $($changedFiles -join ', ')"
+}
+
+# Upstream's PR validation of the mod file, as its CI runs it for the PR author (gh's user); the
+# worktree's .github equals upstream main's here. The PR description's checks aren't covered.
+$ghUser = gh api user | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not read the gh user (exit $LASTEXITCODE)"
+}
+$env:PYTHONUTF8 = '1'
+Push-Location -LiteralPath $Worktree
+try {
+    $validation = @(python .github/pr_validation.py $catalogPath $ghUser.login $ghUser.id 2>&1)
+    $validationExit = $LASTEXITCODE
+} finally {
+    Pop-Location
+}
+$validation | ForEach-Object { "$_" }
+$validationWarnings = @($validation | Where-Object { "$_" -like '::warning*' })
+if ($validationExit -ne 0 -or $validationWarnings.Count -ne 0) {
+    throw ("Upstream PR validation failed (exit $validationExit, $($validationWarnings.Count) " +
+        'warning(s)); map line numbers to src/ with generate-mod.ps1 -Locate <line>')
 }
 
 $currentBranch = git -C $Worktree branch --show-current
