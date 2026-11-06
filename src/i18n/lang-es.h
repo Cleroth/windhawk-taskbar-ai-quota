@@ -405,11 +405,12 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"el historial se conserva para siempre y la ventana del historial de uso se abre en 7 días. El historial "
      L"guardado se conserva."},
     {L"", L"Reset Layout to defaults", L"Restablecer Diseño a los valores predeterminados"},
-    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
-          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
-          L"changed.",
-     L"¿Restablecer Diseño a sus valores predeterminados?\n\nBarras apiladas de 100\u00A0x\u00A08\u00A0px con etiquetas a la "
+    {L"", L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px with labels on the left, "
+          L"32 px rings, logos and number badges in the taskbar’s text color, percentage text on hover (never on "
+          L"vertical bars) with adaptive alignment, no amounts, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"¿Restablecer Diseño a sus valores predeterminados?\n\nEstilo de mosaico {style}, barras apiladas de "
+     L"100\u00A0x\u00A08\u00A0px con etiquetas a la "
      L"izquierda, anillos de 32\u00A0px, logotipos y distintivos numéricos en el color de texto de la barra de tareas, "
      L"texto de porcentaje al pasar el puntero (nunca en las barras verticales) con alineación adaptable, sin "
      L"importes, marcadores de ritmo de tipo cursor en gris claro y el espaciado predeterminado. Las cuentas no "

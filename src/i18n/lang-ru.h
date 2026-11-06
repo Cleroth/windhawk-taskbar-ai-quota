@@ -397,11 +397,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Сбросить «История» к значениям по умолчанию?\n\nЗапись включается для этого пользователя Windows, история "
      L"хранится бессрочно, а окно истории использования открывается с периодом 7 дней. Сохранённая история остаётся."},
     {L"", L"Reset Layout to defaults", L"Сбросить «Макет» к значениям по умолчанию"},
-    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
-          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
-          L"changed.",
-     L"Сбросить «Макет» к значениям по умолчанию?\n\nПолосы стопкой 100\u00A0×\u00A08\u00A0пикс. с подписями слева, кольца 32\u00A0пикс., "
+    {L"", L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px with labels on the left, "
+          L"32 px rings, logos and number badges in the taskbar’s text color, percentage text on hover (never on "
+          L"vertical bars) with adaptive alignment, no amounts, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"Сбросить «Макет» к значениям по умолчанию?\n\nСтиль плитки «{style}», полосы стопкой 100\u00A0×\u00A08\u00A0пикс. "
+     L"с подписями слева, кольца 32\u00A0пикс., "
      L"логотипы и номера цветом текста панели задач, текст процентов при наведении (на вертикальных полосах — "
      L"никогда) с адаптивным выравниванием, без сумм, светло-серые метки темпа в виде курсора и интервалы по "
      L"умолчанию. Аккаунты не изменяются."},

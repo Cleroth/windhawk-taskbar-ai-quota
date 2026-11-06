@@ -977,11 +977,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"eingeschaltet, der Verlauf wird unbegrenzt aufbewahrt und das Fenster „Nutzungsverlauf“ öffnet mit 7 Tagen. "
      L"Der gespeicherte Verlauf bleibt erhalten."},
     {L"", L"Reset Layout to defaults", L"Layout auf Standard zurücksetzen"},
-    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
-          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
-          L"changed.",
-     L"Layout auf die Standardwerte zurücksetzen?\n\nGestapelte Balken 100\u00A0x\u00A08\u00A0px mit Bezeichnungen links, Ringe mit "
+    {L"", L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px with labels on the left, "
+          L"32 px rings, logos and number badges in the taskbar’s text color, percentage text on hover (never on "
+          L"vertical bars) with adaptive alignment, no amounts, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"Layout auf die Standardwerte zurücksetzen?\n\nKachelstil „{style}“, gestapelte Balken 100\u00A0x\u00A08\u00A0px mit "
+     L"Bezeichnungen links, Ringe mit "
      L"32\u00A0px, Logos und Nummern-Badges in der Textfarbe der Taskleiste, Prozenttext beim Daraufzeigen (nie auf "
      L"vertikalen Balken) mit adaptiver Ausrichtung, keine Beträge, hellgraue Tempomarkierungen als Caret und die "
      L"Standardabstände. Konten werden nicht geändert."},
@@ -2226,11 +2227,12 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"el historial se conserva para siempre y la ventana del historial de uso se abre en 7 días. El historial "
      L"guardado se conserva."},
     {L"", L"Reset Layout to defaults", L"Restablecer Diseño a los valores predeterminados"},
-    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
-          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
-          L"changed.",
-     L"¿Restablecer Diseño a sus valores predeterminados?\n\nBarras apiladas de 100\u00A0x\u00A08\u00A0px con etiquetas a la "
+    {L"", L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px with labels on the left, "
+          L"32 px rings, logos and number badges in the taskbar’s text color, percentage text on hover (never on "
+          L"vertical bars) with adaptive alignment, no amounts, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"¿Restablecer Diseño a sus valores predeterminados?\n\nEstilo de mosaico {style}, barras apiladas de "
+     L"100\u00A0x\u00A08\u00A0px con etiquetas a la "
      L"izquierda, anillos de 32\u00A0px, logotipos y distintivos numéricos en el color de texto de la barra de tareas, "
      L"texto de porcentaje al pasar el puntero (nunca en las barras verticales) con alineación adaptable, sin "
      L"importes, marcadores de ritmo de tipo cursor en gris claro y el espaciado predeterminado. Las cuentas no "
@@ -3478,11 +3480,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"conservé indéfiniment et la fenêtre de l’historique d’utilisation s’ouvre sur 7\u00A0jours. L’historique enregistré "
      L"est conservé."},
     {L"", L"Reset Layout to defaults", L"Réinitialiser la page Disposition"},
-    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
-          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
-          L"changed.",
-     L"Réinitialiser la page Disposition\u202F?\n\nBarres empilées de 100\u00A0×\u00A08\u00A0px avec libellés à gauche, anneaux de 32\u00A0px, "
+    {L"", L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px with labels on the left, "
+          L"32 px rings, logos and number badges in the taskbar’s text color, percentage text on hover (never on "
+          L"vertical bars) with adaptive alignment, no amounts, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"Réinitialiser la page Disposition\u202F?\n\nStyle de vignette {style}, barres empilées de 100\u00A0×\u00A08\u00A0px "
+     L"avec libellés à gauche, anneaux de 32\u00A0px, "
      L"logos et badges numérotés dans la couleur du texte de la barre des tâches, texte de pourcentage au survol "
      L"(jamais sur les barres verticales) avec alignement adaptatif, aucun montant, repères de rythme en chevron gris "
      L"clair et l’espacement par défaut. Les comptes ne sont pas modifiés."},
@@ -4649,11 +4652,11 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"the usage history window opens on 7 days. Saved history stays.",
      L"履歴を既定値にリセットしますか？\n\nこの Windows ユーザーの記録がオンになり、履歴は無期限に保持され、使用履歴ウィンドウは 7 日で開きます。保存済みの履歴は残ります。"},
     {L"", L"Reset Layout to defaults", L"レイアウトを既定値にリセット"},
-    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
-          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
-          L"changed.",
-     L"レイアウトを既定値にリセットしますか？\n\n100 x 8 px の積み上げバーと左側のラベル、32 px のリング、タスク バーの文字色のロゴと番号バッジ、ホバー時のパーセント表示 (縦バーでは非表示、配置は自動)、金額なし、"
+    {L"", L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px with labels on the left, "
+          L"32 px rings, logos and number badges in the taskbar’s text color, percentage text on hover (never on "
+          L"vertical bars) with adaptive alignment, no amounts, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"レイアウトを既定値にリセットしますか？\n\nタイル スタイルは［{style}］、100 x 8 px の積み上げバーと左側のラベル、32 px のリング、タスク バーの文字色のロゴと番号バッジ、ホバー時のパーセント表示 (縦バーでは非表示、配置は自動)、金額なし、"
      L"薄い灰色のキャレット型ペース マーカー、既定の間隔。アカウントは変更されません。"},
     {L"", L"Reset countdown", L"リセットまでの残り時間"},
     {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "
@@ -5791,11 +5794,12 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Redefinir Histórico para o padrão?\n\nO registro é ativado para este usuário do Windows, o histórico é "
      L"mantido para sempre e a janela do histórico de uso abre em 7 dias. O histórico salvo permanece."},
     {L"", L"Reset Layout to defaults", L"Redefinir Layout para o padrão"},
-    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
-          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
-          L"changed.",
-     L"Redefinir Layout para o padrão?\n\nBarras empilhadas de 100 x 8\u00A0px com rótulos à esquerda, anéis de 32\u00A0px, "
+    {L"", L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px with labels on the left, "
+          L"32 px rings, logos and number badges in the taskbar’s text color, percentage text on hover (never on "
+          L"vertical bars) with adaptive alignment, no amounts, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"Redefinir Layout para o padrão?\n\nEstilo de bloco {style}, barras empilhadas de 100 x 8\u00A0px com rótulos à "
+     L"esquerda, anéis de 32\u00A0px, "
      L"logos e selos numéricos na cor do texto da barra de tarefas, texto de porcentagem ao passar o mouse (nunca "
      L"nas barras verticais) com alinhamento adaptável, sem valores, marcadores de ritmo Cursor em cinza-claro e o "
      L"espaçamento padrão. As contas não são alteradas."},
@@ -6484,7 +6488,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"settings-page", L"Layout", L"Layout"},
     {L"settings-section", L"Alerts", L"Alertas"},
     {L"settings-section", L"Appearance", L"Aparência"},
-    {L"settings-section", L"Bar text", L"Texto da barra"},
+    {L"settings-section", L"Bar text", L"Texto das barras"},
     {L"settings-section", L"Bars", L"Barras"},
     {L"settings-section", L"Credits and license", L"Créditos e licença"},
     {L"settings-section", L"Current position", L"Posição atual"},
@@ -7013,11 +7017,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Сбросить «История» к значениям по умолчанию?\n\nЗапись включается для этого пользователя Windows, история "
      L"хранится бессрочно, а окно истории использования открывается с периодом 7 дней. Сохранённая история остаётся."},
     {L"", L"Reset Layout to defaults", L"Сбросить «Макет» к значениям по умолчанию"},
-    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
-          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
-          L"changed.",
-     L"Сбросить «Макет» к значениям по умолчанию?\n\nПолосы стопкой 100\u00A0×\u00A08\u00A0пикс. с подписями слева, кольца 32\u00A0пикс., "
+    {L"", L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px with labels on the left, "
+          L"32 px rings, logos and number badges in the taskbar’s text color, percentage text on hover (never on "
+          L"vertical bars) with adaptive alignment, no amounts, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"Сбросить «Макет» к значениям по умолчанию?\n\nСтиль плитки «{style}», полосы стопкой 100\u00A0×\u00A08\u00A0пикс. "
+     L"с подписями слева, кольца 32\u00A0пикс., "
      L"логотипы и номера цветом текста панели задач, текст процентов при наведении (на вертикальных полосах — "
      L"никогда) с адаптивным выравниванием, без сумм, светло-серые метки темпа в виде курсора и интервалы по "
      L"умолчанию. Аккаунты не изменяются."},
@@ -8150,11 +8155,11 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"the usage history window opens on 7 days. Saved history stays.",
      L"要将“历史”重置为默认值吗？\n\n将为此 Windows 用户开启记录，永久保留历史，使用历史窗口打开时显示 7 天。已保存的历史会保留。"},
     {L"", L"Reset Layout to defaults", L"将“布局”重置为默认值"},
-    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
-          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
-          L"changed.",
-     L"要将“布局”重置为默认值吗？\n\n100 x 8 px 堆叠条形且标签在左侧、32 px 圆环、采用任务栏文字颜色的徽标和编号徽章、悬停时显示百分比文本（垂直条形上从不显示）并自适应对齐、不显示金额、"
+    {L"", L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px with labels on the left, "
+          L"32 px rings, logos and number badges in the taskbar’s text color, percentage text on hover (never on "
+          L"vertical bars) with adaptive alignment, no amounts, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"要将“布局”重置为默认值吗？\n\n“{style}”磁贴样式、100 x 8 px 堆叠条形且标签在左侧、32 px 圆环、采用任务栏文字颜色的徽标和编号徽章、悬停时显示百分比文本（垂直条形上从不显示）并自适应对齐、不显示金额、"
      L"浅灰色插入符号式节奏标记以及默认间距。账户不会更改。"},
     {L"", L"Reset countdown", L"重置倒计时"},
     {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "
@@ -37308,17 +37313,19 @@ struct SettingsUiClient final : UiHostClient {
                                    L"display only, show details on hover, poll every 10 minutes, do not poll hidden "
                                    L"accounts, threshold notifications at red.") :
                             field == SettingsField::ResetLayout ?
-                                Tr(L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, "
-                                   L"32 px rings, logos and number badges in the taskbar\u2019s text color, percentage "
-                                   L"text on hover (never on vertical bars) with adaptive alignment, no amounts, light "
-                                   L"grey caret pace markers and the default spacing. Accounts are not changed.") :
+                                Tr(L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px "
+                                   L"with labels on the left, 32 px rings, logos and number badges in the taskbar\u2019s "
+                                   L"text color, percentage text on hover (never on vertical bars) with adaptive "
+                                   L"alignment, no amounts, light grey caret pace markers and the default spacing. "
+                                   L"Accounts are not changed.") :
                             field == SettingsField::ResetDisplay ?
                                 Tr(L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default "
                                    L"palette (custom colors reset too) with yellow from 50%, orange from 75% and red "
                                    L"from 90%, stale data marked, additional OpenAI rate limits hidden.") :
                                 Tr(L"Reset History to its defaults?\n\nRecording turns on for this Windows user, "
                                    L"history is kept forever and the usage history window opens on 7 days. Saved "
-                                   L"history stays."));
+                                   L"history stays."),
+                            {{L"style", I18nText(locale, kSettingsTileStyles[int(Settings().barLayout)])}});
                         if (Ask(host, question, I18nText(locale, TrCtx(L"dialog-caption", L"Reset settings")),
                                 MB_YESNO | MB_ICONQUESTION) != IDYES ||
                             Unloading() || closePreparation || host.closing) {

@@ -334,17 +334,19 @@ struct SettingsUiClient final : UiHostClient {
                                    L"display only, show details on hover, poll every 10 minutes, do not poll hidden "
                                    L"accounts, threshold notifications at red.") :
                             field == SettingsField::ResetLayout ?
-                                Tr(L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, "
-                                   L"32 px rings, logos and number badges in the taskbar\u2019s text color, percentage "
-                                   L"text on hover (never on vertical bars) with adaptive alignment, no amounts, light "
-                                   L"grey caret pace markers and the default spacing. Accounts are not changed.") :
+                                Tr(L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px "
+                                   L"with labels on the left, 32 px rings, logos and number badges in the taskbar\u2019s "
+                                   L"text color, percentage text on hover (never on vertical bars) with adaptive "
+                                   L"alignment, no amounts, light grey caret pace markers and the default spacing. "
+                                   L"Accounts are not changed.") :
                             field == SettingsField::ResetDisplay ?
                                 Tr(L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default "
                                    L"palette (custom colors reset too) with yellow from 50%, orange from 75% and red "
                                    L"from 90%, stale data marked, additional OpenAI rate limits hidden.") :
                                 Tr(L"Reset History to its defaults?\n\nRecording turns on for this Windows user, "
                                    L"history is kept forever and the usage history window opens on 7 days. Saved "
-                                   L"history stays."));
+                                   L"history stays."),
+                            {{L"style", I18nText(locale, kSettingsTileStyles[int(Settings().barLayout)])}});
                         if (Ask(host, question, I18nText(locale, TrCtx(L"dialog-caption", L"Reset settings")),
                                 MB_YESNO | MB_ICONQUESTION) != IDYES ||
                             Unloading() || closePreparation || host.closing) {

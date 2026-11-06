@@ -418,11 +418,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"eingeschaltet, der Verlauf wird unbegrenzt aufbewahrt und das Fenster „Nutzungsverlauf“ öffnet mit 7 Tagen. "
      L"Der gespeicherte Verlauf bleibt erhalten."},
     {L"", L"Reset Layout to defaults", L"Layout auf Standard zurücksetzen"},
-    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
-          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
-          L"changed.",
-     L"Layout auf die Standardwerte zurücksetzen?\n\nGestapelte Balken 100\u00A0x\u00A08\u00A0px mit Bezeichnungen links, Ringe mit "
+    {L"", L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px with labels on the left, "
+          L"32 px rings, logos and number badges in the taskbar’s text color, percentage text on hover (never on "
+          L"vertical bars) with adaptive alignment, no amounts, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"Layout auf die Standardwerte zurücksetzen?\n\nKachelstil „{style}“, gestapelte Balken 100\u00A0x\u00A08\u00A0px mit "
+     L"Bezeichnungen links, Ringe mit "
      L"32\u00A0px, Logos und Nummern-Badges in der Textfarbe der Taskleiste, Prozenttext beim Daraufzeigen (nie auf "
      L"vertikalen Balken) mit adaptiver Ausrichtung, keine Beträge, hellgraue Tempomarkierungen als Caret und die "
      L"Standardabstände. Konten werden nicht geändert."},

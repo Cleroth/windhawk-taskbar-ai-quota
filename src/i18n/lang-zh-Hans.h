@@ -314,11 +314,11 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"the usage history window opens on 7 days. Saved history stays.",
      L"要将“历史”重置为默认值吗？\n\n将为此 Windows 用户开启记录，永久保留历史，使用历史窗口打开时显示 7 天。已保存的历史会保留。"},
     {L"", L"Reset Layout to defaults", L"将“布局”重置为默认值"},
-    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
-          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
-          L"changed.",
-     L"要将“布局”重置为默认值吗？\n\n100 x 8 px 堆叠条形且标签在左侧、32 px 圆环、采用任务栏文字颜色的徽标和编号徽章、悬停时显示百分比文本（垂直条形上从不显示）并自适应对齐、不显示金额、"
+    {L"", L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px with labels on the left, "
+          L"32 px rings, logos and number badges in the taskbar’s text color, percentage text on hover (never on "
+          L"vertical bars) with adaptive alignment, no amounts, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"要将“布局”重置为默认值吗？\n\n“{style}”磁贴样式、100 x 8 px 堆叠条形且标签在左侧、32 px 圆环、采用任务栏文字颜色的徽标和编号徽章、悬停时显示百分比文本（垂直条形上从不显示）并自适应对齐、不显示金额、"
      L"浅灰色插入符号式节奏标记以及默认间距。账户不会更改。"},
     {L"", L"Reset countdown", L"重置倒计时"},
     {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "

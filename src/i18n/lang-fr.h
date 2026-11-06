@@ -416,11 +416,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"conservé indéfiniment et la fenêtre de l’historique d’utilisation s’ouvre sur 7\u00A0jours. L’historique enregistré "
      L"est conservé."},
     {L"", L"Reset Layout to defaults", L"Réinitialiser la page Disposition"},
-    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
-          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
-          L"changed.",
-     L"Réinitialiser la page Disposition\u202F?\n\nBarres empilées de 100\u00A0×\u00A08\u00A0px avec libellés à gauche, anneaux de 32\u00A0px, "
+    {L"", L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px with labels on the left, "
+          L"32 px rings, logos and number badges in the taskbar’s text color, percentage text on hover (never on "
+          L"vertical bars) with adaptive alignment, no amounts, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"Réinitialiser la page Disposition\u202F?\n\nStyle de vignette {style}, barres empilées de 100\u00A0×\u00A08\u00A0px "
+     L"avec libellés à gauche, anneaux de 32\u00A0px, "
      L"logos et badges numérotés dans la couleur du texte de la barre des tâches, texte de pourcentage au survol "
      L"(jamais sur les barres verticales) avec alignement adaptatif, aucun montant, repères de rythme en chevron gris "
      L"clair et l’espacement par défaut. Les comptes ne sont pas modifiés."},

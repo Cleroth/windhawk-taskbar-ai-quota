@@ -402,11 +402,12 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Redefinir Histórico para o padrão?\n\nO registro é ativado para este usuário do Windows, o histórico é "
      L"mantido para sempre e a janela do histórico de uso abre em 7 dias. O histórico salvo permanece."},
     {L"", L"Reset Layout to defaults", L"Redefinir Layout para o padrão"},
-    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
-          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
-          L"changed.",
-     L"Redefinir Layout para o padrão?\n\nBarras empilhadas de 100 x 8\u00A0px com rótulos à esquerda, anéis de 32\u00A0px, "
+    {L"", L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px with labels on the left, "
+          L"32 px rings, logos and number badges in the taskbar’s text color, percentage text on hover (never on "
+          L"vertical bars) with adaptive alignment, no amounts, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"Redefinir Layout para o padrão?\n\nEstilo de bloco {style}, barras empilhadas de 100 x 8\u00A0px com rótulos à "
+     L"esquerda, anéis de 32\u00A0px, "
      L"logos e selos numéricos na cor do texto da barra de tarefas, texto de porcentagem ao passar o mouse (nunca "
      L"nas barras verticais) com alinhamento adaptável, sem valores, marcadores de ritmo Cursor em cinza-claro e o "
      L"espaçamento padrão. As contas não são alteradas."},
@@ -1095,7 +1096,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"settings-page", L"Layout", L"Layout"},
     {L"settings-section", L"Alerts", L"Alertas"},
     {L"settings-section", L"Appearance", L"Aparência"},
-    {L"settings-section", L"Bar text", L"Texto da barra"},
+    {L"settings-section", L"Bar text", L"Texto das barras"},
     {L"settings-section", L"Bars", L"Barras"},
     {L"settings-section", L"Credits and license", L"Créditos e licença"},
     {L"settings-section", L"Current position", L"Posição atual"},

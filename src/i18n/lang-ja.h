@@ -328,11 +328,11 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"the usage history window opens on 7 days. Saved history stays.",
      L"履歴を既定値にリセットしますか？\n\nこの Windows ユーザーの記録がオンになり、履歴は無期限に保持され、使用履歴ウィンドウは 7 日で開きます。保存済みの履歴は残ります。"},
     {L"", L"Reset Layout to defaults", L"レイアウトを既定値にリセット"},
-    {L"", L"Reset Layout to its defaults?\n\nStacked bars 100 x 8 px with labels on the left, 32 px rings, logos and "
-          L"number badges in the taskbar’s text color, percentage text on hover (never on vertical bars) with "
-          L"adaptive alignment, no amounts, light grey caret pace markers and the default spacing. Accounts are not "
-          L"changed.",
-     L"レイアウトを既定値にリセットしますか？\n\n100 x 8 px の積み上げバーと左側のラベル、32 px のリング、タスク バーの文字色のロゴと番号バッジ、ホバー時のパーセント表示 (縦バーでは非表示、配置は自動)、金額なし、"
+    {L"", L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px with labels on the left, "
+          L"32 px rings, logos and number badges in the taskbar’s text color, percentage text on hover (never on "
+          L"vertical bars) with adaptive alignment, no amounts, light grey caret pace markers and the default spacing. "
+          L"Accounts are not changed.",
+     L"レイアウトを既定値にリセットしますか？\n\nタイル スタイルは［{style}］、100 x 8 px の積み上げバーと左側のラベル、32 px のリング、タスク バーの文字色のロゴと番号バッジ、ホバー時のパーセント表示 (縦バーでは非表示、配置は自動)、金額なし、"
      L"薄い灰色のキャレット型ペース マーカー、既定の間隔。アカウントは変更されません。"},
     {L"", L"Reset countdown", L"リセットまでの残り時間"},
     {L"", L"Retention: forever, with no size limit. Turning recording off keeps saved history. Removed accounts "
