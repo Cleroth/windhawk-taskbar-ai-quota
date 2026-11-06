@@ -106,6 +106,8 @@ static bool HasStoredToken(uint64_t idHash) {
     return stored[0] != 0;
 }
 
+// Every token read uses a 16,384-character buffer: a value that would fill it (16,383 characters or
+// more) fails before writing.
 static bool SaveStoredToken(uint64_t idHash, const StoredToken& t) {
     std::lock_guard<std::mutex> lk(g_authMutex);
     std::wstring json;
@@ -121,7 +123,12 @@ static bool SaveStoredToken(uint64_t idHash, const StoredToken& t) {
     }
     std::string b64 = DpapiProtect(WideToUtf8(json));
     if (b64.empty()) return false;
-    return Wh_SetStringValue(TokenStorageKey(idHash).c_str(), Utf8ToWide(b64).c_str());
+    std::wstring stored = Utf8ToWide(b64);
+    if (stored.size() >= 16383) {
+        Wh_Log(L"Token save failed: %zu characters is over the storage limit", stored.size());
+        return false;
+    }
+    return Wh_SetStringValue(TokenStorageKey(idHash).c_str(), stored.c_str());
 }
 
 static bool ClearStoredToken(uint64_t idHash) {

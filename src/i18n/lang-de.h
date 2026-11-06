@@ -277,9 +277,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"No accounts support this view.", L"Kein Konto unterstützt diese Ansicht."},
     {L"", L"No accounts to display.", L"Keine Konten zum Anzeigen."},
     {L"", L"No accounts yet", L"Noch keine Konten"},
-    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
-     L"Nicht verschlüsselt. Messwerte und anonyme IDs, keine Token oder Bezeichnungen. Bleibt nach dem Entfernen des "
-     L"Mods erhalten."},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. In the mod's Windhawk storage, which Windhawk "
+          L"deletes, as far as it can, when it removes the mod.",
+     L"Nicht verschlüsselt. Messwerte und anonyme IDs, keine Token oder Bezeichnungen. Im Windhawk-Speicher des Mods, "
+     L"den Windhawk beim Entfernen des Mods so weit wie möglich löscht."},
+    {L"", L"Not saved: saving would replace the stored settings, which couldn't be read.",
+     L"Nicht gespeichert: Das Speichern würde die gespeicherten Einstellungen ersetzen, die nicht gelesen werden "
+     L"konnten."},
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"Es wurde noch nichts aufgezeichnet. Der Ordner wird mit dem ersten aufgezeichneten Messwert erstellt."},
     {L"", L"Nothing new is recorded.", L"Es wird nichts Neues aufgezeichnet."},
@@ -291,6 +295,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Number size", L"Zahlengröße"},
     {L"", L"On hover", L"Beim Daraufzeigen"},
     {L"", L"Open AI quota settings", L"Einstellungen für KI-Kontingente öffnen"},
+    {L"", L"Open AI quota settings. Stored settings could not be read.",
+     L"Einstellungen für KI-Kontingente öffnen. Die gespeicherten Einstellungen konnten nicht gelesen werden."},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"Einstellungen für KI-Kontingente öffnen. Die gespeicherten Einstellungen konnten nicht gelesen werden; eine "
      L"Sicherung wurde aufbewahrt."},
@@ -452,11 +458,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"OpenCode Go in der Taskleiste anzuzeigen."},
     {L"", L"Set Credits max to show the Credits bar.",
      L"Legen Sie „Credits-Maximum“ fest, um den Credits-Balken anzuzeigen."},
-    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
-          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
-     L"Gilt für alle Windows-Benutzer. „Unbegrenzt“ löscht nichts und hat keine Größenbeschränkung, daher wächst der "
-     L"Verlauf im Speicher des Explorers und auf dem Datenträger weiter. Tageslimits bereinigen stündlich, mit einer "
-     L"Obergrenze von etwa 60\u00A0MB."},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
+          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
+          L"with a cap of about 60 MB.",
+     L"Gilt für alle Windows-Benutzer. „Unbegrenzt“ hat keine Größenbeschränkung, daher wächst der Verlauf im Speicher "
+     L"des Explorers und auf dem Datenträger weiter; Antigravity-Messwerte, die älter als 15 Tage sind, werden in "
+     L"Abständen von etwa 10 Minuten aufbewahrt. Tageslimits bereinigen stündlich, mit einer Obergrenze von etwa "
+     L"60\u00A0MB."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"Kürzel neben jedem Balken: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Kurztext"},
@@ -559,6 +567,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Windows-Anzeigesprache. Gilt nur für diesen Windows-Benutzer."},
     {L"", L"The settings and usage history windows use Mica for it.",
      L"Die Fenster „Einstellungen“ und „Nutzungsverlauf“ verwenden dafür „Mica“."},
+    {L"", L"The stored settings couldn't be read, so this window shows the defaults. Saving this change replaces the "
+          L"stored settings, accounts included, with what this window shows.\n\nReplace the stored settings? If you "
+          L"keep them, this change isn't saved; they're read again the next time Windows Explorer starts.",
+     L"Die gespeicherten Einstellungen konnten nicht gelesen werden, daher zeigt dieses Fenster die Standardwerte. "
+     L"Beim Speichern dieser Änderung werden die gespeicherten Einstellungen, einschließlich der Konten, durch das "
+     L"ersetzt, was dieses Fenster zeigt.\n\nDie gespeicherten Einstellungen ersetzen? Wenn Sie sie behalten, wird "
+     L"diese Änderung nicht gespeichert; sie werden beim nächsten Start des Windows-Explorers erneut gelesen."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"Die gespeicherte Anmeldung konnte nicht kopiert werden. Das Konto wurde nicht geändert."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -602,11 +617,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Dieses Konto wurde entfernt. Sein gespeicherter Verlauf bleibt erhalten, bis er abläuft oder gelöscht wird."},
     {L"", L"This change couldn't be saved.", L"Diese Änderung konnte nicht gespeichert werden."},
     {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
-          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
-          L"available. Continue?",
+          L"spreadsheet row limits. Until it finishes, the history window shows its progress and most of its controls "
+          L"are unavailable; closing the window cancels the export. Continue?",
      L"Dieser Export enthält etwa {rows, plural, one{# Zeile} other{# Zeilen}}. Er kann eine Weile dauern und die "
-     L"Zeilenlimits von Tabellenkalkulationen überschreiten. Das Verlaufsfenster ist während des Schreibens "
-     L"beschäftigt; die Taskleiste des Explorers bleibt verfügbar. Fortfahren?"},
+     L"Zeilenlimits von Tabellenkalkulationen überschreiten. Bis er abgeschlossen ist, zeigt das Verlaufsfenster "
+     L"seinen Fortschritt, und die meisten seiner Steuerelemente sind nicht verfügbar; das Schließen des Fensters "
+     L"bricht den Export ab. Fortfahren?"},
     {L"", L"Threshold notifications", L"Schwellenwert-Benachrichtigungen"},
     {L"", L"Thresholds stay in order: yellow, orange, red.",
      L"Die Schwellenwerte bleiben in der Reihenfolge Gelb, Orange, Rot."},

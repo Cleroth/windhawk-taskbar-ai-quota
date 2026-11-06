@@ -11,6 +11,7 @@ struct AccountTarget {
 struct AccountCommandResult {
     SettingsApplyResult apply = SettingsApplyResult::Failed;
     bool missing = false;      // The account isn't configured (any more)
+    bool replaceBlocked = false;  // An add's failure: ApplyOwnedSettings' `replaceBlocked`
     SettingsNoticeCode message = SettingsNoticeCode::None;   // For the user (settings/edits.h)
     HistoryJournalError reason = HistoryJournalError::None;  // HistoryKept's
     UINT icon = MB_ICONERROR;  // The message's
@@ -47,7 +48,9 @@ static AccountTarget PublishedAccountTarget(uint64_t identity) {
     return {0, identity};
 }
 
-// Adds `account` labelled with the first of `labels` its provider doesn't use yet.
+// Adds `account` labelled with the first of `labels` its provider doesn't use yet. Only an add can
+// meet stored settings the load couldn't read (that recovery has no accounts to act on), so only it
+// reports a save blocked from replacing them.
 static AccountCommandResult AddAccountCommand(AccountConfig account, const std::vector<std::wstring>& labels) {
     AccountCommandResult result;
     std::unique_lock<std::mutex> configLock(g_configEditMutex);
@@ -69,7 +72,7 @@ static AccountCommandResult AddAccountCommand(AccountConfig account, const std::
     account.label = *label;
     uint64_t identity = AccountIdentityHash(account);
     settings.accounts.push_back(std::move(account));
-    result.apply = ApplyOwnedSettings(std::move(settings));
+    result.apply = ApplyOwnedSettings(std::move(settings), 0, 0, &result.replaceBlocked);
     if (result.apply != SettingsApplyResult::Failed) result.account = PublishedAccountTarget(identity);
     configLock.unlock();
     if (result.apply == SettingsApplyResult::Failed) {

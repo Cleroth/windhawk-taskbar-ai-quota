@@ -54,9 +54,9 @@ static StartArea FindStartArea(FrameworkElement const& root) {
 //
 // Records belong to the taskbar window's thread, which alone adds, changes and removes them and
 // uses their weak references; the settings thread reads only the plain fields. The window's
-// destruction removes them. g_placementMutex is a leaf. Never destroyed: weak references still
-// held at unload are leaked. Side: the taskbar runs down a side of the screen, where the bars
-// don't go beside Start.
+// destruction removes them. g_placementMutex is a leaf. Never destroyed: unload clears what is left
+// (ClearPlacementRecords), leaking the weak references still held. Side: the taskbar runs down a
+// side of the screen, where the bars don't go beside Start.
 enum class PlacementFallback : uint8_t { None, Unavailable, Conflict, Side };
 
 struct PlacementRecord {
@@ -141,6 +141,21 @@ static void SetSideTaskbar(HWND hWnd, bool side, bool unsupported) {
         }
     }
     if (changed) NotifySettingsWindowChanged();
+}
+
+// Unload, once every taskbar's teardown ran (RemoveAllQuotaGrids(true)): the records left (a lost
+// margin, a fallback, a side taskbar) go with their storage. Each weak reference still held is
+// its owner thread's, never released here: it moves into a deliberately leaked heap copy, and if
+// that can't be allocated, the records stay as they are.
+static void ClearPlacementRecords() {
+    std::lock_guard<std::mutex> lock(g_placementMutex);
+    std::vector<SideTaskbarRecord>().swap(g_sideTaskbars);
+    for (PlacementRecord& record : g_placementRecords) {
+        if (record.element && !new (std::nothrow) winrt::weak_ref<FrameworkElement>(std::move(record.element))) {
+            return;
+        }
+    }
+    std::vector<PlacementRecord>().swap(g_placementRecords);
 }
 
 // Gives a margin back: without our contribution, unless another mod took it (the record then stays,

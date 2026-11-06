@@ -208,8 +208,10 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"No accounts support this view.", L"没有账户支持此视图。"},
     {L"", L"No accounts to display.", L"没有可显示的账户。"},
     {L"", L"No accounts yet", L"还没有账户"},
-    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
-     L"未加密。仅包含读数和不透明 ID，不含令牌或标签。移除模组后仍会保留。"},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. In the mod's Windhawk storage, which Windhawk "
+          L"deletes, as far as it can, when it removes the mod.",
+     L"未加密。仅包含读数和不透明 ID，不含令牌或标签。位于此模组的 Windhawk 存储中，Windhawk 移除模组时会尽可能将其删除。"},
+    {L"", L"Not saved: saving would replace the stored settings, which couldn't be read.", L"未保存：保存会替换无法读取的已保存设置。"},
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"尚未记录任何内容。记录第一个样本时会创建该文件夹。"},
     {L"", L"Nothing new is recorded.", L"不会记录新数据。"},
@@ -220,6 +222,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Number size", L"数字大小"},
     {L"", L"On hover", L"悬停时"},
     {L"", L"Open AI quota settings", L"打开 AI 配额设置"},
+    {L"", L"Open AI quota settings. Stored settings could not be read.", L"打开 AI 配额设置。无法读取已保存的设置。"},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"打开 AI 配额设置。无法读取已保存的设置；已保留备份。"},
     {L"", L"Opens an account’s details after the pointer rests on it.", L"指针停留在账户上时打开其详情。"},
@@ -338,9 +341,10 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"account on the taskbar.",
      L"选择<b>{button}</b>，即可在任务栏上显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 或 OpenCode Go 账户。"},
     {L"", L"Set Credits max to show the Credits bar.", L"设置“积分上限”以显示积分条。"},
-    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
-          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
-     L"所有 Windows 用户共享此设置。“永久”不会删除任何数据，也没有大小限制，因此历史会在资源管理器的内存和磁盘中持续增长。按天数限制时每小时清理一次，上限约 60 MB。"},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
+          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
+          L"with a cap of about 60 MB.",
+     L"所有 Windows 用户共享此设置。“永久”没有大小限制，因此历史会在资源管理器的内存和磁盘中持续增长；超过 15 天的 Antigravity 读数按约 10 分钟的间隔保留。按天数限制时每小时清理一次，上限约 60 MB。"},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"每个条形旁的简称：{key5h}、{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyCr}、{keyMo}。"},
     {L"", L"Short text", L"短文本"},
@@ -414,6 +418,10 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"Applies to this Windows user only.",
      L"设置窗口、使用历史窗口和任务栏。“自动”跟随 Windows 显示语言。仅适用于当前 Windows 用户。"},
     {L"", L"The settings and usage history windows use Mica for it.", L"设置窗口和使用历史窗口对此改用“云母”。"},
+    {L"", L"The stored settings couldn't be read, so this window shows the defaults. Saving this change replaces the "
+          L"stored settings, accounts included, with what this window shows.\n\nReplace the stored settings? If you "
+          L"keep them, this change isn't saved; they're read again the next time Windows Explorer starts.",
+     L"无法读取已保存的设置，因此此窗口显示的是默认值。保存此更改会用此窗口显示的内容替换已保存的设置（包括账户）。\n\n要替换已保存的设置吗？如果保留它们，此更改不会保存；下次 Windows 资源管理器启动时会重新读取它们。"},
     {L"", L"The stored sign-in could not be copied. The account was not changed.", L"无法复制已存储的登录信息。账户未更改。"},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
      L"无法删除已存储的登录信息，该信息仍为此账户保留。"},
@@ -445,9 +453,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"此账户已移除。其已保存的历史会保留，直到过期或被删除。"},
     {L"", L"This change couldn't be saved.", L"无法保存此更改。"},
     {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
-          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
-          L"available. Continue?",
-     L"此导出约包含 {rows, plural, other{# 行}}。这可能需要一段时间，并可能超出电子表格的行数限制。写入期间历史窗口将处于忙碌状态；资源管理器的任务栏仍可使用。要继续吗？"},
+          L"spreadsheet row limits. Until it finishes, the history window shows its progress and most of its controls "
+          L"are unavailable; closing the window cancels the export. Continue?",
+     L"此导出约包含 {rows, plural, other{# 行}}。这可能需要一段时间，并可能超出电子表格的行数限制。完成之前，历史窗口会显示导出进度，且大部分控件不可用；关闭窗口会取消导出。要继续吗？"},
     {L"", L"Threshold notifications", L"阈值通知"},
     {L"", L"Thresholds stay in order: yellow, orange, red.", L"阈值始终保持顺序：黄色、橙色、红色。"},
     {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",

@@ -1,12 +1,13 @@
 // The history window's operations through its controller, against the in-memory ops of
 // history-controller.inc: Export (its scope frozen across the large-export warning and the save
-// dialog, the posted write and its progress, cancellations and failures), Clear all history (its
+// dialog, the started write's polls while pending and its progress, its end however late,
+// cancellations, a close or unload while it runs, and failures), Clear all history (its
 // confirmation, result and the burn-up curves), a removed account's Delete history (its
 // confirmation, result and selection), About these charts, and the close latch or unload arriving
 // inside each dialog; loads, commands and refreshes meanwhile, with the no-stranding invariant
 // (history-refresh.inc) checked after the events. Orchestration only: the production dialogs and
-// their scope (host probe), the CSV file (tests/history: the writer) and the journal's Clear and
-// account deletion are outside this suite. Hand-derived expectations.
+// their scope (host probe), the CSV file and its worker (tests/history: the writer) and the
+// journal's Clear and account deletion are outside this suite. Hand-derived expectations.
 
 static const PCWSTR kTestExportAll = L"choose Export all accounts \u2014 all meters, selected range (both weeks if comparing)";
 static const PCWSTR kTestExportOne =
@@ -48,7 +49,7 @@ static void TestOnlyChips(const UiFrame& frame) {
 static void RunHistoryOperationsTests() {
     Run("history export: the scope freezes at the command (one account, the shown times, the snapshot itself); "
         "an activation, a poll and clicks inside the warning and the save dialog change neither it nor the "
-        "window; the write is posted with the progress shown and every control but the chips disabled; the "
+        "window; the write starts with the progress shown and every control but the chips disabled; the "
         "waiting load runs once after it, taking the latest request", [] {
         TestHistoryOps ops = TestLargeOps();
         HistoryController c(ops);
@@ -74,12 +75,15 @@ static void RunHistoryOperationsTests() {
         ops.choosing = arrive;
         c.Command(HistoryUiCommand::Export);
         TestSettled(c, ops);
-        CHECK((ops.log == TestLog{L"ask Large history export", L"post", kTestExportOne, L"post", L"post write"}));
+        CHECK((ops.log == TestLog{L"ask Large history export", L"post", kTestExportOne, L"post",
+                                  L"start write C:\\Exports\\usage.csv"}));
         CHECK(ops.asked.size() == 1 && ops.asked[0].second == (MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2));
         CHECK(ops.asked[0].first == L"This export contains about 500015 rows. It may take a while and exceed "
-                                    L"spreadsheet row limits. The history window will be busy while writing; "
-                                    L"Explorer's taskbar remains available. Continue?");
-        CHECK(c.operation == HistoryOperation::Writing && c.loadPending && c.modal == 0 && ops.writePosts == 1);
+                                    L"spreadsheet row limits. Until it finishes, the history window shows its "
+                                    L"progress and most of its controls are unavailable; closing the window cancels "
+                                    L"the export. Continue?");
+        CHECK(c.operation == HistoryOperation::Writing && c.loadPending && c.modal == 0 && ops.written.size() == 1 &&
+              ops.writePolling);
         CHECK(c.exportScope->snapshot == held && c.exportScope->accountId == 0xC1 && c.exportScope->from == readFrom &&
               c.exportScope->to == to && !c.exportScope->compare && c.destination == L"C:\\Exports\\usage.csv");
         CHECK(c.snapshot == held && c.generation == generation && c.selectedId == 0xC1 &&
@@ -89,11 +93,10 @@ static void RunHistoryOperationsTests() {
         CHECK(UiFindItem(frame, kHistoryUiProgress) && UiFindItem(frame, c.view.lines.at(0).chip));
         TestOnlyChips(frame);
 
-        int repaints = 0;
         ops.log.clear();
-        c.Write(true, [&] { repaints++; });
+        CHECK(c.WriteTick());
         TestSettled(c, ops);
-        CHECK((ops.log == TestLog{L"write C:\\Exports\\usage.csv", L"take", L"settings", L"snapshot 7d"}));
+        CHECK((ops.log == TestLog{L"poll write", L"take", L"settings", L"snapshot 7d"}) && !ops.writePolling);
         CHECK(ops.written.size() == 1 && ops.written[0].snapshot == held && ops.written[0].accountId == 0xC1 &&
               ops.written[0].from == readFrom && ops.written[0].to == to);
         CHECK(c.operation == HistoryOperation::None && !c.loadPending && !c.exportScope && !c.view.exporting);
@@ -102,31 +105,42 @@ static void RunHistoryOperationsTests() {
         // The notice comes after the waiting load: its selection change doesn't take it away.
         CHECK(c.view.notice.text == L"Exported 100,003 meter rows (selected account) to C:\\Exports\\usage.csv. "
                                     L"Labels omitted; times UTC." && c.view.notice.severity == UiSeverity::Info);
-        CHECK(repaints == 0 && UiFindItem(TestHistoryFrame(c.view), kHistoryUiExport)->enabled);
+        CHECK(UiFindItem(TestHistoryFrame(c.view), kHistoryUiExport)->enabled);
     });
 
-    Run("history export: progress reports only set the rows written and ask for a repaint; nothing is read or "
-        "composed until the write ends", [] {
+    Run("history export: while the write is pending each poll only reads the rows written (the window repaints the "
+        "progress when they moved), nothing else read or composed; the poll that finds it ended, however late, "
+        "shows its notice; polls act only while a write runs", [] {
         TestHistoryOps ops = TestControllerOps();
         HistoryController c(ops);
         TestLoaded(c, ops);
+        ops.writePending = true;
         c.Command(HistoryUiCommand::Export);
-        CHECK((ops.log == TestLog{kTestExportAll, L"post write"}) && ops.asked.empty());
+        CHECK((ops.log == TestLog{kTestExportAll, L"start write C:\\Exports\\usage.csv"}) && ops.asked.empty());
+        CHECK(c.operation == HistoryOperation::Writing && c.view.exporting && c.exported == 0);
         HistoryUiView before = c.view;
         ops.log.clear();
-        ops.progressRows = {1000, 2000};
         std::vector<size_t> seen;
-        c.Write(true, [&] {
+        for (size_t rows : {size_t(0), size_t(1000), size_t(1000), size_t(2000)}) {
+            ops.writeRows = rows;
+            CHECK(!c.WriteTick());
             seen.push_back(c.exported);
-            CHECK(c.view == before && c.operation == HistoryOperation::Writing &&
-                  ops.log == TestLog{L"write C:\\Exports\\usage.csv"});
-        });
-        CHECK((seen == std::vector<size_t>{1000, 2000}));
+            CHECK(c.view == before && c.operation == HistoryOperation::Writing && ops.writePolling);
+            TestSettled(c, ops);
+        }
+        CHECK((seen == std::vector<size_t>{0, 1000, 1000, 2000}) && ops.log == TestLog(4, L"poll write"));
+        // Many polls later it ends.
+        for (int i = 0; i < 100; i++) CHECK(!c.WriteTick());
+        ops.writePending = false;
+        ops.log.clear();
+        CHECK(c.WriteTick());
+        CHECK(ops.log == TestLog{L"poll write"} && !ops.writePolling && !ops.writeCancelled);
+        CHECK(c.operation == HistoryOperation::None && !c.exportScope && !c.view.exporting);
         CHECK(c.view.notice.text == L"Exported 4 meter rows (all accounts) to C:\\Exports\\usage.csv. Labels omitted; "
                                     L"times UTC.");
-        // The write message only acts while its write is pending.
+        // The poll only acts while its write runs.
         ops.log.clear();
-        c.Write(true, [] {});
+        CHECK(!c.WriteTick());
         CHECK(ops.log.empty());
     });
 
@@ -154,18 +168,19 @@ static void RunHistoryOperationsTests() {
                       ops.asked[0].first.starts_with(L"This export contains about 500001 rows. "));
                 CHECK(c.operation == HistoryOperation::None && !c.exportScope);
             } else {
-                CHECK((ops.log == TestLog{kTestExportOne, L"post write"}) && ops.asked.empty());
+                CHECK((ops.log == TestLog{kTestExportOne, L"start write C:\\Exports\\usage.csv"}) && ops.asked.empty());
                 CHECK(c.operation == HistoryOperation::Writing && c.exportScope->accountId == 0x0C);
             }
         }
     });
 
     Run("history export: cancelled at the warning or in the save dialog, nothing is written or shown; a failed save "
-        "dialog, dialogs that can't be tracked and a write that can't be posted say so; each ends the operation", [] {
+        "dialog, dialogs that can't be tracked and a write that can't start (its worker or its poll) say so; each "
+        "ends the operation", [] {
         struct Case {
             std::deque<int> answers;
             HistoryDialogResult result;
-            bool failPost;
+            bool failStart;
             PCWSTR notice;
             UiSeverity severity;
             TestLog log;
@@ -181,7 +196,7 @@ static void RunHistoryOperationsTests() {
             {{}, HistoryDialogResult::Untracked, false, L"Cannot track native dialogs safely; operation cancelled.",
              UiSeverity::Error, {L"ask Large history export", kTestExportOne}},
             {{}, HistoryDialogResult::Chosen, true, L"CSV export could not start; no file written.", UiSeverity::Error,
-             {L"ask Large history export", kTestExportOne, L"post write failed"}},
+             {L"ask Large history export", kTestExportOne, L"start write failed"}},
         };
         TestHistoryOps ops = TestLargeOps();
         HistoryController c(ops);
@@ -191,7 +206,7 @@ static void RunHistoryOperationsTests() {
             ops.answers = test.answers;
             ops.destination = {test.result, test.result == HistoryDialogResult::Chosen ? L"C:\\Exports\\usage.csv" : L"",
                                test.result == HistoryDialogResult::Failed ? DWORD(12291) : DWORD(0)};
-            ops.failPostWrite = test.failPost;
+            ops.failStartWrite = test.failStart;
             c.Command(HistoryUiCommand::Export);
             TestSettled(c, ops);
             CHECK(ops.log == test.log && ops.written.empty());
@@ -225,36 +240,53 @@ static void RunHistoryOperationsTests() {
             };
             c.Command(HistoryUiCommand::Export);
             CHECK(ops.log == TestLog{kTestExportAll});
-            CHECK(c.operation == HistoryOperation::None && c.view.notice.text.empty() && ops.writePosts == 0);
-            c.Write(true, [] {});
+            CHECK(c.operation == HistoryOperation::None && c.view.notice.text.empty() && ops.written.empty());
+            CHECK(!c.WriteTick());
             CHECK(ops.log.size() == 1 && ops.written.empty());
         }
     });
 
-    Run("history export: a close before the posted write, or the frame with its progress never shown, writes "
-        "nothing", [] {
-        for (bool close : {false, true}) {
+    Run("history export: a close latched while the write is pending cancels it at once (the window closes without "
+        "waiting for it), unload at the next poll; neither shows or loads anything, and the write ending later is "
+        "never polled", [] {
+        for (bool unload : {false, true}) {
             TestHistoryOps ops = TestControllerOps();
             HistoryController c(ops);
             TestLoaded(c, ops);
+            ops.writePending = true;
             c.Command(HistoryUiCommand::Export);
+            ops.writeRows = 500;
+            CHECK(!c.WriteTick() && c.exported == 500);
+            c.RequestLoad();
+            c.Notify();
+            CHECK(c.loadPending && c.liveDirty);
             ops.log.clear();
-            if (close) c.RequestClose();
-            c.Write(close, [] {});
-            CHECK(ops.log.empty() && ops.written.empty() && c.operation == HistoryOperation::None);
-            CHECK(c.view.notice.text == (close ? L"" : L"CSV export could not start; no file written."));
-            CHECK(c.view.notice.severity == (close ? UiSeverity::Info : UiSeverity::Error));
+            if (unload) {
+                ops.unloading = true;
+                CHECK(!c.WriteTick());
+            } else {
+                c.RequestClose();
+            }
+            CHECK(ops.log == TestLog{L"cancel write"} && ops.writeCancelled && !ops.writePolling);
+            CHECK(c.operation == HistoryOperation::None && !c.exportScope && c.view.notice.text.empty());
+            // The write ends on its own; nothing polls, shows or loads it.
+            ops.writePending = false;
+            CHECK(!c.WriteTick());
+            c.Notify();
+            c.RequestLoad();
+            CHECK(ops.log == TestLog{L"cancel write"} && c.view.notice.text.empty() && ops.written.size() == 1);
         }
     });
 
     Run("history export: a failed write keeps the destination and says why (a temporary file that can't be "
-        "created too); a repeat replaces the notice; unload during the write shows and loads nothing", [] {
+        "created too); a repeat replaces the notice; a cancelled result arriving with unload shows and loads "
+        "nothing", [] {
         TestHistoryOps ops = TestControllerOps();
         HistoryController c(ops);
         TestLoaded(c, ops);
         auto run = [&] {
             c.Command(HistoryUiCommand::Export);
-            c.Write(true, [] {});
+            CHECK(c.WriteTick());
             TestSettled(c, ops);
             CHECK(c.operation == HistoryOperation::None);
         };
@@ -270,15 +302,15 @@ static void RunHistoryOperationsTests() {
         UiFrame frame = TestHistoryFrame(c.view);
         CHECK(std::count_if(frame.content.begin(), frame.content.end(),
                             [&](const UiItem& item) { return UiRunsText(item.runs) == failed; }) == 1);
-        // Unload mid-write: its cancellation reported, nothing shown or loaded.
+        // Unload as the write ends: its cancellation reported, nothing shown or loaded.
         c.Command(HistoryUiCommand::Export);
         c.RequestLoad();
         CHECK(c.loadPending);
         ops.log.clear();
         ops.writeResult = {12, ERROR_CANCELLED, true};
-        ops.writing = [&] { ops.unloading = true; };
-        c.Write(true, [] {});
-        CHECK(ops.log == TestLog{L"write C:\\Exports\\usage.csv"});
+        ops.polling = [&] { ops.unloading = true; };
+        CHECK(!c.WriteTick());
+        CHECK((ops.log == TestLog{L"poll write", L"cancel write"}) && !ops.writeCancelled);
         CHECK(c.operation == HistoryOperation::None && c.view.notice.text.empty());
     });
 
@@ -290,8 +322,8 @@ static void RunHistoryOperationsTests() {
         c.Command(HistoryUiCommand::Compare, 1);
         ops.log.clear();
         c.Command(HistoryUiCommand::Export);
-        CHECK((ops.log == TestLog{kTestExportAll, L"post write"}));
-        c.Write(true, [] {});
+        CHECK((ops.log == TestLog{kTestExportAll, L"start write C:\\Exports\\usage.csv"}));
+        CHECK(c.WriteTick());
         const HistoryExportScope& scope = ops.written.at(0);
         CHECK(scope.accountId == 0 && scope.compare && scope.from == kWeekFrom - kHistoryWeekMs && scope.to == kWeekTo);
         CHECK(c.view.notice.text == L"Exported 5 meter rows (all accounts) to C:\\Exports\\usage.csv. Labels omitted; "
@@ -302,12 +334,13 @@ static void RunHistoryOperationsTests() {
         CHECK(c.view.notice.text.empty());
     });
 
-    Run("history export: one operation at a time; while the write waits only the legend's chips act, explicit "
-        "loads wait for it and run once after, refreshes are held and resume after it", [] {
+    Run("history export: one operation at a time; while the write is pending only the legend's chips act, explicit "
+        "loads wait for it and run once after, refreshes are held across its polls and resume after it", [] {
         for (bool load : {false, true}) {
             TestHistoryOps ops = TestControllerOps();
             HistoryController c(ops);
             TestLoaded(c, ops, 0xC1);
+            ops.writePending = true;
             c.Command(HistoryUiCommand::Export);
             CHECK(c.operation == HistoryOperation::Writing);
             ops.log.clear();
@@ -333,13 +366,21 @@ static void RunHistoryOperationsTests() {
             TestSettled(c, ops);
             CHECK(c.loadPending == load && c.liveDirty && c.samplesDirty);
             ops.log.clear();
-            c.Write(true, [] {});
+            for (size_t rows : {size_t(100), size_t(200), size_t(300)}) {
+                ops.writeRows = rows;
+                CHECK(!c.WriteTick() && c.exported == rows);
+                TestSettled(c, ops);
+            }
+            CHECK(ops.log == TestLog(3, L"poll write") && c.loadPending == load && c.liveDirty && c.samplesDirty);
+            ops.log.clear();
+            ops.writePending = false;
+            CHECK(c.WriteTick());
             TestSettled(c, ops);
             if (load) {
-                CHECK((ops.log == TestLog{L"write C:\\Exports\\usage.csv", L"take", L"settings", L"snapshot 7d"}));
+                CHECK((ops.log == TestLog{L"poll write", L"take", L"settings", L"snapshot 7d"}));
                 CHECK(!c.liveDirty && !c.samplesDirty && ops.posted == 0);
             } else {
-                CHECK((ops.log == TestLog{L"write C:\\Exports\\usage.csv", L"post"}));
+                CHECK((ops.log == TestLog{L"poll write", L"post"}));
                 CHECK(TestDeliver(c, ops));
                 TestSettled(c, ops);
                 CHECK(TestCount(ops.log, L"peek 7d") == 1 && !c.liveDirty && !c.samplesDirty);

@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.17.0
+// @version         2.18.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -98,12 +98,15 @@ Percentages, USD, and credits use separate axes. Connected samples use lines onl
 isolated readings visible.
 Percentages from different accounts or overlapping windows are not added together.
 
-History follows the configured entry: use a new entry for a different login. Data stays under
-`%LOCALAPPDATA%\TaskbarAIQuota\<mod ID>` with your user-folder permissions, without tokens or
-labels. It is not encrypted and survives mod removal. Kept forever, it grows without limit;
-with a number of days, retention and a roughly 60 MB size cap prune old samples. **Clear all
-history...** removes recordings without changing sign-ins, and **Delete history...** on a
-removed account's page removes just its recordings.
+History follows the configured entry: use a new entry for a different login. Data stays in the
+mod's Windhawk storage, in a folder named after your Windows account's SID, without tokens or
+labels. It is not encrypted, and Windhawk's storage folder lets other users of the PC read it.
+Windhawk deletes the mod's storage, as far as it can, when it removes the mod. Kept forever, it
+grows without limit, though Antigravity readings older than 15 days are kept about 10 minutes
+apart; with a number of days, retention and a roughly 60 MB size cap prune old samples. History
+recorded under `%LOCALAPPDATA%\TaskbarAIQuota` by earlier versions moves there on the first
+start. **Clear all history...** removes recordings without changing sign-ins, and **Delete
+history...** on a removed account's page removes just its recordings.
 See the [usage history guide](https://github.com/Cleroth/windhawk-taskbar-ai-quota#usage-history)
 for recording rules, export, and verification.
 
@@ -134,6 +137,7 @@ Have a suggestion or found a bug?
 #include <bcrypt.h>
 #include <wincrypt.h>
 #include <dpapi.h>
+#include <sddl.h>
 #include <unknwn.h>
 #include <d2d1.h>
 #include <dwrite.h>
@@ -246,6 +250,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 #include "core/state.h"
 
+#include "core/user-storage.h"
+
 #include "core/language.h"
 
 #include "core/helpers.h"
@@ -279,6 +285,8 @@ namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 #include "history/journal.h"
 
 #include "history/continuity.h"
+
+#include "history/thinning.h"
 
 #include "history/burn-up.h"
 
@@ -599,11 +607,14 @@ void Wh_ModUninit() {
         g_historyCapped = false;
         g_historyMaintenanceMs = 0;
         g_historyWriteRetryMs = 0;
+        g_historyThinnedMs = 0;
+        g_historyLegacySettled = false;
     }
 
     // All worker threads that can issue finite taskbar marshals are joined. These synchronous
     // cleanup sends are the final per-UI-thread lifetime barrier before the DLL can unload.
     RemoveAllQuotaGrids(true);
+    ClearPlacementRecords();
 
     // A taskbar thread that terminated without window teardown has no owner thread left for its
     // XAML releases. Leak those unreachable states rather than release them under loader lock.

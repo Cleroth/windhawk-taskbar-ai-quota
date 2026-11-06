@@ -60,9 +60,10 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
     {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Keep history"));
-        spec.description = {{I18nText(locale, Tr(L"Shared across Windows users. Forever deletes nothing and has no "
-                                                 L"size limit, so history keeps growing in Explorer's memory and on "
-                                                 L"disk. Day limits prune hourly, with a cap of about 60 MB."))}};
+        spec.description = {{I18nText(locale, Tr(L"Shared across Windows users. Forever has no size limit, so history "
+                                                 L"keeps growing in Explorer's memory and on disk; Antigravity readings "
+                                                 L"older than 15 days are kept about 10 minutes apart. Day limits "
+                                                 L"prune hourly, with a cap of about 60 MB."))}};
         spec.enabled = s.historyEnabled;
         if (!s.historyEnabled) spec.reason = recordingOff;
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::KeepHistory,
@@ -121,8 +122,9 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Storage location"));
         spec.description = {{view.status.historyFolder + L"\n", UiRunStyle::Normal, UiInk::Secondary},
-                            {I18nText(locale, Tr(L"Not encrypted. Readings and opaque IDs, no tokens or labels. "
-                                                 L"Survives mod removal."))}};
+                            {I18nText(locale, Tr(L"Not encrypted. Readings and opaque IDs, no tokens or labels. In "
+                                                 L"the mod's Windhawk storage, which Windhawk deletes, as far as it "
+                                                 L"can, when it removes the mod."))}};
         y = SettingsAddButtonCard(g, items, id, x, y, width, spec, SettingsField::OpenHistoryFolder,
                                   I18nText(locale, TrCtx(L"button", L"Open folder")), L"\uE838");
     }

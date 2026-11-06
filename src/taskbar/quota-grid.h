@@ -141,10 +141,11 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 });
             state.pointerHandlers.push_back({setupElement, tappedToken});
             SetXamlToolTip(setupElement,
-                           I18nText(locale, g_settingsLoadError.load() ?
+                           I18nText(locale, !g_settingsLoadError.load() ? Tr(L"Open AI quota settings") :
+                                            g_settingsLoadBackup.load() ?
                                                 Tr(L"Open AI quota settings. Stored settings could not be read; a "
                                                    L"backup was kept.") :
-                                                Tr(L"Open AI quota settings")),
+                                                Tr(L"Open AI quota settings. Stored settings could not be read.")),
                            locale);
 
             MenuFlyout menu;

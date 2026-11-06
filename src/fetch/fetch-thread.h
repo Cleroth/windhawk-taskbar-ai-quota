@@ -312,6 +312,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     // without unloading. The taskbar's process removes it while notifications are off and at
     // unload; a failed removal retries.
     bool toastAppIdMayExist = true;
+    g_toastAppIdRegistered = false;
+    // Whether this thread moved in what older versions kept outside Windhawk storage.
+    bool legacyMoved = false;
     ULONGLONG lastLoggedSettingsGeneration = 0;
     const uint64_t historySession = NowUnixMs();
     bool curvesRecording = false;  // Recording was active last round, so curves may be published.
@@ -336,6 +339,17 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
         if (waitingForTaskbar) Wh_Log(L"This process owns the taskbar; polling");
         waitingForTaskbar = false;
+        // Once, recording or not: the preferences and journal older versions kept in HKCU and
+        // LocalAppData move into Windhawk storage.
+        if (!legacyMoved) {
+            legacyMoved = true;
+            try {
+                MigrateUserPreferences();
+            } catch (...) {
+                Wh_Log(L"Could not move the preferences");
+            }
+            PrepareHistoryStorage();
+        }
         if (g_historyIdsPendingSave) {
             // Init can run before the shell creates its taskbar. Persist the exact IDs
             // under the normal edit lock before any sample uses them, without history IO.

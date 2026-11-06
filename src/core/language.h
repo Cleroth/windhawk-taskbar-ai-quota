@@ -7,35 +7,38 @@
 // aside).
 static std::atomic<const I18nLanguage*> g_language{&kI18nLanguages[0]};
 
-// This Windows user's settings, never in machine-shared settings_v1: the recording consent
-// (history/journal.h) and the language preference, a tag (missing or empty: Automatic).
-static constexpr PCWSTR kUserRegistryKey = L"Software\\Windhawk\\TaskbarAIQuota\\" WH_MOD_ID;
-static constexpr PCWSTR kLanguageRegistryValue = L"Language";  // i18n-en
+// This Windows user's language preference, never in machine-shared settings_v1: a tag in Windhawk
+// storage (core/user-storage.h), Automatic stored as "auto", which names no language.
 
-// The stored tag, spelled as kI18nLanguages spells it; empty (Automatic) when missing, empty,
-// unreadable or naming no language.
+// The stored tag, spelled as kI18nLanguages spells it; empty (Automatic) when missing, unreadable
+// or naming no language. Without the Windhawk value, the HKCU one older versions wrote, rereading
+// the Windhawk value once after finding that absent: the taskbar's process may have just moved it.
 static std::wstring ReadLanguagePreference() {
+    const std::wstring sid = CurrentUserSid();
+    const std::wstring name = kLanguageValuePrefix + sid;
     wchar_t tag[64] = {};
-    DWORD size = sizeof(tag);
-    if (RegGetValueW(HKEY_CURRENT_USER, kUserRegistryKey, kLanguageRegistryValue, RRF_RT_REG_SZ, nullptr, tag,
-                     &size) != ERROR_SUCCESS) {
-        return {};
+    auto stored = [&] { return !sid.empty() && Wh_GetStringValue(name.c_str(), tag, std::size(tag)); };
+    if (!stored()) {
+        DWORD size = sizeof(tag);
+        LSTATUS result = RegGetValueW(HKEY_CURRENT_USER, kLegacyUserRegistryKey, kLegacyLanguageValue, RRF_RT_REG_SZ,
+                                      nullptr, tag, &size);
+        if (result == ERROR_FILE_NOT_FOUND || result == ERROR_PATH_NOT_FOUND) {
+            if (!stored()) return {};
+        } else if (result != ERROR_SUCCESS) {
+            return {};
+        }
     }
     const I18nLanguage* language = I18nLanguageByTag(tag);
     return language ? std::wstring(language->tag) : std::wstring();
 }
 
-// Stores a tag, or an empty one for Automatic.
+// Stores a tag, or Automatic for an empty one, under UserPreferencesLock; fails, writing nothing,
+// when the lock can't be had.
 static bool WriteLanguagePreference(const std::wstring& tag) {
-    HKEY key = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kUserRegistryKey, 0, nullptr, 0, KEY_SET_VALUE, nullptr, &key,
-                        nullptr) != ERROR_SUCCESS) {
-        return false;
-    }
-    LSTATUS result = RegSetValueExW(key, kLanguageRegistryValue, 0, REG_SZ,
-                                    reinterpret_cast<const BYTE*>(tag.c_str()), DWORD((tag.size() + 1) * sizeof(wchar_t)));
-    RegCloseKey(key);
-    return result == ERROR_SUCCESS;
+    const std::wstring sid = CurrentUserSid();
+    if (sid.empty()) return false;
+    UserPreferencesLock lock(sid);
+    return lock.held && Wh_SetStringValue((kLanguageValuePrefix + sid).c_str(), tag.empty() ? L"auto" : tag.c_str());
 }
 
 // The language a preference shows: its tag's, else (Automatic) the first finished language the

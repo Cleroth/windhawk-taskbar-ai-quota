@@ -25,12 +25,15 @@ struct TestStore final : SettingsStore {
     uint64_t nextHistoryId = 0x100;
     bool generateHistoryIds = false;  // An account edit gives accounts without one a history ID
     std::function<void(Settings&)> normalize;  // What saving does after the assignment, if set
+    // Stored settings the load couldn't read: applies that change something and adds fail as
+    // blocked replacements until ConfirmReplace ("confirm" in the log)
+    bool replaceUnconfirmed = false;
 
     SettingsBaseline Load() override {
         log.push_back(L"load");
         return {settings, status};
     }
-    SettingsSaveResult Apply(SettingsField field, int value) override {
+    SettingsSaveResult Apply(SettingsField field, int value, bool& replaceBlocked) override {
         log.push_back(L"apply " + std::to_wstring(int(field)) + L"=" + std::to_wstring(value));
         applies++;
         if (failNext > 0) {
@@ -41,6 +44,10 @@ struct TestStore final : SettingsStore {
         SettingsAssign(next, field, value);
         if (normalize) normalize(next);
         bool changed = !(next == settings);
+        if (changed && replaceUnconfirmed) {
+            replaceBlocked = true;
+            return SettingsSaveResult::Failed;
+        }
         settings = std::move(next);
         return changed ? SettingsSaveResult::Changed : SettingsSaveResult::Unchanged;
     }
@@ -128,8 +135,9 @@ struct TestStore final : SettingsStore {
     SettingsAccountResult AddAccount(const std::wstring& provider, const std::vector<std::wstring>& labels) override {
         applies++;
         SettingsAccountResult result;
-        if (failNext > 0) {
-            failNext--;
+        if (failNext > 0 || replaceUnconfirmed) {
+            result.replaceBlocked = failNext <= 0;
+            if (failNext > 0) failNext--;
             log.push_back(L"add " + provider + L" failed");
             result.save = SettingsSaveResult::Failed;
             result.notice = SettingsNoticeCode::AccountSaveFailed;
@@ -159,6 +167,10 @@ struct TestStore final : SettingsStore {
     bool HasStoredSignIn(uint64_t identity) override {
         presenceChecks++;
         return std::find(signIns.begin(), signIns.end(), identity) != signIns.end();
+    }
+    void ConfirmReplace() override {
+        log.push_back(L"confirm");
+        replaceUnconfirmed = false;
     }
     bool Unloading() override { return unloadAfter >= 0 && applies >= unloadAfter; }
 
@@ -508,6 +520,116 @@ static void RunEditTests() {
         CHECK(edits.PrepareClose() == SettingsCloseResult::Unloading);
         CHECK(store.Applied() == std::vector<std::wstring>{Op(kRetention, 30)});
         CHECK(edits.Process() == 0 && store.applies == 1);  // Nothing else commits once unloading
+    });
+
+    // Stored settings the load couldn't read (the store's replaceUnconfirmed). The window asks on a
+    // ReplaceBlocked notice and passes the answer to AnswerReplace; a close ends the question as No.
+    Run("unreadable stored settings: only a blocked save asks; yes confirms and saves it again on fresh settings", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        // An ordinary failure doesn't ask.
+        store.failNext = 1;
+        CHECK(edits.Commit(0, SettingsField::Notifications, 0) == 1);
+        CHECK(edits.notices.empty() && edits.replaceBlocked.empty() &&
+              edits.drafts[0].error == SettingsDraftError::SaveFailed);
+        // A save that would replace them fails with its own error and one question.
+        store.replaceUnconfirmed = true;
+        CHECK(edits.Commit(0, SettingsField::Notifications, 0) == 1);
+        CHECK(edits.notices.size() == 1 && edits.notices[0].code == SettingsNoticeCode::ReplaceBlocked &&
+              edits.notices[0].failure && edits.replaceBlocked.size() == 1);
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].failed &&
+              ErrorText(edits.drafts[0]) == L"Not saved: saving would replace the stored settings, which couldn't be read.");
+        CHECK(store.settings.notificationLevel == NotificationLevel::Red);
+        // Yes, with the settings changed meanwhile: confirmed, then saved on them.
+        store.settings.pollMinutes = 30;
+        edits.notices.clear();
+        CHECK(edits.AnswerReplace(true) == 0);
+        CHECK((std::vector<std::wstring>(store.log.end() - 3, store.log.end()) ==
+               std::vector<std::wstring>{L"confirm", L"apply " + Op(SettingsField::Notifications, 0), L"load"}));
+        CHECK(edits.drafts.empty() && edits.replaceBlocked.empty() && edits.notices.empty());
+        CHECK(store.settings.notificationLevel == NotificationLevel::Off && edits.baseline.settings.pollMinutes == 30);
+        // Later saves go ahead without asking.
+        CHECK(edits.Commit(0, kPoll, 15) == 0 && edits.notices.empty() && store.settings.pollMinutes == 15);
+    });
+
+    Run("unreadable stored settings: no keeps the change failed until it is changed again; a newer draft "
+        "isn't saved by the answer", [] {
+        TestStore store;
+        store.replaceUnconfirmed = true;
+        SettingsEdits edits(store);
+        edits.Reload();
+        edits.SetText(0, kRetention, L"30");
+        CHECK(edits.RequestCommit(0, kRetention) && edits.Process() == 1);
+        CHECK(edits.notices.size() == 1 && edits.replaceBlocked.size() == 1);
+        edits.notices.clear();
+        CHECK(edits.AnswerReplace(false) == 0);
+        CHECK(edits.replaceBlocked.empty() && edits.drafts.size() == 1 && edits.drafts[0].failed &&
+              edits.drafts[0].error == SettingsDraftError::ReplaceBlocked);
+        CHECK(std::count(store.log.begin(), store.log.end(), L"confirm") == 0 && store.applies == 1 &&
+              store.settings.historyRetentionDays == 90);
+        // Focus loss doesn't retry it; acting on it again asks again.
+        CHECK(!edits.RequestCommit(0, kRetention, true));
+        CHECK(edits.RequestCommit(0, kRetention) && edits.Process() == 1 && edits.notices.size() == 1 &&
+              edits.replaceBlocked.size() == 1);
+        // Typed again before the answer: yes confirms, and the newer draft waits for its own commit.
+        edits.notices.clear();
+        edits.SetText(0, kRetention, L"45");
+        CHECK(edits.AnswerReplace(true) == 0 && store.applies == 2 && store.settings.historyRetentionDays == 90);
+        CHECK(edits.drafts.size() == 1 && !edits.drafts[0].failed && edits.drafts[0].raw == L"45");
+        CHECK(edits.RequestCommit(0, kRetention) && edits.Process() == 0 && edits.notices.empty());
+        CHECK(store.settings.historyRetentionDays == 45 && edits.drafts.empty());
+    });
+
+    Run("unreadable stored settings: a close during the question keeps the change failed; unloading "
+        "confirms nothing", [] {
+        TestStore store;
+        store.replaceUnconfirmed = true;
+        SettingsEdits edits(store);
+        edits.Reload();
+        CHECK(edits.Commit(0, SettingsField::Notifications, 0) == 1 && edits.replaceBlocked.size() == 1);
+        edits.notices.clear();
+        CHECK(edits.AnswerReplace(false) == 0);  // The close's answer
+        // Its flush meets the same block; the window asks nothing while closing, then offers to discard.
+        CHECK(edits.PrepareClose() == SettingsCloseResult::Blocked);
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].error == SettingsDraftError::ReplaceBlocked);
+        CHECK(edits.notices.size() == 1 && edits.notices[0].code == SettingsNoticeCode::ReplaceBlocked &&
+              edits.replaceBlocked.size() == 1);
+        edits.notices.clear();
+        CHECK(edits.AnswerReplace(false) == 0);
+        edits.Discard();
+        CHECK(edits.drafts.empty() && edits.PrepareClose() == SettingsCloseResult::Saved);
+        // Unloading while the question shows: a yes confirms and saves nothing.
+        CHECK(edits.Commit(0, SettingsField::Notifications, 0) == 1 && edits.replaceBlocked.size() == 1);
+        edits.notices.clear();
+        store.unloadAfter = 0;
+        CHECK(edits.AnswerReplace(true) == 0 && edits.replaceBlocked.empty());
+        CHECK(std::count(store.log.begin(), store.log.end(), L"confirm") == 0 && store.replaceUnconfirmed &&
+              store.settings.notificationLevel == NotificationLevel::Red);
+    });
+
+    Run("unreadable stored settings: a blocked add or page reset asks instead of its own notice; yes adds "
+        "anew and resets", [] {
+        TestStore store;
+        store.settings.pollMinutes = 30;
+        SettingsEdits edits(store);
+        edits.Reload();
+        store.failNext = 1;  // An ordinary failed add says so and doesn't ask
+        CHECK(edits.AddAccount(L"openai") == 0 && edits.notices.size() == 1 &&
+              edits.notices[0].code == SettingsNoticeCode::AccountSaveFailed && edits.replaceBlocked.empty());
+        edits.notices.clear();
+        store.replaceUnconfirmed = true;
+        CHECK(edits.AddAccount(L"openai") == 0);
+        CHECK(edits.Reset(SettingsField::ResetBehavior) == 1);
+        CHECK(edits.notices.size() == 2 && edits.replaceBlocked.size() == 2);
+        for (const SettingsNotice& notice : edits.notices) CHECK(notice.code == SettingsNoticeCode::ReplaceBlocked);
+        CHECK(store.settings.accounts.empty() && store.settings.pollMinutes == 30);
+        edits.notices.clear();
+        uint64_t added = 0;
+        CHECK(edits.AnswerReplace(true, &added) == 0 && edits.notices.empty());
+        CHECK(store.settings.accounts.size() == 1 && store.settings.accounts[0].label == L"O");
+        CHECK(added && edits.IndexOf(added) == 0 && edits.pendingSignIn == added);
+        CHECK(store.settings.pollMinutes == 10 && edits.baseline.settings.pollMinutes == 10);
     });
 
     Run("page reset: drops only its own fields' drafts", [] {

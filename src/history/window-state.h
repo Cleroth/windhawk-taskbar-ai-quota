@@ -8,10 +8,11 @@ static std::atomic<bool> g_historyWindowCancelRequested{false};
 // current selection. OpenHistoryWindow stores it under g_historyWindowMutex.
 static std::atomic<uint64_t> g_historyRequestedAccount{0};
 
-// The window's activation request and explicit load, its posted refresh and export write, and its
-// deferral check timer (main window; the toolkit's own timers use 0x7E01-0x7E02).
+// The window's activation request and explicit load, its posted refresh, and its timers: the
+// deferral check and an export's write poll (main window; the toolkit's own timers use
+// 0x7E01-0x7E02).
 static constexpr UINT kHistoryActivateMessage = WM_APP + 181;
 static constexpr UINT kHistoryLoadMessage = WM_APP + 182;
 static constexpr UINT kHistoryRefreshMessage = WM_APP + 183;
-static constexpr UINT kHistoryWriteMessage = WM_APP + 184;
 static constexpr UINT_PTR kHistoryDeferralTimer = 0x4E01;
+static constexpr UINT_PTR kHistoryWriteTimer = 0x4E02;

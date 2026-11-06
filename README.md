@@ -58,7 +58,7 @@ The taskbar, the details flyout, notifications, and the settings, usage history 
 
 ## Usage history
 
-Recording is on by default, per Windows user and per account, reusing the normal polls. Open **Usage history** from a column's right-click menu or **Settings > History** to compare quota timelines across accounts, overlay the previous week, see extra usage and credits, and export CSV; the details flyout's charts and the usage graph tiles use the same recordings. Samples stay on this PC, unencrypted, under `%LOCALAPPDATA%\TaskbarAIQuota\`, kept forever by default; they survive mod removal, so use **Clear all history...** first if you want them gone.
+Recording is on by default, per Windows user and per account, reusing the normal polls. Open **Usage history** from a column's right-click menu or **Settings > History** to compare quota timelines across accounts, overlay the previous week, see extra usage and credits, and export CSV; the details flyout's charts and the usage graph tiles use the same recordings. Samples stay on this PC, unencrypted, in the mod's Windhawk storage (a folder per Windows user, which other users of the PC can read), kept forever by default, with Antigravity readings older than 15 days kept about 10 minutes apart. Windhawk deletes the mod's storage when it removes the mod, as far as it can; to be sure, use **Clear all history...** first. Earlier versions' history moves there from `%LOCALAPPDATA%\TaskbarAIQuota\` on the first start.
 
 Viewer, recording rules, storage, retention and export: [usage history guide](docs/usage-history.md). Manual verification: [usage history checks](docs/usage-history-verification.md).
 

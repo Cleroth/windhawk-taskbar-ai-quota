@@ -78,12 +78,7 @@ struct SettingsProductionStore final : SettingsStore {
         status.automaticLanguage = baseline.settings.language.empty() ? g_language.load(std::memory_order_acquire) :
                                                                         &ResolveLanguage({});
         // Where the journal lives (history/journal.h), whether or not anything was recorded.
-        PWSTR localAppData = nullptr;
-        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DONT_VERIFY, nullptr,
-                                           &localAppData))) {
-            status.historyFolder = std::wstring(localAppData) + L"\\TaskbarAIQuota\\" WH_MOD_ID;
-        }
-        CoTaskMemFree(localAppData);
+        status.historyFolder = UserStorageFolder();
         return baseline;
     }
 
@@ -91,7 +86,7 @@ struct SettingsProductionStore final : SettingsStore {
     // taskbar update runs after the lock is released. A language change also rebuilds the usage
     // history window; one alone doesn't wake polling, and one that keeps the shown language
     // (Automatic resolving to the explicit choice) rebuilds no taskbar.
-    SettingsSaveResult Apply(SettingsField field, int value) override {
+    SettingsSaveResult Apply(SettingsField field, int value, bool& replaceBlocked) override {
         std::unique_lock<std::mutex> configLock(g_configEditMutex);
         Settings settings;
         {
@@ -104,7 +99,7 @@ struct SettingsProductionStore final : SettingsStore {
         before.language = settings.language;
         bool poll = settings != before;
         const I18nLanguage* shown = g_language.load(std::memory_order_acquire);
-        SettingsApplyResult result = ApplyOwnedSettings(std::move(settings));
+        SettingsApplyResult result = ApplyOwnedSettings(std::move(settings), 0, 0, &replaceBlocked);
         bool switched = g_language.load(std::memory_order_acquire) != shown;
         configLock.unlock();
         if (result == SettingsApplyResult::Failed) return SettingsSaveResult::Failed;
@@ -160,6 +155,12 @@ struct SettingsProductionStore final : SettingsStore {
 
     bool HasStoredSignIn(uint64_t identity) override { return HasStoredToken(identity); }
 
+    // For the rest of this load's recovery (settings/storage.h): LoadSettings resets it.
+    void ConfirmReplace() override {
+        Wh_Log(L"Replacing the stored settings that couldn't be read, as confirmed");
+        g_settingsReplaceAllowed = true;
+    }
+
     bool Unloading() override { return g_unloading || g_settingsWindowCancelRequested; }
 
 private:
@@ -169,6 +170,7 @@ private:
                       command.apply == SettingsApplyResult::Unchanged ? SettingsSaveResult::Unchanged :
                                                                          SettingsSaveResult::Changed;
         result.missing = command.missing;
+        result.replaceBlocked = command.replaceBlocked;
         result.notice = command.message;
         result.reason = command.reason;
         result.kind = command.icon == MB_ICONWARNING     ? SettingsNoticeKind::Warning :

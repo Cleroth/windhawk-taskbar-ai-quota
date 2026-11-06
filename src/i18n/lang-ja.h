@@ -217,8 +217,11 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"No accounts support this view.", L"このビューに対応しているアカウントはありません。"},
     {L"", L"No accounts to display.", L"表示するアカウントはありません。"},
     {L"", L"No accounts yet", L"アカウントはまだありません"},
-    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
-     L"暗号化されていません。測定値と不透明な ID のみで、トークンやラベルは含みません。Mod を削除しても残ります。"},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. In the mod's Windhawk storage, which Windhawk "
+          L"deletes, as far as it can, when it removes the mod.",
+     L"暗号化されていません。測定値と不透明な ID のみで、トークンやラベルは含みません。Mod の Windhawk ストレージ内にあり、Windhawk が Mod を削除するときに可能な範囲で削除されます。"},
+    {L"", L"Not saved: saving would replace the stored settings, which couldn't be read.",
+     L"保存されていません: 保存すると、読み込めなかった保存された設定が置き換えられます。"},
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"まだ何も記録されていません。フォルダーは最初のサンプルが記録されたときに作成されます。"},
     {L"", L"Nothing new is recorded.", L"新しいデータは記録されません。"},
@@ -229,6 +232,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Number size", L"数値のサイズ"},
     {L"", L"On hover", L"ホバー時"},
     {L"", L"Open AI quota settings", L"AI クォータの設定を開く"},
+    {L"", L"Open AI quota settings. Stored settings could not be read.", L"AI クォータの設定を開く。保存された設定を読み込めませんでした。"},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"AI クォータの設定を開く。保存された設定を読み込めませんでした。バックアップを保持しています。"},
     {L"", L"Opens an account’s details after the pointer rests on it.",
@@ -354,9 +358,10 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"account on the taskbar.",
      L"<b>{button}</b> を選択すると、Anthropic、OpenAI、Google Antigravity、GitHub Copilot、OpenCode Go のアカウントをタスク バーに表示できます。"},
     {L"", L"Set Credits max to show the Credits bar.", L"クレジット バーを表示するには、［クレジット上限］を設定してください。"},
-    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
-          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
-     L"Windows のユーザー間で共有されます。［無期限］では何も削除されず、サイズの上限もないため、履歴はエクスプローラーのメモリとディスク上で増え続けます。日数を指定すると 1 時間ごとに古い履歴が整理され、容量の上限は約 60 MB になります。"},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
+          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
+          L"with a cap of about 60 MB.",
+     L"Windows のユーザー間で共有されます。［無期限］ではサイズの上限がないため、履歴はエクスプローラーのメモリとディスク上で増え続けます。15 日より古い Antigravity の測定値は約 10 分間隔で保持されます。日数を指定すると 1 時間ごとに古い履歴が整理され、容量の上限は約 60 MB になります。"},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"各バーの横の短いキー: {key5h}、{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyCr}、{keyMo}。"},
     {L"", L"Short text", L"短いテキスト"},
@@ -435,6 +440,10 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"設定ウィンドウ、使用履歴ウィンドウ、タスク バー。［自動］は Windows の表示言語に従います。この Windows "
      L"ユーザーにのみ適用されます。"},
     {L"", L"The settings and usage history windows use Mica for it.", L"設定ウィンドウと使用履歴ウィンドウでは、代わりに［Mica］を使います。"},
+    {L"", L"The stored settings couldn't be read, so this window shows the defaults. Saving this change replaces the "
+          L"stored settings, accounts included, with what this window shows.\n\nReplace the stored settings? If you "
+          L"keep them, this change isn't saved; they're read again the next time Windows Explorer starts.",
+     L"保存された設定を読み込めなかったため、このウィンドウには既定値が表示されています。この変更を保存すると、保存された設定 (アカウントを含む) が、このウィンドウに表示されている内容に置き換えられます。\n\n保存された設定を置き換えますか？保持する場合、この変更は保存されず、保存された設定は次回 Windows エクスプローラーが起動したときに再度読み込まれます。"},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"保存されたサインインをコピーできませんでした。アカウントは変更されませんでした。"},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -465,10 +474,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"このアカウントは削除されました。保存済みの履歴は、期限切れになるか削除されるまで残ります。"},
     {L"", L"This change couldn't be saved.", L"この変更を保存できませんでした。"},
     {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
-          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
-          L"available. Continue?",
-     L"このエクスポートには約 {rows, plural, other{# 行}} "
-     L"が含まれます。時間がかかり、スプレッドシートの行数の上限を超える可能性があります。書き込み中は履歴ウィンドウを操作できませんが、エクスプローラーのタスク バーは引き続き使用できます。続行しますか？"},
+          L"spreadsheet row limits. Until it finishes, the history window shows its progress and most of its controls "
+          L"are unavailable; closing the window cancels the export. Continue?",
+     L"このエクスポートには約 {rows, plural, other{# 行}} が含まれます。時間がかかり、スプレッドシートの行数の上限を超える可能性があります。完了するまで、履歴ウィンドウには進行状況が表示され、ほとんどのコントロールは使用できません。ウィンドウを閉じるとエクスポートはキャンセルされます。続行しますか？"},
     {L"", L"Threshold notifications", L"しきい値の通知"},
     {L"", L"Thresholds stay in order: yellow, orange, red.", L"しきい値は黄色、オレンジ、赤の順に保たれます。"},
     {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",

@@ -79,7 +79,11 @@ state and storage errors stay visible in the main window.
   stored as historical usage. View selection does not change the journal or CSV contents.
 - **Export CSV...** exports all meters for the selected account or all accounts in the selected
   range (both periods in comparison mode). Times are UTC; opaque IDs preserve account identity
-  without exporting labels. An existing destination is replaced only after a successful write.
+  without exporting labels. The file is written in the background: the window keeps responding
+  and shows the rows written so far, its other controls stay unavailable and refreshes wait until
+  the export ends. An existing destination is replaced only after a successful write. Closing the
+  window or unloading the mod cancels an export still writing and leaves the destination
+  unchanged; one that already reached its final step can still complete.
 - **Clear all history...** permanently removes every account's local samples after confirmation.
   It leaves settings and sign-ins untouched; future polls record again if recording remains on.
   To delete one account's samples, remove the account with **Also delete its usage history**
@@ -104,28 +108,61 @@ history** when removing it; re-adding it starts fresh.
 Duplicate entries for the same login remain separate lines. Antigravity graphs track the
 displayed limiting pools, which can change; they are not cumulative consumption meters.
 
-Samples are stored under `%LOCALAPPDATA%\TaskbarAIQuota\<Windhawk mod ID>\usage-history-v1.bin`,
-with the user's inherited folder permissions. The journal contains quota/amount readings,
-timestamps, provider and opaque IDs—not tokens, labels, prompts, or raw responses. It is not
-encrypted: processes running as you can read it. It survives mod removal; use Clear first if
-you want to remove recorded usage. Local and catalog mod IDs use separate histories.
+Samples are stored in the mod's Windhawk storage, in a folder named after your Windows account's
+SID: `<Windhawk data>\ModsWritable\mod-storage\<mod ID>\<SID>\usage-history-v1.bin` (in a
+default install, `<Windhawk data>` is `C:\ProgramData\Windhawk\Engine`; **Settings > History**
+shows the folder), beside `history.lock` and the notifications' icon. The journal contains
+quota/amount readings, timestamps, provider and opaque IDs—not tokens, labels, prompts, or raw
+responses. It is not encrypted, and the folder keeps the permissions of Windhawk's storage, which
+gives every user and app on the PC full access: other users can read or change it. The mod
+refuses a storage folder that is a link (a junction or symbolic link), and writes only to plain
+files under fresh random names, moved into place; this limits what another user's files in the
+shared folder can redirect, but is no protection against a hostile user of the PC. When Windhawk
+removes the mod it deletes the mod's storage, history included, as far as it can (a file in use
+may stay); use Clear first to be sure. Local and catalog mod IDs use separate histories.
 
-The recording choice is stored per user in
-`HKCU\Software\Windhawk\TaskbarAIQuota\<mod ID>\RecordHistory` (missing means on, `0` means off);
-another Windows user's choice cannot change yours. Other settings, including per-account
-selection and retention, follow Windhawk's existing machine-shared configuration. Opening an
-empty viewer does not create files.
+The recording choice is stored per user in the mod's Windhawk storage as `recordHistory_<SID>`
+(missing means on, `0` means off), and so is the interface language, as `language_<SID>`
+(`auto`: Automatic); another Windows user's choice cannot change yours. Other settings, including
+per-account selection and retention, follow Windhawk's existing machine-shared configuration.
+Opening an empty viewer does not create files.
 
-History is kept **forever** by default: nothing is pruned and there is no size limit, so the
-journal keeps growing on disk and in Explorer's memory (for example, six accounts polled every
-10 minutes around the clock add about 75 MB a year; **All retained** in the viewer holds another
-copy while open). Settings saved before this option keep their day count. With a number of
-days, hourly maintenance prunes older samples while recording or when refreshing the viewer
+Earlier versions kept the journal in `%LOCALAPPDATA%\TaskbarAIQuota\<mod ID>\` and the two choices
+in `HKCU\Software\Windhawk\TaskbarAIQuota\<mod ID>` (`RecordHistory`, `Language`), which every
+Explorer still reads until they move. The taskbar's Explorer moves them when it starts, recording
+or not:
+
+- The choices: a value already in Windhawk storage wins; otherwise the old one is copied, then
+  deleted. The emptied registry keys go too.
+- The journal, if the new folder has none yet: copied whole into it (under the old folder's lock,
+  so a running earlier version can't write meanwhile), then the old journal, its lock, the old
+  icon and the emptied folders are deleted. If the old folder is in use or the copy fails, nothing
+  old changes and the viewer reports the storage problem; recorded polls try again (a failed copy
+  at most hourly), as do **Refresh** in the viewer and the next start, and recording waits until
+  the move succeeds.
+- If both folders hold a journal, the old one is deleted only when it is the one already moved
+  or identical to the new one; any other is kept where it is, never merged and never deleted.
+  While such a moved copy can't be deleted yet, **Clear all history...** and history deletion
+  first retry it and, if it stays, fail as in use rather than leave a copy that could come back.
+
+History is kept **forever** by default: nothing is pruned by age and there is no size limit, so
+the journal keeps growing on disk and in Explorer's memory (for example, six accounts polled
+every 10 minutes around the clock add about 75 MB a year; **All retained** in the viewer holds
+another copy while open). Settings saved before this option keep their day count. With a number
+of days, hourly maintenance prunes older samples while recording or when refreshing the viewer
 (including with recording off); loading a journal also permits maintenance. Retention edits do
 not bypass that hourly cadence. A **250,000-sample cap (about 60 MB)** then also evicts oldest records in
 batches; many accounts or frequent polls can shorten effective retention. Leaving **Forever**
 asks first, since both limits apply again. Only the taskbar-owning Explorer records, with
 exclusive journal ownership to prevent competing writers. Storage failures appear in the viewer.
+
+Antigravity is read every minute whatever the poll interval, so whatever the retention its
+readings older than 15 days are thinned to about one every 10 minutes (at the first maintenance
+after loading, then daily). Kept are the first and last of each account's older readings, failed
+readings, and both readings around every gap, reset, failure and meter appearing or disappearing,
+so lines still connect and break where they did. Thinned readings are exported with
+`poll_interval_ms` 600000. Statistics over thinned periods (coverage at a range's edges, peaks,
+time near the limit) are estimates from the readings kept and can differ from before thinning.
 
 ## Downgrading
 
@@ -148,6 +185,10 @@ exclusive journal ownership to prevent competing writers. Storage failures appea
   there drops the custom colors.
 - A version without **Forever** keeps 3650 days but applies its size cap, permanently discarding
   samples beyond the newest 250,000.
+- Versions before 2.18.0 read the journal, recording choice and language from their old places
+  (`%LOCALAPPDATA%`, HKCU). Once this version moved them, such a version starts with recording on
+  and the language on Automatic, and records a new journal in the old folder. Updating again keeps
+  that journal there as it is: never merged into the moved one, never deleted.
 
 ## Verification
 

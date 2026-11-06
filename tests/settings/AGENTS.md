@@ -71,9 +71,9 @@ stub client). These need the root guide's runtime check, or the interactive mode
 - Explorer, the settings thread's real client and store, DWM caption colors, how the title bar and
   Alt+Tab show the window icon, live theme switches and multi-monitor DPI.
 - The history window's production ops (journal reads and the peek, settings and poll reads, the
-  consent transaction, the refresh message and deferral timer), its opener, client (notification,
-  inspection and popup inputs) and activation path; `tests/history` covers the production peek's
-  contract.
+  consent transaction, the refresh message and deferral timer, the export's worker, its poll
+  timer, cancellation and join), its opener, client (notification, inspection and popup inputs)
+  and activation path; `tests/history` covers the production peek's contract and the CSV writer.
 - The popup probe's automated part covers thread-local activation and programmatic events only;
   real clicks on other apps or the taskbar, Alt+Tab, Start and wheel routing need
   `--popup-interactive`. Neither mode runs inside Explorer, where the taskbar shares the process.

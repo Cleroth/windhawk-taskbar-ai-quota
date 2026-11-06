@@ -47,17 +47,23 @@ static HistoryBreak HistoryWindowConnection(const HistorySample& a, const Histor
     return HistoryBreak::None;
 }
 
+// Whether readings a and b, b later, lie apart in polling: another account, provider or session,
+// out of order, or more than two of their longer interval apart.
+static bool HistoryPollingGap(const HistorySample& a, const HistorySample& b) {
+    if (a.accountId != b.accountId || a.provider != b.provider || a.session != b.session ||
+        b.timeMs <= a.timeMs || !a.intervalMs || !b.intervalMs)
+        return true;
+    ULONGLONG gap = b.timeMs - a.timeMs;
+    ULONGLONG polling = std::max(a.intervalMs, b.intervalMs);
+    // ceil(gap / 2) > polling is overflow-safe gap > 2 * polling.
+    return gap / 2 + gap % 2 > polling;
+}
+
 // Shared by rendering and integration: no extrapolation, including at range boundaries.
 static HistoryBreak HistoryConnection(const HistorySample& a, const HistorySample& b,
                                       int meter) {
     if (!HistoryHasValue(a, meter) || !HistoryHasValue(b, meter))
         return HistoryBreak::Unavailable;
-    if (a.accountId != b.accountId || a.provider != b.provider || a.session != b.session ||
-        b.timeMs <= a.timeMs || !a.intervalMs || !b.intervalMs)
-        return HistoryBreak::Gap;
-    ULONGLONG gap = b.timeMs - a.timeMs;
-    ULONGLONG polling = std::max(a.intervalMs, b.intervalMs);
-    // ceil(gap / 2) > polling is overflow-safe gap > 2 * polling.
-    if (gap / 2 + gap % 2 > polling) return HistoryBreak::Gap;
+    if (HistoryPollingGap(a, b)) return HistoryBreak::Gap;
     return HistoryWindowConnection(a, b, meter);
 }

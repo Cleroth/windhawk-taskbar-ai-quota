@@ -20,6 +20,11 @@ history** or **Delete history...** removes that account's.
 - Hidden accounts pause under the default global restriction and resume only when it is off and
   recording is enabled.
 - Test CSV export, persistence across a restart, and Clear; none changes sign-ins.
+- Export a large range: the progress count rises while the window scrolls, repaints and resizes;
+  other controls stay disabled until the notice. Close the window mid-export: it closes at once,
+  no `*.quota-*.tmp` remains beside the destination and an existing destination is unchanged.
+  Disable the mod mid-export: Explorer stays responsive and the unload completes. Export to a
+  share that stalls mid-write, then close the window and disable the mod: both complete.
 - Remove a disposable recorded account with **Also delete its usage history** checked, once with
   each kind of history window open: its samples leave the open window, CSV export and a restart;
   other accounts keep theirs.
@@ -74,7 +79,38 @@ history** or **Delete history...** removes that account's.
 - Switching groups changes neither recorded history nor CSV meters: exports of the same account
   scope and range from different groups hold the same meters.
 
+## Antigravity thinning
+
+- With an Antigravity account recorded for more than 15 days, after a restart and its first
+  maintenance: readings older than 15 days are about 10 minutes apart (CSV `poll_interval_ms`
+  600000, the last older one and those beside gaps 60000), newer ones a minute apart; lines over
+  the thinned period connect and break where they did before (compare a CSV export or a
+  screenshot taken first), and a storage-audit compare reports the removed readings as thinning.
+- Other providers' readings and the journal's other days are unchanged.
+
 ## Upgrades
 
 Before enabling recording on an upgrade, verify existing non-default accounts, visibility,
 appearance and sign-ins.
+
+From a version before 2.18.0, with a recorded journal, recording turned off or a language chosen
+(take a storage-audit snapshot first, and compare after each step):
+
+- Migration: after the upgrade, the journal sits in the History page's folder (under Windhawk's
+  `mod-storage`), with every sample; the old `%LOCALAPPDATA%\TaskbarAIQuota` folder and the
+  `HKCU\Software\Windhawk\TaskbarAIQuota` key are gone; recording and the language are as they
+  were; the Windhawk log names the move.
+- Interrupted migration: with an older version still holding the old folder (another signed-in
+  session running it), or Explorer ended during the copy, the old journal stays as it was, the
+  viewer reports the storage problem, nothing records, and the next start (or **Refresh**)
+  completes the move without losing or duplicating samples. No `*.staging` file stays behind.
+- Concurrent preference migration: change the language or recording in Settings while Explorer
+  restarts (or from a second session): the change holds, and neither value returns to its old
+  one.
+- Downgrade and upgrade again: the older version starts with recording on and Automatic and
+  records a journal in the old folder; after updating again that journal stays there (logged),
+  the moved journal keeps its samples, and nothing merges.
+- Removal while loaded: remove the mod in Windhawk with Explorer running: Explorer stays up, and
+  the mod's storage folder (journal, lock, icon) goes, unless a file was in use. The notifications'
+  registry key is gone after unload, and also after a sign-out without unload (kill Explorer, then
+  sign out and in).

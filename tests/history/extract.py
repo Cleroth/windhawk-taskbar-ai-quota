@@ -89,25 +89,25 @@ def generate(source, output, expected_hash):
 
     # Every section is bounded by its own fragment. Pure fragments are taken whole: the
     # localization engine with its catalogs (the history model's titles), the account model,
-    # sample types, continuity rules, the flyout's burn-up curves, the history model and its CSV
-    # writer; so is the journal's coordination state (a lock, counters and flags). The journal and
-    # helper fragments only contribute named definitions.
+    # sample types, continuity rules, Antigravity thinning, the flyout's burn-up curves, the history
+    # model and its CSV writer; so is the journal's coordination state (a lock, counters and
+    # flags). The journal and helper fragments only contribute named definitions.
     for name in ["template", "catalog", "lang-de", "lang-es", "lang-fr", "lang-ja", "lang-pt-BR", "lang-ru",
                  "lang-zh-Hans", "languages", "pseudo", "format", "numbers"]:
         emit(f"i18n/{name}.h", fragment(text, f"i18n/{name}.h"))
     emit("core/model.h", fragment(text, "core/model.h"))
     emit("history/types.h", fragment(text, "history/types.h"))
     # The journal's memory-only parts: its in-memory state (never the storage state after it),
-    # the status notifier, the history window's peek and an account deletion's memory step.
-    # Nothing that loads or writes storage.
+    # the status notifier, the record checksum, the history window's peek and an account
+    # deletion's memory step. Nothing that loads or writes storage.
     journal = "history/journal.h"
     emit("history/state.h", fragment(text, "history/state.h"))
     emit("journal memory state", within(text, journal, between, "static std::deque<HistorySample> g_historySamples;", "static std::wstring g_historyPath;"))
-    for name in ["SetHistoryStatus", "PeekHistorySnapshot", "EraseHistorySamplesLocked"]:
+    for name in ["SetHistoryStatus", "HistoryChecksum", "PeekHistorySnapshot", "EraseHistorySamplesLocked"]:
         emit(name, within(text, journal, definition, name))
     for name in ["Utf8ToWide", "WideToUtf8"]:
         emit(name, within(text, "core/helpers.h", definition, name))
-    for path in ["history/continuity.h", "history/burn-up.h", "history/series.h", "history/csv.h"]:
+    for path in ["history/continuity.h", "history/thinning.h", "history/burn-up.h", "history/series.h", "history/csv.h"]:
         emit(path, fragment(text, path))
     chunks.append('\n#include "fixtures/main.inc"\n')
     if source.read_bytes() != raw:

@@ -30,15 +30,17 @@ struct HistoryDestination {
 };
 
 // A CSV write: the rows written, and the Windows error that stopped it (0: the file replaced the
-// destination; ERROR_CANCELLED: unload); `created`: its temporary file was created.
+// destination; ERROR_CANCELLED: the window's close or unload); `created`: its temporary file was
+// created.
 struct HistoryCsvResult {
     size_t rows = 0;
     DWORD error = 0;
     bool created = true;
 };
 
-// What the controller reads and asks for. Production ops are stateless adapters: every request,
-// load, refresh, deferral, operation and close state is the controller's.
+// What the controller reads and asks for. Production ops are adapters holding only the export's
+// running write: every request, load, refresh, deferral, operation and close state is the
+// controller's.
 struct HistoryOps {
     // The latest open request's history ID (0: none), cleared.
     virtual uint64_t TakeRequest() = 0;
@@ -63,14 +65,17 @@ struct HistoryOps {
     // The save dialog for a CSV, titled `title`, its file types in `locale`'s language, tracked as
     // Ask (its overwrite prompt too).
     virtual HistoryDestination ChooseDestination(const std::wstring& title, const I18nLocale& locale) = 0;
-    // Posts the window's write message (Write); false when it couldn't.
-    virtual bool PostWrite() = 0;
-    // Writes the scope's CSV to a new temporary file beside `destination` and replaces the
-    // destination with it once it is whole and flushed; any failure or unload deletes it and
-    // leaves the destination as it was. `progress` hears the rows written so far, at most every
-    // 250 ms.
-    virtual HistoryCsvResult WriteCsv(const HistoryExportScope& scope, const std::wstring& destination,
-                                      const std::function<void(size_t)>& progress) = 0;
+    // Starts writing the scope's CSV off the window's thread, polled by the window every 250 ms
+    // (WriteTick): a new temporary file beside `destination` replaces the destination once it is
+    // whole and flushed; any failure, cancellation or unload before that deletes it and leaves the
+    // destination as it was. False when the poll or the write couldn't start: nothing is written.
+    virtual bool StartWrite(const HistoryExportScope& scope, const std::wstring& destination) = 0;
+    // The started write: the rows written so far in `rows`, and its result once it ended (its poll
+    // stopped); nullopt while it runs.
+    virtual std::optional<HistoryCsvResult> PollWrite(size_t& rows) = 0;
+    // Cancels the started write and stops its poll (nothing once it ended); it ends at its next
+    // check unless its file already replaced the destination. The ops' destruction waits for it.
+    virtual void CancelWrite() = 0;
     // Clears the journal (`error`: why it couldn't), then the flyout's burn-up curves are dropped.
     virtual bool Clear(HistoryJournalError& error) = 0;
     virtual void InvalidateCurves() = 0;
@@ -108,9 +113,9 @@ struct HistorySeriesKey {
     bool operator==(const HistorySeriesKey&) const = default;
 };
 
-// The running operation: Export (its warning and save dialog), its write (posted once the
-// dialog chose a file), Clear (its confirmation, then the clear), Delete (its confirmation, then
-// the deletion).
+// The running operation: Export (its warning and save dialog), its write (started once the
+// dialog chose a file, polled until it ends), Clear (its confirmation, then the clear), Delete
+// (its confirmation, then the deletion).
 enum class HistoryOperation : uint8_t { None, Export, Writing, Clear, Delete };
 
 // An operation's result (approved Q3 a): a code with its arguments, shown in the language of each
@@ -122,7 +127,7 @@ enum class HistoryNoticeCode : uint8_t {
     ConsentFailed,        // Enable recording
     Untracked,            // A dialog couldn't be tracked
     SaveDialogFailed,     // `error`: the save dialog's common dialog error
-    ExportNotStarted,     // The write couldn't be posted, or its progress never showed
+    ExportNotStarted,     // The write or its poll couldn't start
     TemporaryFileFailed,  // `error`: the Windows error
     ExportFailed,         // `error`: the Windows error
     Exported,             // `rows` of the selected account (or `all` accounts) to `text`, both weeks if `compare`
@@ -266,7 +271,8 @@ struct HistoryController {
 
     // Operations, one at a time; during one, and during a modal, only the legend's chips act and
     // an explicit load the window asks for waits (loadPending: once after it, taking the latest
-    // request). An export's scope, frozen at its command, its destination and the rows written.
+    // request). An export's scope, frozen at its command, its destination and the rows written as
+    // its last poll read them.
     HistoryOperation operation = HistoryOperation::None;
     bool loadPending = false;
     std::optional<HistoryExportScope> exportScope;
@@ -274,7 +280,8 @@ struct HistoryController {
     size_t exported = 0;
 
     // Set once the window closes (the first step of every close, before a running dialog is
-    // cancelled): nothing loads or acts any more, and an operation ends at its next step
+    // cancelled): nothing loads or acts any more, a running write is cancelled, and another
+    // operation ends at its next step
     bool closeRequested = false;
 
     // The window opened, on the settings' default range: until the first load, the pill and the
@@ -408,11 +415,13 @@ struct HistoryController {
 
     // The window is closing (its close path's first step, before a running dialog is cancelled):
     // requests stay with the opener; outstanding refresh work, a waiting load and the deferral
-    // timer go. A running operation ends when its dialog returns.
+    // timer go. A running write is cancelled now (the window closes without waiting for it);
+    // another operation ends when its dialog returns.
     void RequestClose() {
         closeRequested = true;
         liveDirty = samplesDirty = loadPending = false;
         Timer(false);
+        if (operation == HistoryOperation::Writing) Stopped();
     }
 
     // Operations and dialogs -----------------------------------------------------------------------
@@ -422,8 +431,8 @@ struct HistoryController {
     // arrives during its dialogs (activation, refresh) changes nothing it writes. A large one asks
     // first (Cancel the default); then the save dialog titled by its scope. Each dialog is in the
     // language current as it opens, and every return from one checks the close latch and unload.
-    // With a file chosen the write is posted: the window shows its progress before the write
-    // starts (Write).
+    // With a file chosen the write starts off the window's thread, and the frame this command
+    // builds shows its progress until a poll finds it ended (WriteTick).
     void Export() {
         if (!snapshot) return;
         notice = {};
@@ -440,9 +449,10 @@ struct HistoryController {
         if (estimate > 500000) {
             I18nLocale locale = ops->Locale();
             int answer = Ask(I18nText(locale, Tr(L"This export contains about {rows, plural, one{# rows} other{# "
-                                                 L"rows}}. It may take a while and exceed spreadsheet row limits. The "
-                                                 L"history window will be busy while writing; Explorer's taskbar "
-                                                 L"remains available. Continue?"),
+                                                 L"rows}}. It may take a while and exceed spreadsheet row limits. "
+                                                 L"Until it finishes, the history window shows its progress and most "
+                                                 L"of its controls are unavailable; closing the window cancels the "
+                                                 L"export. Continue?"),
                                       {{L"rows", estimate}}),
                              I18nText(locale, TrCtx(L"dialog-caption", L"Large history export")),
                              MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
@@ -474,26 +484,25 @@ struct HistoryController {
         destination = std::move(chosen.path);
         exported = 0;
         operation = HistoryOperation::Writing;
-        if (!ops->PostWrite()) return Finish({HistoryNoticeCode::ExportNotStarted});
+        if (!ops->StartWrite(*exportScope, destination)) return Finish({HistoryNoticeCode::ExportNotStarted});
         Compose();
     }
 
-    // The posted write, `shown`: the window painted its progress (else it is closing, or the frame
-    // with the progress never came: nothing is written). It runs to its end without returning to
-    // the window: each progress report sets the rows written and asks `repaint` to show them,
-    // nothing else. Its notice: the rows and where they went, or why the destination is unchanged.
-    void Write(bool shown, const std::function<void()>& repaint) {
-        if (operation != HistoryOperation::Writing || !exportScope || Stopped()) return;
-        if (!shown) return Finish({HistoryNoticeCode::ExportNotStarted});
-        HistoryCsvResult result = ops->WriteCsv(*exportScope, destination, [&](size_t rows) {
-            exported = rows;
-            repaint();
-        });
-        if (Stopped()) return;
-        if (!result.created) return Finish({HistoryNoticeCode::TemporaryFileFailed, result.error});
-        if (result.error) return Finish({HistoryNoticeCode::ExportFailed, result.error});
-        Finish({.code = HistoryNoticeCode::Exported, .rows = result.rows, .all = !exportScope->accountId,
-                .compare = exportScope->compare, .text = destination});
+    // The write's poll (its timer's tick, while it runs): the rows written so far, nothing else
+    // read or composed; once it ended, its notice: the rows and where they went, or why the
+    // destination is unchanged. A close latched or unload cancels it instead, and a result
+    // arriving with unload (perhaps its cancellation) shows nothing. Returns whether it ended
+    // with its notice (the window rebuilds; otherwise it repaints the progress when the rows
+    // moved).
+    bool WriteTick() {
+        if (operation != HistoryOperation::Writing || !exportScope || Stopped()) return false;
+        std::optional<HistoryCsvResult> result = ops->PollWrite(exported);
+        if (!result || Stopped()) return false;
+        if (!result->created) Finish({HistoryNoticeCode::TemporaryFileFailed, result->error});
+        else if (result->error) Finish({HistoryNoticeCode::ExportFailed, result->error});
+        else Finish({.code = HistoryNoticeCode::Exported, .rows = result->rows, .all = !exportScope->accountId,
+                     .compare = exportScope->compare, .text = destination});
+        return true;
     }
 
     // Clear all history (the More menu): asked first (Cancel the default). Whatever its result the
@@ -634,10 +643,11 @@ struct HistoryController {
         return answer;
     }
 
-    // After a dialog or a step that can take a while: the close latch or unload ends the running
-    // operation there, nothing more done or shown.
+    // After a dialog or a step that can take a while, and at each write poll: the close latch or
+    // unload ends the running operation there (a write cancelled), nothing more done or shown.
     bool Stopped() {
         if (!closeRequested && !ops->Unloading()) return false;
+        if (operation == HistoryOperation::Writing) ops->CancelWrite();
         operation = HistoryOperation::None;
         exportScope.reset();
         return true;

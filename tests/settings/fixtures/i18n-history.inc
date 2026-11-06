@@ -187,14 +187,14 @@ static void RunHistoryI18nTests() {
             ops.log.clear();
             c.Command(HistoryUiCommand::Export);
             CHECK(ops.log.at(0) == title);
-            c.Write(true, [] {});
+            CHECK(c.WriteTick());
             CHECK(c.view.notice.text == head + all && c.view.notice.severity == UiSeverity::Info);
         }
         c.Command(HistoryUiCommand::Select, 0, 0xC1);
         c.Command(HistoryUiCommand::Compare, 1);
         ops.writeResult = {5, 0, true};
         c.Command(HistoryUiCommand::Export);
-        c.Write(true, [] {});
+        CHECK(c.WriteTick());
         // Экспортировано 5 строк показателей (выбранный аккаунт) в C:\Exports\usage.csv. Метки не включены;
         // время в UTC. Включает оба прошедших 7-дневных периода.
         CHECK(c.view.notice.text ==

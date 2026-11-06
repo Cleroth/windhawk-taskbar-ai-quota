@@ -108,10 +108,13 @@ reach the limit before the reset, say when, as the details flyout does. Clicking
 provider's dashboard (Antigravity has none), and a repeat for the same account and quota
 replaces the earlier one.
 
-While notifications are on, the mod registers its name and icon with Windows under
-`HKCU\Software\Classes\AppUserModelId\Windhawk.TaskbarAIQuota.<mod ID>`, the icon being
-`%LOCALAPPDATA%\TaskbarAIQuota\<mod ID>\notification-icon.png`. Turning notifications off or
-disabling the mod removes the registry key; the icon file stays, like history. Windows keeps its
+At its first notification after starting, the mod registers its name and icon with Windows under
+`HKCU\Software\Classes\AppUserModelId\Windhawk.TaskbarAIQuota.<mod ID>`, a volatile key Windows
+drops when you sign out, the icon being `notification-icon.png` in your folder of the mod's
+Windhawk storage, beside the usage history (see
+[usage history > Recording and storage](usage-history.md#recording-and-storage)). Turning
+notifications off or disabling the mod removes the registry key; the icon file stays until
+Windhawk removes the mod's storage with the mod. Windows keeps its
 own entry for the mod in **Settings > System > Notifications**, and turning the mod off there
 silences it. Only when Windows fails to show a notification does the mod fall back to a tray
 balloon, which Windows attributes to Windows Explorer.

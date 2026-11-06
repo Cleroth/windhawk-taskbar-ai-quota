@@ -49,10 +49,14 @@ static void UiCreateGraphics(UiGraphics& g) {
     winrt::check_hresult(g.d2d->CreateStrokeStyle(&round, nullptr, 0, g.roundCaps.put()));
 }
 
-// Effect-free layouts accumulate while text changes; trimming between frames bounds them. No
-// layout pointer from UiLayout may be held across this call.
-static void UiTrimCaches(UiGraphics& g) {
+// Layouts accumulate while text changes, effect-free ones and each target's inked ones; trimming
+// between frames bounds them. No layout pointer from UiLayout, UiRichLayout or UiInkedLayout may be
+// held across this call.
+static void UiTrimCaches(UiGraphics& g, std::initializer_list<UiTargetCache*> targets = {}) {
     if (g.layouts.size() > 512) g.layouts.clear();
+    for (UiTargetCache* cache : targets) {
+        if (cache->layouts.size() > 512) cache->layouts.clear();
+    }
 }
 
 // A family's font collection, its name resolved (preferred, else fallback) on first use. The

@@ -1,14 +1,36 @@
-// Production ops of the usage history window's controller (history/controller.h): stateless
-// adapters over the open request, the journal, the published settings and polls, recording
-// consent, the settings window, the journal's folder, the window's dialogs (history/modal.h), the
-// CSV file, the window's own refresh and write messages and deferral timer, and the current
-// language. History thread only.
+// Production ops of the usage history window's controller (history/controller.h): adapters over
+// the open request, the journal, the published settings and polls, recording consent, the
+// settings window, the journal's folder, the window's dialogs (history/modal.h), the window's own
+// refresh message and deferral timer, and the current language; and the owner of the export's
+// CSV write, its worker thread and poll timer. History thread only, except the worker.
+
+// An export's write, shared by the history thread and its worker: the frozen scope and the
+// destination, the rows written so far, the cancel request, and the result, published before
+// `done` (release) and read after it (acquire).
+struct HistoryWriteJob {
+    HistoryExportScope scope;
+    std::wstring destination;
+    std::atomic<size_t> rows{0};
+    std::atomic<bool> cancel{false}, done{false};
+    HistoryCsvResult result;
+};
 
 struct HistoryProductionOps final : HistoryOps {
     // Wiring, set once the window exists: its host (the dialogs' owner; its popup and tooltip
     // close before each) and the context its dialogs run in.
     UiHost* host = nullptr;
     HistoryDialogContext dialogs;
+
+    // The latest write and its worker (none: null), kept until the worker is joined
+    std::unique_ptr<HistoryWriteJob> job;
+    HANDLE writer = nullptr;
+
+    // Every exit of the window's thread (UiHostRun's return or an exception) cancels the write and
+    // waits for its worker. The window may close before: the worker never touches it.
+    ~HistoryProductionOps() {
+        if (job) job->cancel = true;
+        JoinWriter();
+    }
 
     uint64_t TakeRequest() override { return g_historyRequestedAccount.exchange(0); }
 
@@ -66,12 +88,7 @@ struct HistoryProductionOps final : HistoryOps {
     // As Settings > History's link: the folder from a link launch thread (ShellExecute's own
     // message loop would run this window's close, activation and refresh inside the command).
     bool OpenFolder() override {
-        PWSTR localAppData = nullptr;
-        std::wstring folder;
-        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DONT_VERIFY, nullptr, &localAppData))) {
-            folder = std::wstring(localAppData) + L"\\TaskbarAIQuota\\" WH_MOD_ID;
-        }
-        CoTaskMemFree(localAppData);
+        std::wstring folder = UserStorageFolder();
         DWORD attributes = folder.empty() ? INVALID_FILE_ATTRIBUTES : GetFileAttributesW(folder.c_str());
         if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY)) return false;
         OpenUrl(folder.c_str());
@@ -112,76 +129,142 @@ struct HistoryProductionOps final : HistoryOps {
         return {error ? HistoryDialogResult::Failed : HistoryDialogResult::Cancelled, {}, error};
     }
 
-    bool PostWrite() override {
+    // A new write once the previous worker has exited (one cancelled and still running refuses
+    // it; the window's thread never waits for it): the poll timer first, so a write never starts
+    // without it, then the worker.
+    bool StartWrite(const HistoryExportScope& scope, const std::wstring& destination) override {
+        if (writer && WaitForSingleObject(writer, 0) != WAIT_OBJECT_0) return false;
+        JoinWriter();
+        job = std::make_unique<HistoryWriteJob>();
+        job->scope = scope;
+        job->destination = destination;
         HWND window = g_historyWindow.load();
-        return window && PostMessageW(window, kHistoryWriteMessage, 0, 0);
+        if (!window || !SetTimer(window, kHistoryWriteTimer, 250, nullptr)) {
+            job.reset();
+            return false;
+        }
+        writer = CreateThread(nullptr, 0, WriteThread, job.get(), 0, nullptr);
+        if (!writer) {
+            Wh_Log(L"Could not create the export thread: %lu", GetLastError());
+            KillTimer(window, kHistoryWriteTimer);
+            job.reset();
+            return false;
+        }
+        return true;
     }
 
-    // The export's file safety: a new temporary file beside the destination (never an existing
-    // one), the rows, flushed and closed, then moved over the destination with write-through. On
-    // any failure, unload or exception the temporary file is deleted and the destination keeps
-    // its content. Progress goes out before each full piece.
-    HistoryCsvResult WriteCsv(const HistoryExportScope& scope, const std::wstring& destination,
-                              const std::function<void(size_t)>& progress) override {
-        struct Temporary {
-            HANDLE file = INVALID_HANDLE_VALUE;
-            std::wstring path;
-            ~Temporary() {
-                if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
-                if (!path.empty()) DeleteFileW(path.c_str());
-            }
-        } temporary;
-        HistoryCsvResult result;
-        std::wstring candidate = destination + L".quota-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
-                                 std::to_wstring(GetTickCount64()) + L".tmp";
-        temporary.file = CreateFileW(candidate.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL,
-                                     nullptr);
-        if (temporary.file == INVALID_HANDLE_VALUE) {
-            result.error = GetLastError();
-            result.created = false;
-            return result;
-        }
-        temporary.path = std::move(candidate);
-        auto cancelled = [] { return g_unloading || g_historyWindowCancelRequested; };
-        ULONGLONG nextProgressMs = 0;
-        HistoryCsvEnd end = HistoryCsvWrite(scope, result.rows, [&](const std::string& piece, bool last) {
-            if (!last && GetTickCount64() >= nextProgressMs) {
-                progress(result.rows);
-                nextProgressMs = GetTickCount64() + 250;
-            }
-            for (size_t written = 0; written < piece.size();) {
-                if (cancelled()) {
-                    SetLastError(ERROR_CANCELLED);
-                    return false;
-                }
-                DWORD count = DWORD(std::min(piece.size() - written, size_t(65536))), actual = 0;
-                if (!WriteFile(temporary.file, piece.data() + written, count, &actual, nullptr)) return false;
-                if (!actual) {
-                    SetLastError(ERROR_WRITE_FAULT);
-                    return false;
-                }
-                written += actual;
-            }
-            return true;
-        }, cancelled);
-        bool success = end == HistoryCsvEnd::Written && FlushFileBuffers(temporary.file);
-        DWORD error = success ? ERROR_SUCCESS : end == HistoryCsvEnd::Cancelled ? DWORD(ERROR_CANCELLED) : GetLastError();
-        if (!CloseHandle(std::exchange(temporary.file, INVALID_HANDLE_VALUE)) && success) {
-            success = false;
-            error = GetLastError();
-        }
-        if (success && cancelled()) {
-            success = false;
-            error = ERROR_CANCELLED;
-        }
-        if (success && !MoveFileExW(temporary.path.c_str(), destination.c_str(),
-                                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-            success = false;
-            error = GetLastError();
-        }
-        if (success) temporary.path.clear();
-        result.error = success ? 0 : error ? error : DWORD(ERROR_GEN_FAILURE);
+    // Never waits: the write ends once its result is published and its worker is no longer
+    // running (thread teardown can lag the result); only a worker known to have exited is reaped.
+    std::optional<HistoryCsvResult> PollWrite(size_t& rows) override {
+        if (!job) return HistoryCsvResult{0, ERROR_GEN_FAILURE, true};
+        rows = job->rows.load(std::memory_order_relaxed);
+        if (!job->done.load(std::memory_order_acquire)) return std::nullopt;
+        DWORD wait = WaitForSingleObject(writer, 0);
+        if (wait == WAIT_TIMEOUT) return std::nullopt;
+        if (HWND window = g_historyWindow.load()) KillTimer(window, kHistoryWriteTimer);
+        HistoryCsvResult result = job->result;
+        if (wait == WAIT_OBJECT_0) JoinWriter();
         return result;
+    }
+
+    void CancelWrite() override {
+        if (job) job->cancel = true;
+        if (HWND window = g_historyWindow.load()) KillTimer(window, kHistoryWriteTimer);
+    }
+
+    // The worker, catching everything; it reads only its job and the unload flags. The export's
+    // file safety: a new temporary file beside the destination (never an existing one), the rows,
+    // flushed and closed, then moved over the destination with write-through (the commit point:
+    // a cancellation after it leaves the file written). On any failure, cancellation, unload or
+    // exception the temporary file is deleted and the destination keeps its content; the result
+    // is published only after that cleanup. The rows written go out before each piece.
+    static DWORD WINAPI WriteThread(LPVOID parameter) {
+        HistoryWriteJob& job = *static_cast<HistoryWriteJob*>(parameter);
+        HistoryCsvResult result;
+        try {
+            struct Temporary {
+                HANDLE file = INVALID_HANDLE_VALUE;
+                std::wstring path;
+                ~Temporary() {
+                    if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
+                    if (!path.empty()) DeleteFileW(path.c_str());
+                }
+            } temporary;
+            std::wstring candidate = job.destination + L".quota-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
+                                     std::to_wstring(GetTickCount64()) + L".tmp";
+            temporary.file = CreateFileW(candidate.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                                         FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (temporary.file == INVALID_HANDLE_VALUE) {
+                result.error = GetLastError();
+                result.created = false;
+            } else {
+                temporary.path = std::move(candidate);
+                auto cancelled = [&job] { return job.cancel || g_unloading || g_historyWindowCancelRequested; };
+                HistoryCsvEnd end = HistoryCsvWrite(job.scope, result.rows, [&](const std::string& piece, bool) {
+                    job.rows.store(result.rows, std::memory_order_relaxed);
+                    for (size_t written = 0; written < piece.size();) {
+                        if (cancelled()) {
+                            SetLastError(ERROR_CANCELLED);
+                            return false;
+                        }
+                        DWORD count = DWORD(std::min(piece.size() - written, size_t(65536))), actual = 0;
+                        if (!WriteFile(temporary.file, piece.data() + written, count, &actual, nullptr)) return false;
+                        if (!actual) {
+                            SetLastError(ERROR_WRITE_FAULT);
+                            return false;
+                        }
+                        written += actual;
+                    }
+                    return true;
+                }, cancelled);
+                bool success = end == HistoryCsvEnd::Written && FlushFileBuffers(temporary.file);
+                DWORD error = success ? ERROR_SUCCESS :
+                              end == HistoryCsvEnd::Cancelled ? DWORD(ERROR_CANCELLED) : GetLastError();
+                if (!CloseHandle(std::exchange(temporary.file, INVALID_HANDLE_VALUE)) && success) {
+                    success = false;
+                    error = GetLastError();
+                }
+                if (success && cancelled()) {
+                    success = false;
+                    error = ERROR_CANCELLED;
+                }
+                if (success && !MoveFileExW(temporary.path.c_str(), job.destination.c_str(),
+                                            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+                    success = false;
+                    error = GetLastError();
+                }
+                if (success) temporary.path.clear();
+                result.error = success ? 0 : error ? error : DWORD(ERROR_GEN_FAILURE);
+            }
+        } catch (...) {
+            result.error = ERROR_GEN_FAILURE;
+        }
+        job.result = result;
+        job.done.store(true, std::memory_order_release);
+        return 0;
+    }
+
+    // Waits for the worker to exit, cancelling its blocking file calls every 100 ms (a stalled
+    // destination), then drops it and its job. Only its exit ends the wait: a failed wait is
+    // retried, never taken for one (unload must not outlive the worker).
+    void JoinWriter() {
+        if (writer) {
+            // Windhawk's bundled import library lacks CancelSynchronousIo.
+            using CancelIo_t = BOOL(WINAPI*)(HANDLE);
+            static const auto cancelIo = reinterpret_cast<CancelIo_t>(
+                GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "CancelSynchronousIo"));
+            bool logged = false;
+            for (DWORD wait; (wait = WaitForSingleObject(writer, 100)) != WAIT_OBJECT_0;) {
+                if (wait == WAIT_TIMEOUT) {
+                    if (cancelIo) cancelIo(writer);
+                    continue;
+                }
+                if (!std::exchange(logged, true)) Wh_Log(L"Could not wait for the export thread: %lu", GetLastError());
+                Sleep(100);
+            }
+            CloseHandle(std::exchange(writer, nullptr));
+        }
+        job.reset();
     }
 
     bool Clear(HistoryJournalError& error) override { return ClearHistory(&error); }

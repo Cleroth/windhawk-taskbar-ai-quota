@@ -7,12 +7,17 @@ static HWND g_notifyWnd = nullptr;
 static const UINT kNotifyIconId = 1;
 static PCWSTR kNotifyClassName = L"AiQuotaNotify_" WH_MOD_ID;
 
-// The toasts' app identity (AppUserModelID), its name and icon registered under its HKCU key while
-// notifications are on. The mod ID keeps local and catalog copies apart. The icon file sits in the
-// per-user folder history uses; Windows caches it by path, so a changed app icon needs a new name.
+// The toasts' app identity (AppUserModelID): its name and icon registered once per fetch thread
+// under a volatile HKCU key, which Windows drops at sign-out, and removed while notifications are
+// off and at unload. The mod ID keeps local and catalog copies apart. The icon file sits in this
+// user's storage folder (core/user-storage.h); Windows caches it by path, so a changed app icon
+// needs a new name.
 static constexpr PCWSTR kToastAppId = L"Windhawk.TaskbarAIQuota." WH_MOD_ID;
+static constexpr PCWSTR kToastAppIdParent = L"Software\\Classes\\AppUserModelId";
 static constexpr PCWSTR kToastAppIdKey = L"Software\\Classes\\AppUserModelId\\Windhawk.TaskbarAIQuota." WH_MOD_ID;
 static constexpr PCWSTR kToastIconFile = L"notification-icon.png";
+// Fetch-thread-owned: whether this fetch thread registered the app identity, name and icon.
+static bool g_toastAppIdRegistered = false;
 
 // Fetch-thread only. Drops the tray icon, window, and class created on demand.
 static void RemoveNotifyIcon() {
@@ -28,10 +33,13 @@ static void RemoveNotifyIcon() {
 }
 
 // Fetch-thread only. Deletes the toasts' app identity; Windows keeps its own notification settings
-// for it. Returns whether it is gone.
+// for it. Returns whether it is gone; the next toast registers it again.
 static bool RemoveToastAppId() {
     LSTATUS status = RegDeleteTreeW(HKEY_CURRENT_USER, kToastAppIdKey);
-    if (status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND) return true;
+    if (status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND) {
+        g_toastAppIdRegistered = false;
+        return true;
+    }
     Wh_Log(L"Could not remove the notifications' app identity: %ld", status);
     return false;
 }
@@ -129,7 +137,7 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
         return e.code() == HRESULT(0x803E0111) || e.code() == HRESULT(0x803E0114);
     };
     // Toast: unless Windows has them off, register the app identity with its icon (without one
-    // Windows shows a generic icon), then show it.
+    // Windows shows a generic icon) once per fetch thread, then show it.
     try {
         namespace notifications = winrt::Windows::UI::Notifications;
         notifications::ToastNotifier notifier =
@@ -147,35 +155,60 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
             }
         }
 
-        std::wstring icon;
-        PWSTR localAppData = nullptr;
-        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_CREATE, nullptr, &localAppData))) {
-            std::wstring folder = std::wstring(localAppData) + L"\\TaskbarAIQuota";
-            CreateDirectoryW(folder.c_str(), nullptr);
-            folder += L"\\" WH_MOD_ID;
-            CreateDirectoryW(folder.c_str(), nullptr);
-            icon = folder + L"\\" + kToastIconFile;
-            if (GetFileAttributesW(icon.c_str()) == INVALID_FILE_ATTRIBUTES && !SaveAppIconPng(icon)) icon.clear();
-        }
-        CoTaskMemFree(localAppData);
-
-        HKEY key = nullptr;
-        LSTATUS status = RegCreateKeyExW(HKEY_CURRENT_USER, kToastAppIdKey, 0, nullptr, 0, KEY_SET_VALUE,
-                                         nullptr, &key, nullptr);
-        if (status == ERROR_SUCCESS) {
-            auto setValue = [key](PCWSTR name, const std::wstring& value) {
-                return RegSetValueExW(key, name, 0, REG_SZ, reinterpret_cast<const BYTE*>(value.c_str()),
-                                      DWORD((value.size() + 1) * sizeof(wchar_t)));
-            };
-            status = setValue(L"DisplayName", L"Taskbar AI Quota");  // i18n-en
-            if (status == ERROR_SUCCESS && !icon.empty()) {
-                if (LSTATUS iconStatus = setValue(L"IconUri", icon); iconStatus != ERROR_SUCCESS) {
-                    Wh_Log(L"Could not register the notifications' icon: %ld", iconStatus);
+        if (!g_toastAppIdRegistered) {
+            // The icon: drawn once, written to a staging file, then moved into place.
+            std::wstring icon;
+            const std::wstring folder = UserStorageFolder();
+            if (!PrepareUserStorageFolder(folder)) {
+                icon = folder + L"\\" + kToastIconFile;
+                if (GetFileAttributesW(icon.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                    DeleteStaleStagingFiles(icon);
+                    std::vector<BYTE> png = AppIconPng();
+                    std::wstring staging;
+                    winrt::file_handle file;
+                    if (!png.empty()) file = CreateUserStagingFile(icon, staging);
+                    DWORD written = 0;
+                    bool saved = file && WriteFile(file.get(), png.data(), DWORD(png.size()), &written, nullptr) &&
+                                 written == png.size();
+                    file.close();
+                    if (!saved || !MoveFileExW(staging.c_str(), icon.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+                        if (!staging.empty()) DeleteFileW(staging.c_str());
+                        Wh_Log(L"Could not write the notification icon");
+                        icon.clear();
+                    }
                 }
             }
-            RegCloseKey(key);
+            // REG_OPTION_VOLATILE is ignored for an existing key, so a lasting one an earlier
+            // version left goes first. The parent stays lasting: other apps can't add lasting
+            // keys under a volatile one.
+            HKEY key = nullptr;
+            LSTATUS status = RegCreateKeyExW(HKEY_CURRENT_USER, kToastAppIdParent, 0, nullptr, 0, KEY_CREATE_SUB_KEY,
+                                             nullptr, &key, nullptr);
+            if (status == ERROR_SUCCESS) {
+                RegCloseKey(key);
+                status = RegDeleteTreeW(HKEY_CURRENT_USER, kToastAppIdKey);
+                if (status == ERROR_FILE_NOT_FOUND) status = ERROR_SUCCESS;
+            }
+            if (status == ERROR_SUCCESS) {
+                status = RegCreateKeyExW(HKEY_CURRENT_USER, kToastAppIdKey, 0, nullptr, REG_OPTION_VOLATILE,
+                                         KEY_SET_VALUE, nullptr, &key, nullptr);
+            }
+            if (status == ERROR_SUCCESS) {
+                auto setValue = [key](PCWSTR name, PCWSTR value) {
+                    return RegSetValueExW(key, name, 0, REG_SZ, reinterpret_cast<const BYTE*>(value),
+                                          DWORD((wcslen(value) + 1) * sizeof(wchar_t)));
+                };
+                status = setValue(L"DisplayName", L"Taskbar AI Quota");  // i18n-en
+                LSTATUS iconStatus = icon.empty() ? ERROR_FILE_NOT_FOUND : setValue(L"IconUri", icon.c_str());
+                if (status == ERROR_SUCCESS && iconStatus != ERROR_SUCCESS) {
+                    Wh_Log(L"Could not register the notifications' icon: %ld", iconStatus);
+                }
+                // A missing icon retries with the next toast.
+                g_toastAppIdRegistered = status == ERROR_SUCCESS && iconStatus == ERROR_SUCCESS;
+                RegCloseKey(key);
+            }
+            winrt::check_win32(status);
         }
-        winrt::check_win32(status);
 
         winrt::Windows::Data::Xml::Dom::XmlDocument document;
         document.LoadXml(ThresholdToastXml(title, body, projection, url));

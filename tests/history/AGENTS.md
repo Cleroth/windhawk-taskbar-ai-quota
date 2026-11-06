@@ -1,8 +1,8 @@
 # History verification
 
 Source-extracted regressions of the usage-history domain: the history model (grouping, labels,
-reduction, statistics, account collection, selection, cancellation), continuity, the flyout's
-burn-up curves, the journal's memory parts and the CSV writer. Not a Windhawk or Explorer
+reduction, statistics, account collection, selection, cancellation), continuity, Antigravity
+thinning, the flyout's burn-up curves, the journal's memory parts and the CSV writer. Not a Windhawk or Explorer
 integration test. The usage history window itself (view, chart, controller, frames, renders, its
 native host and dialog scope) is tested in `tests/settings`.
 
@@ -51,8 +51,10 @@ extraction, compile and the tests, with exactly one successful `RESULT` summary.
 summaries, source/harness changes, assertion failures and timeouts fail the run. Readiness
 evidence is a fresh successful run, not a result from an older source hash.
 
-- **Extracted model:** grouping, account collection, selection, continuity, reduction,
-  statistics, burn-up curves and in-memory CSV are actual source.
+- **Extracted model:** grouping, account collection, selection, continuity, Antigravity thinning
+  (with the journal's record checksum), reduction, statistics, burn-up curves and in-memory CSV
+  are actual source. Thinning's call from maintenance (its cadence, swap and revision bump) is not
+  extracted.
 - **Journal memory parts** (`fixtures/journal.inc`): the in-memory journal state, the status
   notifier (`SetHistoryStatus`, its window notification a counting stub), the history window's
   peek (`PeekHistorySnapshot`) and an account deletion's memory step
@@ -76,7 +78,7 @@ evidence is a fresh successful run, not a result from an older source hash.
   pass a test. Review extraction when production structure changes. Extraction reads the
   generated file, but every section is bounded by its own `// src/<path>` fragment: pure
   fragments (the localization engine with its catalogs for the model's titles, `core/model.h`,
-  `history/types.h`, `continuity.h`, `burn-up.h`, `series.h`, `csv.h`) and the journal's
+  `history/types.h`, `continuity.h`, `thinning.h`, `burn-up.h`, `series.h`, `csv.h`) and the journal's
   coordination state (`history/state.h`) whole, other fragments by
   named definitions or anchors searched inside that fragment only, so include order can't change
   what is extracted. `history/journal.h` keeps its in-memory state before its storage state
@@ -89,6 +91,10 @@ evidence is a fresh successful run, not a result from an older source hash.
   Python/C++ copies of production decision rules or source-text call-count audits.
 - Preserve synthetic continuity coverage for clock rollback, gaps, real resets, idle rolling
   deadlines and first-use anchoring. No real CSV replay.
+- `fixtures/thinning.inc` tests Antigravity thinning (`history/thinning.h`) on minute readings
+  with hand-derived kept times: steady runs, reset drift, gaps, failed readings, meters appearing
+  or disappearing, real resets, the 15-day boundary, other accounts and providers, and daily
+  re-thinning converging to a single pass.
 - `win32-stubs.hpp` holds only the prelude and the globals the extracted sections read; extracted
   code that gains window or storage calls doesn't belong in this suite.
 - Keep generated artifacts under `.out/` by default; never promote them to source.

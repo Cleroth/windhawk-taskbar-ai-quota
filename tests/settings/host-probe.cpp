@@ -1443,7 +1443,7 @@ int wmain(int argc, wchar_t** argv) {
         CHECK(probe.count(kCancels) >= 1);
     });
 
-    // An export's progress: repainted from inside a handler that keeps the thread busy.
+    // An export's progress: repainted from inside a handler (its poll's), without a rebuild.
     Run("nested progress repaint: a client-drawn main item repainted ten times from inside a handler through "
         "UiHostPaintNow, found by id each time (a moved item paints where it is now), no rebuild meanwhile; a "
         "lost target is recreated by the next repaint; once the host faults the rest are skipped", [&] {

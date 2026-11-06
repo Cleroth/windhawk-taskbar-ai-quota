@@ -265,8 +265,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"No accounts support this view.", L"Ни один аккаунт не поддерживает этот вид."},
     {L"", L"No accounts to display.", L"Нет аккаунтов для отображения."},
     {L"", L"No accounts yet", L"Аккаунтов пока нет"},
-    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
-     L"Не зашифровано. Замеры и обезличенные идентификаторы, без токенов и меток. Сохраняется после удаления мода."},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. In the mod's Windhawk storage, which Windhawk "
+          L"deletes, as far as it can, when it removes the mod.",
+     L"Не зашифровано. Замеры и обезличенные идентификаторы, без токенов и меток. В хранилище мода в Windhawk, которое "
+     L"Windhawk по возможности удаляет вместе с модом."},
+    {L"", L"Not saved: saving would replace the stored settings, which couldn't be read.",
+     L"Не сохранено: сохранение заменило бы сохранённые параметры, которые не удалось прочитать."},
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"Пока ничего не записано. Папка создаётся с первым записанным замером."},
     {L"", L"Nothing new is recorded.", L"Ничего нового не записывается."},
@@ -278,6 +282,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Number size", L"Размер числа"},
     {L"", L"On hover", L"При наведении"},
     {L"", L"Open AI quota settings", L"Открыть параметры квот ИИ"},
+    {L"", L"Open AI quota settings. Stored settings could not be read.",
+     L"Открыть параметры квот ИИ. Не удалось прочитать сохранённые параметры."},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"Открыть параметры квот ИИ. Не удалось прочитать сохранённые параметры; резервная копия сохранена."},
     {L"", L"Opens an account’s details after the pointer rests on it.",
@@ -431,11 +437,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Нажмите <b>{button}</b>, чтобы показать на панели задач аккаунт Anthropic, OpenAI, Google Antigravity, GitHub "
      L"Copilot или OpenCode Go."},
     {L"", L"Set Credits max to show the Credits bar.", L"Задайте «Максимум кредитов», чтобы показать полосу кредитов."},
-    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
-          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
-     L"Общий параметр для всех пользователей Windows. «Бессрочно» ничего не удаляет и не ограничивает размер, поэтому "
-     L"история продолжает расти в памяти Проводника и на диске. Ограничения в днях очищают историю каждый час, с "
-     L"пределом около 60\u00A0МБ."},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
+          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
+          L"with a cap of about 60 MB.",
+     L"Общий параметр для всех пользователей Windows. «Бессрочно» не ограничивает размер, поэтому история продолжает "
+     L"расти в памяти Проводника и на диске; замеры Antigravity старше 15 дней хранятся с интервалом около 10 минут. "
+     L"Ограничения в днях очищают историю каждый час, с пределом около 60\u00A0МБ."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"Короткое обозначение рядом с каждой полосой: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Короткий текст"},
@@ -531,6 +538,13 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Windows. Действует только для этого пользователя Windows."},
     {L"", L"The settings and usage history windows use Mica for it.",
      L"Для окон параметров и истории использования вместо него применяется Mica."},
+    {L"", L"The stored settings couldn't be read, so this window shows the defaults. Saving this change replaces the "
+          L"stored settings, accounts included, with what this window shows.\n\nReplace the stored settings? If you "
+          L"keep them, this change isn't saved; they're read again the next time Windows Explorer starts.",
+     L"Не удалось прочитать сохранённые параметры, поэтому в этом окне показаны значения по умолчанию. При сохранении "
+     L"этого изменения сохранённые параметры, включая аккаунты, будут заменены тем, что показано в этом "
+     L"окне.\n\nЗаменить сохранённые параметры? Если оставить их, это изменение не будет сохранено; они будут снова "
+     L"прочитаны при следующем запуске Проводника Windows."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"Не удалось скопировать сохранённый вход. Аккаунт не изменён."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -572,11 +586,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Этот аккаунт удалён. Его сохранённая история остаётся, пока не истечёт срок хранения или пока её не удалят."},
     {L"", L"This change couldn't be saved.", L"Не удалось сохранить это изменение."},
     {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
-          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
-          L"available. Continue?",
-     L"Этот экспорт содержит около {rows, plural, one{# строки} few{# строк} many{# строк} other{# строки}}. Он "
-     L"может занять некоторое время и превысить ограничение на число строк в электронных таблицах. Пока идёт запись, "
-     L"окно истории будет занято; панель задач Проводника остаётся доступной. Продолжить?"},
+          L"spreadsheet row limits. Until it finishes, the history window shows its progress and most of its controls "
+          L"are unavailable; closing the window cancels the export. Continue?",
+     L"Этот экспорт содержит около {rows, plural, one{# строки} few{# строк} many{# строк} other{# строки}}. Он может "
+     L"занять некоторое время и превысить ограничение на число строк в электронных таблицах. Пока он не завершится, "
+     L"окно истории показывает ход выполнения, а большинство его элементов управления недоступно; закрытие окна "
+     L"отменяет экспорт. Продолжить?"},
     {L"", L"Threshold notifications", L"Уведомления о пороге"},
     {L"", L"Thresholds stay in order: yellow, orange, red.",
      L"Пороги всегда идут по порядку: жёлтый, оранжевый, красный."},

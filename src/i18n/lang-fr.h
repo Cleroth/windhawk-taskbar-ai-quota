@@ -277,8 +277,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"No accounts support this view.", L"Aucun compte ne prend en charge cette vue."},
     {L"", L"No accounts to display.", L"Aucun compte à afficher."},
     {L"", L"No accounts yet", L"Aucun compte pour l’instant"},
-    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
-     L"Non chiffré. Relevés et ID opaques, sans jetons ni libellés. Conservé après la suppression du mod."},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. In the mod's Windhawk storage, which Windhawk "
+          L"deletes, as far as it can, when it removes the mod.",
+     L"Non chiffré. Relevés et ID opaques, sans jetons ni libellés. Dans le stockage Windhawk du mod, que Windhawk "
+     L"efface, dans la mesure du possible, lors de la suppression du mod."},
+    {L"", L"Not saved: saving would replace the stored settings, which couldn't be read.",
+     L"Non enregistré\u202F: l’enregistrement remplacerait les paramètres enregistrés, qui n’ont pas pu être lus."},
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"Rien n’a encore été enregistré. Le dossier est créé avec le premier échantillon enregistré."},
     {L"", L"Nothing new is recorded.", L"Rien de nouveau n’est enregistré."},
@@ -290,6 +294,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Number size", L"Taille des nombres"},
     {L"", L"On hover", L"Au survol"},
     {L"", L"Open AI quota settings", L"Ouvrir les paramètres des quotas IA"},
+    {L"", L"Open AI quota settings. Stored settings could not be read.",
+     L"Ouvrir les paramètres des quotas IA. Les paramètres enregistrés n’ont pas pu être lus."},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"Ouvrir les paramètres des quotas IA. Les paramètres enregistrés n’ont pas pu être lus\u202F; une sauvegarde a été "
      L"conservée."},
@@ -450,11 +456,13 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"OpenCode Go dans la barre des tâches."},
     {L"", L"Set Credits max to show the Credits bar.",
      L"Définissez le maximum de crédits pour afficher la barre des crédits."},
-    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
-          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
-     L"Partagé entre les utilisateurs Windows. L’option Indéfiniment ne supprime rien et n’a pas de limite de taille\u202F: "
-     L"l’historique continue de grossir dans la mémoire de l’Explorateur Windows et sur le disque. Avec une limite en "
-     L"jours, le nettoyage a lieu toutes les heures, avec un plafond d’environ 60\u00A0Mo."},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
+          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
+          L"with a cap of about 60 MB.",
+     L"Partagé entre les utilisateurs Windows. L’option Indéfiniment n’a pas de limite de taille\u202F: l’historique "
+     L"continue de grossir dans la mémoire de l’Explorateur Windows et sur le disque\u202F; les relevés d’Antigravity "
+     L"de plus de 15\u00A0jours sont conservés à environ 10\u00A0minutes d’intervalle. Avec une limite en jours, le "
+     L"nettoyage a lieu toutes les heures, avec un plafond d’environ 60\u00A0Mo."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"Code court à côté de chaque barre\u202F: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Texte court"},
@@ -555,6 +563,13 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"langue d’affichage de Windows. S’applique uniquement à cet utilisateur Windows."},
     {L"", L"The settings and usage history windows use Mica for it.",
      L"Les fenêtres des paramètres et de l’historique d’utilisation utilisent alors Mica."},
+    {L"", L"The stored settings couldn't be read, so this window shows the defaults. Saving this change replaces the "
+          L"stored settings, accounts included, with what this window shows.\n\nReplace the stored settings? If you "
+          L"keep them, this change isn't saved; they're read again the next time Windows Explorer starts.",
+     L"Les paramètres enregistrés n’ont pas pu être lus, cette fenêtre affiche donc les valeurs par défaut. "
+     L"Enregistrer cette modification remplace les paramètres enregistrés, comptes compris, par ce qu’affiche cette "
+     L"fenêtre.\n\nRemplacer les paramètres enregistrés\u202F? Si vous les conservez, cette modification n’est pas "
+     L"enregistrée\u202F; ils seront relus au prochain démarrage de l’Explorateur Windows."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"Impossible de copier la connexion enregistrée. Le compte n’a pas été modifié."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -598,11 +613,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Ce compte a été retiré. Son historique enregistré est conservé jusqu’à son expiration ou sa suppression."},
     {L"", L"This change couldn't be saved.", L"Cette modification n’a pas pu être enregistrée."},
     {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
-          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
-          L"available. Continue?",
+          L"spreadsheet row limits. Until it finishes, the history window shows its progress and most of its controls "
+          L"are unavailable; closing the window cancels the export. Continue?",
      L"Cet export contient environ {rows, plural, one{# ligne} many{# de lignes} other{# lignes}}. Il peut prendre du "
-     L"temps et dépasser la limite de lignes des tableurs. La fenêtre de l’historique sera occupée pendant "
-     L"l’écriture\u202F; la barre des tâches de l’Explorateur Windows reste disponible. Continuer\u202F?"},
+     L"temps et dépasser la limite de lignes des tableurs. Jusqu’à la fin, la fenêtre de l’historique affiche sa "
+     L"progression et la plupart de ses commandes sont indisponibles\u202F; fermer la fenêtre annule l’export. "
+     L"Continuer\u202F?"},
     {L"", L"Threshold notifications", L"Notifications de seuil"},
     {L"", L"Thresholds stay in order: yellow, orange, red.",
      L"Les seuils restent dans l’ordre\u202F: jaune, orange, rouge."},

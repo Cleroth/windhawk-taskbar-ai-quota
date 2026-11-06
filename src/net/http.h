@@ -103,13 +103,20 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
                    location[0] ? location : L"an unreadable location");
         }
 
+        // Retry-After: delay seconds (digits only), else an HTTP date; either waits at most a day.
+        constexpr ULONGLONG kMaxRetryAfterSec = 24ULL * 60 * 60;
         wchar_t ra[128]{};
         DWORD raSz = sizeof(ra);
         if (WinHttpQueryHeaders(req, WINHTTP_QUERY_RETRY_AFTER,
                                 WINHTTP_HEADER_NAME_BY_INDEX, ra, &raSz,
                                 WINHTTP_NO_HEADER_INDEX)) {
-            res.retryAfterSec = _wtoi(ra);
-            if (res.retryAfterSec <= 0) {
+            if (ra[0] && !ra[wcsspn(ra, L"0123456789")]) {
+                ULONGLONG seconds = 0;
+                for (const wchar_t* digit = ra; *digit; digit++) {
+                    seconds = std::min(seconds * 10 + ULONGLONG(*digit - L'0'), kMaxRetryAfterSec);
+                }
+                res.retryAfterSec = (int)seconds;
+            } else {
                 SYSTEMTIME st{};
                 FILETIME ft{};
                 if (WinHttpTimeToSystemTime(ra, &st) && SystemTimeToFileTime(&st, &ft)) {
@@ -120,7 +127,7 @@ static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR us
                         ULONGLONG now = NowUnixMs();
                         if (retryUnixMs > now) {
                             ULONGLONG deltaSec = (retryUnixMs - now + 999) / 1000;
-                            res.retryAfterSec = (int)std::min(deltaSec, 24ULL * 60 * 60);
+                            res.retryAfterSec = (int)std::min(deltaSec, kMaxRetryAfterSec);
                         }
                     }
                 }

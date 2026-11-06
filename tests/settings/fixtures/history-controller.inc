@@ -7,8 +7,9 @@
 
 // In-memory ops: the open request (overwritten by each open, as the shared global is), a journal
 // with its stamp, status and cap, settings with their polls, the clock, unload, the window's
-// posted refresh messages and deferral timer, the consent transaction, the dialogs, the CSV write,
-// Clear, Delete history and the folder, the current language, and an operation log.
+// posted refresh messages and deferral timer, the consent transaction, the dialogs, the CSV
+// write's job (pending until a case ends it, or ending at its first poll), Clear, Delete history
+// and the folder, the current language, and an operation log.
 struct TestHistoryOps final : HistoryOps {
     uint64_t request = 0;
     std::vector<HistorySample> journal;
@@ -39,15 +40,16 @@ struct TestHistoryOps final : HistoryOps {
     HistoryDestination destination{HistoryDialogResult::Chosen, L"C:\\Exports\\usage.csv"};
     std::function<void()> asking, choosing;
     std::vector<std::pair<std::wstring, UINT>> asked;
-    // The write: posted write messages (failPostWrite: posting fails), the scopes written, the
-    // progress it reports (rows), what happens during it, and its result (rows unless set: one
-    // per sample of the scope)
-    int writePosts = 0;
-    bool failPostWrite = false;
+    // The write: writes started (failStartWrite: starting fails) with their scopes; the running
+    // job's rows written so far, whether it was cancelled (it ends on its own) and its poll; it
+    // ends at a poll unless writePending, with writeResult (rows unless set: one per sample of the
+    // scope); what happens at each poll
+    bool failStartWrite = false;
     std::vector<HistoryExportScope> written;
-    std::vector<size_t> progressRows;
-    std::function<void()> writing;
+    size_t writeRows = 0;
+    bool writePending = false, writeCancelled = false, writePolling = false;
     HistoryCsvResult writeResult{SIZE_MAX, 0, true};
+    std::function<void()> polling;
     // Clear's result (and its error; the epoch moves either way, as the journal's does), what
     // happens during it; whether the journal's folder exists
     bool clearResult = true;
@@ -64,8 +66,8 @@ struct TestHistoryOps final : HistoryOps {
     // "take", "settings", "snapshot <days before now>d", "peek" (status only),
     // "peek <days before now>d" (samples too), "consent", "notify", "post" ("post failed"),
     // "timer on", "timer off", "open settings", "open folder" ("no folder"), "ask <caption>",
-    // "choose <title>", "post write" ("post write failed"), "write <path>", "clear", "invalidate",
-    // "delete <history ID in hex>"
+    // "choose <title>", "start write <path>" ("start write failed"), "poll write", "cancel write",
+    // "clear", "invalidate", "delete <history ID in hex>"
     std::vector<std::wstring> log;
 
     // A poll's reading recorded: appended, counted in the stamp.
@@ -137,19 +139,28 @@ struct TestHistoryOps final : HistoryOps {
         if (choosing) choosing();
         return destination;
     }
-    bool PostWrite() override {
-        log.push_back(failPostWrite ? L"post write failed" : L"post write");
-        writePosts += !failPostWrite;
-        return !failPostWrite;
-    }
-    HistoryCsvResult WriteCsv(const HistoryExportScope& scope, const std::wstring& path,
-                              const std::function<void(size_t)>& progress) override {
-        log.push_back(L"write " + path);
+    // The controller starts one write at a time and polls only the running one; a cancellation
+    // after the write ended changes nothing.
+    bool StartWrite(const HistoryExportScope& scope, const std::wstring& path) override {
+        log.push_back(failStartWrite ? L"start write failed" : L"start write " + path);
+        if (failStartWrite) return false;
+        CHECK(!writePolling);
         written.push_back(scope);
-        for (size_t rows : progressRows) progress(rows);
-        if (writing) writing();
+        writeRows = 0;
+        writePolling = true;
+        writeCancelled = false;
+        return true;
+    }
+    std::optional<HistoryCsvResult> PollWrite(size_t& rows) override {
+        log.push_back(L"poll write");
+        CHECK(writePolling && !writeCancelled);
+        if (polling) polling();
+        rows = writeRows;
+        if (writePending) return std::nullopt;
+        writePolling = false;
         HistoryCsvResult result = writeResult;
         if (result.rows == SIZE_MAX) {
+            const HistoryExportScope& scope = written.back();
             result.rows = 0;
             for (const HistorySample& sample : scope.snapshot->samples) {
                 if (sample.accountId && (!scope.accountId || sample.accountId == scope.accountId) &&
@@ -159,6 +170,11 @@ struct TestHistoryOps final : HistoryOps {
             }
         }
         return result;
+    }
+    void CancelWrite() override {
+        log.push_back(L"cancel write");
+        writeCancelled = writeCancelled || writePolling;
+        writePolling = false;
     }
     bool Clear(HistoryJournalError& error) override {
         log.push_back(L"clear");

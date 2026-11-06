@@ -51,6 +51,8 @@ static bool UiParseSvgPath(PCWSTR data, ID2D1GeometrySink* sink) {
                 sink->BeginFigure(current, D2D1_FIGURE_BEGIN_FILLED);
                 open = true;
                 command = relative ? L'l' : L'L';  // Further pairs are implicit lines.
+            } else {
+                command = 0;  // A close takes no numbers: one after it is malformed.
             }
             previous = upper;
             continue;

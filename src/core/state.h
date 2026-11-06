@@ -17,7 +17,12 @@ static ULONGLONG g_refreshGeneration = 0;
 static std::mutex g_refreshMutex;
 static std::atomic<bool> g_uiInjected{false};
 static std::atomic<bool> g_visualTestMode{false};
+// The settings load's failure (settings/storage.h), until a save replaces the stored settings:
+// whether a backup of them was kept (settings_v1_invalid), and whether a save may replace them:
+// read whole and backed up, or once the settings window's user confirmed it. Each load resets them.
 static std::atomic<bool> g_settingsLoadError{false};
+static std::atomic<bool> g_settingsLoadBackup{false};
+static std::atomic<bool> g_settingsReplaceAllowed{false};
 static std::atomic<bool> g_fetchThreadStarted{false};
 static HANDLE g_stopEvent = nullptr;
 static HANDLE g_refreshEvent = nullptr;

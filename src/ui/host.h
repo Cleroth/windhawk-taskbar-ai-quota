@@ -161,10 +161,10 @@ static void UiHostInvalidate(const UiHost& host) {
     if (host.viewport) InvalidateRect(host.viewport, nullptr, FALSE);
 }
 
-// Paints main-surface item `id` now, from a handler that keeps the thread busy (no message loop
-// meanwhile): found by id each time, its rectangle invalidated and the main window painted nested
-// (no rebuild there; a lost target is recreated by that paint). Nothing while closing or faulted,
-// without the window or the item. Returns whether it painted.
+// Paints main-surface item `id` now, without a rebuild (an export's progress at each poll): found
+// by id each time, its rectangle invalidated and the main window painted nested in the caller's
+// handler (a lost target is recreated by that paint). Nothing while closing or faulted, without
+// the window or the item. Returns whether it painted.
 static bool UiHostPaintNow(UiHost& host, uint32_t id) {
     UiSurfaceId surface = UiSurfaceId::Content;
     const UiItem* item = host.closing || host.faulted || !host.main || !IsWindow(host.main) ? nullptr :
@@ -210,7 +210,8 @@ static void UiHostShowTooltip(UiHost& host, UiTooltipContent content, POINT curs
         UiTooltipHide(tip, host.main);
         return;
     }
-    UiTrimCaches(*host.graphics);
+    UiTrimCaches(*host.graphics, {&host.mainSurface.cache, &host.viewSurface.cache, &host.popup.surface.cache,
+                                  &host.tooltip.surface.cache});
     UiTooltipKey at;
     at.cursor = cursor;
     at.work = monitor.rcWork;
@@ -692,7 +693,8 @@ static void UiHostRebuildIfPending(UiHost& host) {
         RECT client{};
         GetClientRect(host.main, &client);
         float scale = UiHostScale(host);
-        UiTrimCaches(*host.graphics);
+        UiTrimCaches(*host.graphics, {&host.mainSurface.cache, &host.viewSurface.cache, &host.popup.surface.cache,
+                                      &host.tooltip.surface.cache});
         UiFrame frame;
         host.client->Build(host, {float(client.right) / scale, float(client.bottom) / scale}, frame);
         host.generation++;

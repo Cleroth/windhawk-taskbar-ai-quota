@@ -137,7 +137,7 @@ enum ProbeCommand {
     kProgressMode, // `argument` 1: an export-like progress item (client-drawn decoration) on the main
                    // surface; returns the builds so far
     kProgressLoop, // From inside this handler, ten repaints of the progress item through UiHostPaintNow
-                   // (the row count changing), as a long write does; before the sixth, `argument` 1
+                   // (the row count changing), as an export's polls do; before the sixth, `argument` 1
                    // loses the main target through the production path, 2 faults the host, 3 moves
                    // the item in the built frame. Returns repaints done | progress paints << 8 | builds
                    // << 16 | main targets created << 24 | 1 << 28 if the last paint had the item's
@@ -253,7 +253,7 @@ static LRESULT CALLBACK ProbeModalHook(int code, WPARAM wParam, LPARAM lParam) {
 // cards, its readout naming the 50 DIP column under the pointer, and an icon button with a
 // tooltip on the main surface. In dialog mode (kDialogMode) a close latches and cancels the history
 // scope's dialogs as the history client does; in progress mode (kProgressMode) a client-drawn
-// progress item sits on the main surface, repainted from inside a handler as an export's write does.
+// progress item sits on the main surface, repainted from inside a handler as an export's poll does.
 struct ProbeClient final : UiHostClient {
     int choice = 0, sliderValue = 50, segment = 0;
     std::wstring boxText = L"10", freeText;

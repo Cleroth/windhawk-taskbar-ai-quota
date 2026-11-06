@@ -112,6 +112,35 @@ static void RunUiTests() {
         bool threw = false;
         try { UiPathGeometry(g, kBroken); } catch (const winrt::hresult_error&) { threw = true; }
         CHECK(threw);
+        // A close takes no numbers: one after it is malformed, while a command after it starts a new
+        // figure at the closed one's start.
+        static constexpr PCWSTR kNumberAfterClose = L"M0 0 L4 0 L4 4 Z 1 1";
+        threw = false;
+        try { UiPathGeometry(g, kNumberAfterClose); } catch (const winrt::hresult_error&) { threw = true; }
+        CHECK(threw);
+        CHECK(SUCCEEDED(UiPathGeometry(g, L"M0 0 L4 0 L4 4 Z L0 8")->GetBounds(nullptr, &bounds)));
+        CHECK_NEAR(bounds.bottom, 8);
+        CHECK_NEAR(bounds.right, 4);
+    });
+
+    Run("caches: past 512 layouts, the shared ones and each target's inked ones are trimmed", [] {
+        UiGraphics g;
+        UiTargetCache full, small;
+        for (int i = 0; i < 512; i++) {
+            g.layouts[std::to_wstring(i)] = nullptr;
+            full.layouts[std::to_wstring(i)] = nullptr;
+        }
+        small.layouts[L"kept"] = nullptr;
+        UiTrimCaches(g, {&full, &small});
+        CHECK(g.layouts.size() == 512 && full.layouts.size() == 512 && small.layouts.size() == 1);
+        g.layouts[L"512"] = full.layouts[L"512"] = nullptr;
+        UiTrimCaches(g, {&full, &small});
+        CHECK(g.layouts.empty() && full.layouts.empty() && small.layouts.size() == 1);
+        // Without targets only the shared ones.
+        full.layouts[L"0"] = nullptr;
+        for (int i = 0; i <= 512; i++) g.layouts[std::to_wstring(i)] = nullptr;
+        UiTrimCaches(g);
+        CHECK(g.layouts.empty() && full.layouts.size() == 1);
     });
 
     Run("palette: accents per theme, high contrast only from system colors", [] {

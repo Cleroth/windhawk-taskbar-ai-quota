@@ -55,8 +55,8 @@ struct HistoryUiClient final : UiHostClient {
     // A new selection or view scrolls the content back to its top; a successful Enable recording
     // focuses the selected entry, and so does a command with dialogs (Export, the More menu's,
     // Delete history) whose loads changed the selection, as an activation's load does. Those
-    // commands return once their dialogs are done; an export's write then waits for its posted
-    // message.
+    // commands return once their dialogs are done; an export's write then runs off this thread,
+    // polled by the window's timer.
     void Invoke(UiHost& host, UiAction action) override {
         if (Unloading() || action.kind != UiActionKind::Command) return;
         uint64_t selected = controller.selectedId;
@@ -76,10 +76,9 @@ struct HistoryUiClient final : UiHostClient {
     // end. Notifications become one posted refresh, which holds what it must while the popup is
     // open (the deferral timer checks it), the pointer inspects the chart, or a dialog or an
     // operation runs. A load or refresh that changed the selection (its request, or the account no
-    // longer listed) moves focus to the selected entry. Esc closes. An export's write runs once
-    // the frame with its progress was published by the command's rebuild: painted first (else it
-    // writes nothing), then repainted as rows are written, the item found again each time. A
-    // regional format change composes again like a notification.
+    // longer listed) moves focus to the selected entry. Esc closes. An export's write poll
+    // repaints the progress when its rows moved (the item found again each time, no rebuild) and
+    // rebuilds once the write ended. A regional format change composes again like a notification.
     bool Message(UiHost& host, UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) override {
         result = 0;
         uint64_t selected = controller.selectedId;
@@ -107,11 +106,13 @@ struct HistoryUiClient final : UiHostClient {
             case kHistoryRefreshMessage:
                 rebuild = controller.ProcessRefresh(host.popup.open, PointerOnChart(host));
                 break;
-            case kHistoryWriteMessage:
-                controller.Write(UiHostPaintNow(host, kHistoryUiProgress),
-                                 [&host] { UiHostPaintNow(host, kHistoryUiProgress); });
-                break;
             case WM_TIMER:
+                if (wParam == kHistoryWriteTimer) {
+                    size_t rows = controller.exported;
+                    if (controller.WriteTick()) break;
+                    if (controller.exported != rows) UiHostPaintNow(host, kHistoryUiProgress);
+                    return true;
+                }
                 if (wParam != kHistoryDeferralTimer) return false;
                 controller.DeferralTick(host.popup.open, PointerOnChart(host));
                 return true;

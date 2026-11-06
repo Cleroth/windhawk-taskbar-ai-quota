@@ -679,6 +679,8 @@ enum class SettingsNoticeCode : uint8_t {
     AccountsDropped,  // An account vanished: its drafts were dropped
     AccountDropped,   // The account acted on vanished
     AccountNotSaved,  // An account edit failed without a notice of its own
+    ReplaceBlocked,   // Saves would replace stored settings the load couldn't read: a question
+                      // (SettingsEdits::AnswerReplace)
     // The account commands' (settings/account-commands.h) and the store's
     AccountExists,
     AccountSaveFailed,
@@ -701,6 +703,7 @@ enum class SettingsNoticeCode : uint8_t {
 struct SettingsAccountResult {
     SettingsSaveResult save = SettingsSaveResult::Unchanged;
     bool missing = false;  // No such account (any more)
+    bool replaceBlocked = false;  // AddAccount's failure, as Apply's `replaceBlocked`
     SettingsNoticeCode notice = SettingsNoticeCode::None;  // What the window tells the user, if anything
     HistoryJournalError reason = HistoryJournalError::None;  // HistoryKept's
     SettingsNoticeKind kind = SettingsNoticeKind::Error;
@@ -711,8 +714,10 @@ struct SettingsAccountResult {
 // fresh settings.
 struct SettingsStore {
     virtual SettingsBaseline Load() = 0;
-    // A field (or a group's fields) set to `value`, saved and published.
-    virtual SettingsSaveResult Apply(SettingsField field, int value) = 0;
+    // A field (or a group's fields) set to `value`, saved and published. `replaceBlocked`: it failed
+    // because its save would replace stored settings the last load couldn't read, which waits for
+    // the user's confirmation (ConfirmReplace).
+    virtual SettingsSaveResult Apply(SettingsField field, int value, bool& replaceBlocked) = 0;
     // An account field set to its desired value (`text` for the label and short text), or an
     // account action, on the account freshly resolved from `account`.
     virtual SettingsAccountResult Account(SettingsAccountRef account, SettingsField field, int value,
@@ -723,6 +728,8 @@ struct SettingsStore {
                                              const std::vector<std::wstring>& labels) = 0;
     // Whether a sign-in is stored for an identity (presence only).
     virtual bool HasStoredSignIn(uint64_t identity) = 0;
+    // The user confirmed it: saves may replace the stored settings the last load couldn't read.
+    virtual void ConfirmReplace() = 0;
     // Unload or cancellation: stop committing.
     virtual bool Unloading() = 0;
 
@@ -739,6 +746,7 @@ enum class SettingsDraftError : uint8_t {
     LabelEmpty,
     LabelTaken,  // Another account of its provider uses it
     SaveFailed,
+    ReplaceBlocked,  // Its save would replace stored settings the load couldn't read; not confirmed
 };
 
 struct SettingsDraft {
@@ -769,6 +777,8 @@ static std::wstring SettingsDraftErrorText(const I18nLocale& locale, const Setti
             return I18nText(locale, Tr(L"Another account of this provider uses this label."));
         case SettingsDraftError::SaveFailed:
             return I18nText(locale, Tr(L"This change couldn't be saved."));
+        case SettingsDraftError::ReplaceBlocked:
+            return I18nText(locale, Tr(L"Not saved: saving would replace the stored settings, which couldn't be read."));
     }
     return {};
 }
@@ -808,6 +818,12 @@ static std::wstring SettingsNoticeText(const I18nLocale& locale, SettingsNoticeC
         case AccountNotSaved:
             return I18nText(locale, Tr(L"Could not save the account. The change is kept here with its error; change it "
                                        L"again to retry."));
+        case ReplaceBlocked:
+            return I18nText(locale, Tr(L"The stored settings couldn't be read, so this window shows the defaults. "
+                                       L"Saving this change replaces the stored settings, accounts included, with "
+                                       L"what this window shows.\n\nReplace the stored settings? If you keep them, "
+                                       L"this change isn't saved; they're read again the next time Windows Explorer "
+                                       L"starts."));
         case AccountExists:
             return I18nText(locale, Tr(L"That provider and label are already configured."));
         case AccountSaveFailed:
@@ -875,8 +891,11 @@ struct SettingsEdits {
     // The added account whose sign-in waits for its naming (CommitLabel); 0 if none
     uint64_t pendingSignIn = 0;
 
-    // Messages for the window to show once the current operation is done
+    // Messages for the window to show once the current operation is done, and the requests whose
+    // saves would replace stored settings the load couldn't read (one ReplaceBlocked notice each),
+    // until the window has the answer (AnswerReplace)
     std::vector<SettingsNotice> notices;
+    std::vector<SettingsRequest> replaceBlocked;
 
     // Baseline and statuses: drafts, requests and text boxes stay as they are, except those of
     // an account that is gone, which go with a notice. A session key lasts for the window, also
@@ -1215,7 +1234,10 @@ struct SettingsEdits {
         }
         SettingsAccountResult result = store->AddAccount(provider, labels);
         bool added = result.save == SettingsSaveResult::Changed;
-        if (result.notice != SettingsNoticeCode::None) {
+        if (!added && result.replaceBlocked) {
+            replaceBlocked.push_back({0, SettingsField::AccountAdd, 0, 0, provider});
+            notices.push_back({SettingsNoticeCode::ReplaceBlocked, SettingsNoticeKind::Warning, true});
+        } else if (result.notice != SettingsNoticeCode::None) {
             notices.push_back({result.notice, result.kind, !added, result.reason});
         }
         if (!added) return 0;
@@ -1229,6 +1251,32 @@ struct SettingsEdits {
             }
         }
         return 0;
+    }
+
+    // The window's answer to the ReplaceBlocked notices of an operation. Replace: the store records
+    // the confirmation (until its next load), then the blocked requests run again, in order, on
+    // fresh settings: a draft's while it is still the one blocked, an add as a new add (`added`:
+    // its key, as AddAccount's). Keep, or unloading: they stay failed with their errors. Returns
+    // the failed saves.
+    int AnswerReplace(bool replace, uint64_t* added = nullptr) {
+        std::vector<SettingsRequest> blocked = std::exchange(replaceBlocked, {});
+        if (!replace || blocked.empty() || store->Unloading()) return 0;
+        store->ConfirmReplace();
+        for (const SettingsRequest& request : blocked) {
+            if (request.field == SettingsField::AccountAdd) {
+                uint64_t key = AddAccount(request.text);
+                if (added && key) *added = key;
+                continue;
+            }
+            if (request.revision) {
+                SettingsDraft* draft = Find(request.key, request.field);
+                if (!draft || draft->revision != request.revision) continue;
+                draft->failed = false;
+                draft->error = SettingsDraftError::None;
+            }
+            queue.push_back(request);
+        }
+        return Process();
     }
 
 private:
@@ -1296,7 +1344,8 @@ private:
     }
 
     // One transaction. Saved (or already so): the draft it was made for is done and the
-    // baseline reloads. Failed: that draft keeps its value with the error.
+    // baseline reloads. Failed: that draft keeps its value with the error; one the stored settings
+    // blocked waits for the window's question about replacing them.
     bool Run(const SettingsRequest& request) {
         if (request.key) {
             std::optional<size_t> index = IndexOf(request.key);
@@ -1305,7 +1354,8 @@ private:
             if (index) result = store->Account(AccountRef(*index), request.field, request.value, request.text);
             return Settle(request, result);
         }
-        SettingsSaveResult result = store->Apply(request.field, request.value);
+        bool blocked = false;
+        SettingsSaveResult result = store->Apply(request.field, request.value, blocked);
         auto same = [&](const SettingsDraft& d) {
             return d.key == request.key && d.field == request.field && d.revision == request.revision;
         };
@@ -1314,8 +1364,12 @@ private:
                 auto draft = std::find_if(drafts.begin(), drafts.end(), same);
                 if (draft != drafts.end()) {
                     draft->failed = true;
-                    draft->error = SettingsDraftError::SaveFailed;
+                    draft->error = blocked ? SettingsDraftError::ReplaceBlocked : SettingsDraftError::SaveFailed;
                 }
+            }
+            if (blocked) {
+                replaceBlocked.push_back(request);
+                notices.push_back({SettingsNoticeCode::ReplaceBlocked, SettingsNoticeKind::Warning, true});
             }
             return false;
         }

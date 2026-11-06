@@ -63,11 +63,16 @@ static bool AnswerLoopbackCallback(SOCKET client, const std::string& expectedRou
         return {};
     };
 
-    DWORD rcvTimeout = 3000;
-    setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, (char*)&rcvTimeout, sizeof(rcvTimeout));
+    // One deadline for the whole request, however its bytes trickle in: each receive waits only
+    // for what is left of it (never 0, which would wait forever).
+    const ULONGLONG deadline = GetTickCount64() + 5000;
     std::string request;
     char buf[2048];
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 16 && !g_unloading; i++) {
+        ULONGLONG now = GetTickCount64();
+        if (now >= deadline) break;
+        DWORD remaining = DWORD(deadline - now);
+        if (setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, (char*)&remaining, sizeof(remaining)) != 0) break;
         int n = recv(client, buf, sizeof(buf), 0);
         if (n <= 0) break;
         request.append(buf, n);

@@ -268,8 +268,12 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"No accounts support this view.", L"Nenhuma conta é compatível com esta visualização."},
     {L"", L"No accounts to display.", L"Nenhuma conta para exibir."},
     {L"", L"No accounts yet", L"Nenhuma conta ainda"},
-    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. Survives mod removal.",
-     L"Não criptografado. Leituras e IDs opacos, sem tokens nem rótulos. Permanece após a remoção do mod."},
+    {L"", L"Not encrypted. Readings and opaque IDs, no tokens or labels. In the mod's Windhawk storage, which Windhawk "
+          L"deletes, as far as it can, when it removes the mod.",
+     L"Não criptografado. Leituras e IDs opacos, sem tokens nem rótulos. No armazenamento do Windhawk do mod, que o "
+     L"Windhawk exclui, na medida do possível, ao remover o mod."},
+    {L"", L"Not saved: saving would replace the stored settings, which couldn't be read.",
+     L"Não salvo: salvar substituiria as configurações salvas, que não puderam ser lidas."},
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"Nada foi registrado ainda. A pasta é criada com a primeira amostra registrada."},
     {L"", L"Nothing new is recorded.", L"Nada novo é registrado."},
@@ -281,6 +285,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Number size", L"Tamanho do número"},
     {L"", L"On hover", L"Ao passar o mouse"},
     {L"", L"Open AI quota settings", L"Abrir as configurações de cotas de IA"},
+    {L"", L"Open AI quota settings. Stored settings could not be read.",
+     L"Abrir as configurações de cotas de IA. Não foi possível ler as configurações salvas."},
     {L"", L"Open AI quota settings. Stored settings could not be read; a backup was kept.",
      L"Abrir as configurações de cotas de IA. Não foi possível ler as configurações salvas; um backup foi mantido."},
     {L"", L"Opens an account’s details after the pointer rests on it.",
@@ -435,11 +441,13 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"OpenCode Go na barra de tarefas."},
     {L"", L"Set Credits max to show the Credits bar.",
      L"Defina Máximo de créditos para mostrar a barra de créditos."},
-    {L"", L"Shared across Windows users. Forever deletes nothing and has no size limit, so history keeps growing in "
-          L"Explorer's memory and on disk. Day limits prune hourly, with a cap of about 60 MB.",
-     L"Compartilhado entre os usuários do Windows. A opção Para sempre não exclui nada e não tem limite de tamanho, "
-     L"então o histórico continua crescendo na memória do Windows Explorer e no disco. Com um limite em dias, a "
-     L"limpeza é feita a cada hora, com um teto de cerca de 60\u00A0MB."},
+    {L"", L"Shared across Windows users. Forever has no size limit, so history keeps growing in Explorer's memory and "
+          L"on disk; Antigravity readings older than 15 days are kept about 10 minutes apart. Day limits prune hourly, "
+          L"with a cap of about 60 MB.",
+     L"Compartilhado entre os usuários do Windows. A opção Para sempre não tem limite de tamanho, então o histórico "
+     L"continua crescendo na memória do Windows Explorer e no disco; as leituras do Antigravity com mais de 15 dias "
+     L"são mantidas com cerca de 10 minutos de intervalo. Com um limite em dias, a limpeza é feita a cada hora, com um "
+     L"teto de cerca de 60\u00A0MB."},
     {L"", L"Short key beside each bar: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}.",
      L"Sigla ao lado de cada barra: {key5h}, {key7d}, {keyFa}, {keyAr}, {keyEx}, {keyCr}, {keyMo}."},
     {L"", L"Short text", L"Texto curto"},
@@ -537,6 +545,13 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"do Windows. Aplica-se somente a este usuário do Windows."},
     {L"", L"The settings and usage history windows use Mica for it.",
      L"As janelas de configurações e de histórico de uso usam Mica nesse caso."},
+    {L"", L"The stored settings couldn't be read, so this window shows the defaults. Saving this change replaces the "
+          L"stored settings, accounts included, with what this window shows.\n\nReplace the stored settings? If you "
+          L"keep them, this change isn't saved; they're read again the next time Windows Explorer starts.",
+     L"Não foi possível ler as configurações salvas, então esta janela mostra os valores padrão. Salvar esta alteração "
+     L"substitui as configurações salvas, incluindo as contas, pelo que esta janela mostra.\n\nSubstituir as "
+     L"configurações salvas? Se você as mantiver, esta alteração não será salva; elas serão lidas novamente na próxima "
+     L"vez que o Windows Explorer iniciar."},
     {L"", L"The stored sign-in could not be copied. The account was not changed.",
      L"Não foi possível copiar o login armazenado. A conta não foi alterada."},
     {L"", L"The stored sign-in could not be deleted and remains retained for this account.",
@@ -579,11 +594,11 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Esta conta foi removida. O histórico salvo dela permanece até expirar ou ser excluído."},
     {L"", L"This change couldn't be saved.", L"Não foi possível salvar esta alteração."},
     {L"", L"This export contains about {rows, plural, one{# rows} other{# rows}}. It may take a while and exceed "
-          L"spreadsheet row limits. The history window will be busy while writing; Explorer's taskbar remains "
-          L"available. Continue?",
+          L"spreadsheet row limits. Until it finishes, the history window shows its progress and most of its controls "
+          L"are unavailable; closing the window cancels the export. Continue?",
      L"Esta exportação contém cerca de {rows, plural, one{# linha} many{# de linhas} other{# linhas}}. Ela pode "
-     L"demorar e ultrapassar o limite de linhas das planilhas. A janela do histórico ficará ocupada durante a "
-     L"gravação; a barra de tarefas do Windows Explorer continua disponível. Continuar?"},
+     L"demorar e ultrapassar o limite de linhas das planilhas. Até terminar, a janela do histórico mostra o progresso "
+     L"e a maioria dos controles fica indisponível; fechar a janela cancela a exportação. Continuar?"},
     {L"", L"Threshold notifications", L"Notificações de limite"},
     {L"", L"Thresholds stay in order: yellow, orange, red.", L"Os limites ficam em ordem: amarelo, laranja, vermelho."},
     {L"", L"Thresholds stay in order: yellow, orange, red. Also the level for threshold notifications.",

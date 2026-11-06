@@ -29,16 +29,17 @@ to `<target>.cpp` with a `.manifest.json`.
   the registry, Automatic matching, the pseudo-locale, lookup with and without context.
 - `meter.inc`, `logos.inc`: the meter model (bars, tiles, account state, headline countdown,
   identity, sparklines and their history requests, projections, matrix cells) and logo paths.
-- `ui.inc`: toolkit palette, input, focus, hit testing, scroll, controls, popup rows, placement and
-  keys, the settings shell and pages (the About page's links and focus stops).
+- `ui.inc`: toolkit SVG paths, layout cache trims, palette, input, focus, hit testing, scroll,
+  controls, popup rows, placement and keys, the settings shell and pages (the About page's links
+  and focus stops).
 - `controls.inc`: the controls the history window builds on (segments, ellipsis, dropdowns, the
   navigation pane, leading switch, pills, info bars).
 - `tooltip-support.inc`, `tooltip.inc`: readout layout search, pointer-excluding placement in
   adversarial geometries, complete-text blocks, content and placement dedupe, chart item hits
   and keys.
 - `edits.inc`: the edit controller against `TestStore` (in-memory, with an operation log,
-  deterministic save failures and unload after N transactions), number parsing, the render
-  projection.
+  deterministic save failures, saves blocked from replacing unreadable stored settings until
+  confirmed, and unload after N transactions), number parsing, the render projection.
 - `accounts.inc`: account edits and actions against `TestStore` (labels, drafts, removal with its
   sign-in and history deletion, Add account, sign-in after naming, visibility, moves) and the
   Accounts page (cards, expanded rows, empty state, drag and reorder).
@@ -73,12 +74,14 @@ to `<target>.cpp` with a `.manifest.json`.
   No readings entries built from synthetic readings.
 - `history-controller.inc`: the controller against `TestHistoryOps` (in-memory request, journal
   with its stamp and peek contract, settings with polls, clock, unload, posted refresh messages,
-  deferral timer, consent transaction, operation log). Orchestration only: never the production
-  ops or the opener-to-window bridge.
+  deferral timer, consent transaction, a controllable export write job, operation log).
+  Orchestration only: never the production ops or the opener-to-window bridge.
 - `history-refresh.inc`: live refresh, deferral (modal, popup, inspection) and its resume paths,
   the no-stranding invariant after every event, Enable recording.
 - `history-operations.inc`: Export, Clear, Delete history and About these charts through the test
-  ops' dialogs, with cancellations, failures, the close latch and unload inside each.
+  ops' dialogs, with cancellations, failures, the close latch and unload inside each; the export's
+  pending write (progress polls, refresh deferral, close and unload while pending, late
+  completion, failed and cancelled results).
 - `history-frame.inc`: the frame per state (navigation, header, segments, info bars, the chart's
   card and legend chips, cards, menus, export progress).
 - `history-tooltip.inc`: the single-account readout guarantee at every pointer position, in every

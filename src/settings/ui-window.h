@@ -107,7 +107,9 @@ struct SettingsUiClient final : UiHostClient {
     static I18nLocale DialogLocale() { return CurrentLocale(); }
 
     // The controller's notices, a message box each. Account operations explain their failures;
-    // other failed saves get the general message.
+    // other failed saves get the general message. Saves blocked from replacing stored settings the
+    // load couldn't read ask once whether to replace them (never while closing: its discard
+    // question covers them); yes saves them again, and what that says shows in turn.
     void ShowNotices(UiHost& host, int failures = 0) {
         std::vector<SettingsNotice> notices = std::exchange(edits.notices, {});
         int explained = int(std::count_if(notices.begin(), notices.end(),
@@ -117,14 +119,28 @@ struct SettingsUiClient final : UiHostClient {
                                                   L"change it again to retry.")),
                 kSettingsProductName, MB_OK | MB_ICONERROR);
         }
+        bool replaceAsked = false;
         for (const SettingsNotice& notice : notices) {
             if (Unloading() || host.closing) break;
             I18nLocale locale = DialogLocale();
+            if (notice.code == SettingsNoticeCode::ReplaceBlocked) {
+                if (std::exchange(replaceAsked, true)) continue;
+                bool replace = !closePreparation &&
+                               Ask(host, SettingsNoticeText(locale, notice.code), kSettingsProductName,
+                                   MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) == IDYES &&
+                               !Unloading() && !closePreparation && !host.closing;
+                uint64_t added = 0;
+                int failed = edits.AnswerReplace(replace, &added);
+                if (added) ShowLabel(host, added);
+                if (replace) Report(host, failed);
+                continue;
+            }
             Ask(host, SettingsNoticeText(locale, notice.code, notice.reason),
                 I18nText(locale, TrCtx(L"dialog-caption", L"Account")),
                 MB_OK | (notice.kind == SettingsNoticeKind::Error   ? MB_ICONERROR :
                          notice.kind == SettingsNoticeKind::Warning ? MB_ICONWARNING : MB_ICONINFORMATION));
         }
+        if (!replaceAsked) edits.AnswerReplace(false);
     }
 
     // Failed saves keep their drafts with an error; the box says so once.

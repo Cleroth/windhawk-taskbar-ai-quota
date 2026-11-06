@@ -608,9 +608,15 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
     }
 }
 
+// Set once a stored configuration of 32,767 characters or more loaded whole: this install's
+// storage reads long values back.
+static std::atomic<bool> g_settingsLongValuesRead{false};
+
+// Portable Windhawk's INI storage reads a value back truncated near 32,767 characters, so a longer
+// one would never load whole: it fails before writing, unless a long one already loaded here.
 static bool SaveOwnedSettings(const Settings& settings) {
     std::wstring json = SerializeSettings(settings);
-    if (json.empty() || json.size() >= 65535) {
+    if (json.empty() || json.size() >= (g_settingsLongValuesRead.load() ? 65535u : 32767u)) {
         Wh_Log(L"Settings save failed: serialization or size limit");
         return false;
     }
@@ -628,7 +634,11 @@ enum class OwnedSettingsLoadResult {
     Unreadable,
 };
 
-static OwnedSettingsLoadResult LoadOwnedSettings(Settings* out, bool* historyIdsChanged) {
+// Invalid also says whether the blob was backed up (settings_v1_invalid) and read whole (the
+// length its save recorded), which lets the first saved edit replace it without asking.
+static OwnedSettingsLoadResult LoadOwnedSettings(Settings* out, bool* historyIdsChanged, bool* backedUp,
+                                                 bool* readWhole) {
+    *backedUp = *readWhole = false;
     std::vector<wchar_t> buf(65536);
     size_t copied = Wh_GetStringValue(kSettingsStorageKey, buf.data(), buf.size());
     if (!copied || !buf[0]) {
@@ -653,11 +663,14 @@ static OwnedSettingsLoadResult LoadOwnedSettings(Settings* out, bool* historyIds
         }
     }
     if (!DeserializeSettings(buf.data(), out, historyIdsChanged)) {
-        Wh_Log(L"Settings load failed: invalid stored configuration");
-        Wh_SetStringValue(L"settings_v1_invalid", buf.data());
+        *backedUp = Wh_SetStringValue(L"settings_v1_invalid", buf.data());
+        *readWhole = Wh_GetIntValue(kSettingsLengthStorageKey, 0) == (int)copied;
+        Wh_Log(L"Settings load failed: invalid stored configuration (%s, %s)",
+               *backedUp ? L"backed up" : L"backup failed", *readWhole ? L"read whole" : L"possibly truncated");
         return OwnedSettingsLoadResult::Invalid;
     }
     Wh_SetIntValue(kSettingsLengthStorageKey, (int)copied);
+    if (copied >= 32767) g_settingsLongValuesRead = true;
     return OwnedSettingsLoadResult::Loaded;
 }
 
@@ -876,8 +889,11 @@ enum class SettingsApplyResult {
     Changed,
 };
 
-static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity = 0,
-                                              uint64_t newIdentity = 0) {
+// `replaceBlocked` (optional): set when this call failed because its save would replace stored
+// settings the load couldn't read before anyone confirmed that (g_settingsReplaceAllowed).
+static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity = 0, uint64_t newIdentity = 0,
+                                              bool* replaceBlocked = nullptr) {
+    if (replaceBlocked) *replaceBlocked = false;
     Settings previous;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
@@ -911,11 +927,20 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
     Settings sharedPrevious = previous;
     sharedPrevious.historyEnabled = s.historyEnabled;
     sharedPrevious.language = s.language;
-    const bool saveShared = s != sharedPrevious || g_historyIdsPendingSave || g_settingsLoadError;
+    // Stored settings the load couldn't read: the first shared save replaces them only once that
+    // is allowed (each load's recovery), and per-user-only edits save nothing shared until then.
+    const bool loadError = g_settingsLoadError, replaceAllowed = g_settingsReplaceAllowed;
+    const bool saveShared = s != sharedPrevious || g_historyIdsPendingSave || (loadError && replaceAllowed);
+    if (saveShared && loadError && !replaceAllowed) {
+        Wh_Log(L"Settings not saved: replacing the unreadable stored settings needs confirmation");
+        if (replaceBlocked) *replaceBlocked = true;
+        return SettingsApplyResult::Failed;
+    }
     if (saveShared && !SaveOwnedSettings(s)) return SettingsApplyResult::Failed;
     // Save shared changes first, consent last: a failed save before it must never grant consent.
     // Per-user-only edits leave shared JSON untouched; a failed write takes back what this call
-    // saved. Registry calls are short and take no history locks.
+    // saved. Preference writes take no history locks; each waits at most 2 s for the per-user
+    // preferences lock another Explorer process may hold.
     const bool languageSaved = !languageChanged || WriteLanguagePreference(s.language);
     if (!languageSaved || (consentChanged && !WriteHistoryConsent(s.historyEnabled))) {
         if (languageChanged && languageSaved && !WriteLanguagePreference(previous.language)) {
@@ -963,9 +988,11 @@ static void LoadSettings() {
     s.language = language;
     SetCurrentLanguage(ResolveLanguage(language));
     g_settingsLoadError = false;
+    g_settingsLoadBackup = false;
+    g_settingsReplaceAllowed = false;
     g_historyIdsPendingSave = false;
-    bool historyIdsChanged = false;
-    OwnedSettingsLoadResult loadResult = LoadOwnedSettings(&s, &historyIdsChanged);
+    bool historyIdsChanged = false, backedUp = false, readWhole = false;
+    OwnedSettingsLoadResult loadResult = LoadOwnedSettings(&s, &historyIdsChanged, &backedUp, &readWhole);
     if (loadResult == OwnedSettingsLoadResult::Missing) {
         bool imported = LoadLegacySettings(&s);
         if (!imported) s = Settings{};
@@ -994,12 +1021,17 @@ static void LoadSettings() {
         }
     } else if (loadResult == OwnedSettingsLoadResult::Invalid ||
                loadResult == OwnedSettingsLoadResult::Unreadable) {
-        // Keep the invalid/future/unreadable blob intact. The setup tile opens with safe
-        // defaults; readable invalid blobs were also backed up above.
+        // Keep the invalid/future/unreadable blob intact. The setup tile opens with safe defaults,
+        // and no accounts, so no account command reaches a sign-in before a save replaced the
+        // blob. That save goes ahead on its own only for a blob read whole and backed up; any
+        // other waits for the settings window's user to confirm it.
         s = Settings{};
         s.historyEnabled = historyConsent;
         s.language = language;
         g_settingsLoadError = true;
+        g_settingsLoadBackup = backedUp;
+        g_settingsReplaceAllowed = backedUp && readWhole;
+        if (!g_settingsReplaceAllowed) Wh_Log(L"Stored settings are kept until replacing them is confirmed");
     }
     PublishSettings(std::move(s));
     if (apartmentInitialized) winrt::uninit_apartment();

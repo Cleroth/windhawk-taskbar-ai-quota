@@ -7,7 +7,7 @@ Rules for code under `src/`. Generation, checks, testing and publishing: the roo
 Each file opens with a comment naming what it holds.
 
 - `core/`: the shared model, settings and runtime state, JSON, crypto (DPAPI), the UI language,
-  account errors, forward declarations.
+  this Windows user's storage (`core/user-storage.h`), account errors, forward declarations.
 - `net/`: WinHTTP with handle tracking. `providers/`: each provider's usage requests and parsing.
 - `auth/`: OAuth clients, the token store, the sign-in thread and window.
 - `fetch/`: the polling loop, threshold notifications, provider status pages.
@@ -40,9 +40,11 @@ The mod is injected into `explorer.exe`. Execution domains:
 - **Fetch thread** (`FetchThreadProc`): usage HTTP, JSON parsing, retry/backoff and token refresh;
   after each round, the providers' public status pages (`PollProviderStatuses`: its own cadence,
   unauthenticated, rereading the setting and visibility before each request). It owns the
-  notifications: their HKCU app identity (registered before each toast, removed while they are
-  off and at unload) and the fallback tray icon. NEVER XAML. It runs rounds only while
-  `IsTaskbarOwnerProcess()`; other Explorer processes never poll, refresh tokens or notify.
+  notifications: their HKCU app identity (a volatile key, registered once per fetch thread,
+  removed while they are off and at unload) and the fallback tray icon. NEVER XAML. It runs
+  rounds only while `IsTaskbarOwnerProcess()`; other Explorer processes never poll, refresh tokens
+  or notify. Once it owns the taskbar, it first moves what older versions kept in HKCU and
+  LocalAppData (`MigrateUserPreferences`, `PrepareHistoryStorage`), recording or not.
 - **Login thread** (`LoginThreadProc`, one at a time, guarded by `g_loginInProgress`; started from
   a taskbar UI thread by `StartLogin`): network and token storage only; NEVER XAML. It runs each
   sign-in in the sign-in window (`g_loginWnd`, own message loop), which offers the authorize link
@@ -69,13 +71,16 @@ The mod is injected into `explorer.exe`. Execution domains:
 - **History thread** (`HistoryUiThreadProc`, one at a time; `OpenHistoryWindow` starts it, or
   hands the open window its request): runs the custom-drawn usage history window
   (`history/ui-window.h`, a `ui/` toolkit client), whose controller (`history/controller.h`) owns
-  all window state and reaches the journal, settings and live readings only through the stateless
-  ops in `history/ops.h`. `NotifySettingsWindowChanged` also reaches it: its refresh reads the
+  all window state and reaches the journal, settings and live readings only through the ops in
+  `history/ops.h`. `NotifySettingsWindowChanged` also reaches it: its refresh reads the
   journal only through the memory-only `PeekHistorySnapshot`; only its explicit loads may
   initialize or retry storage. Its dialogs (message boxes, the save dialog and its overwrite
   prompt) run in the scope of `history/modal.h` (the close latch, then unload, ends them, nested
   and late ones included); a Yes/No prompt ignores Cancel, so the scope answers No there. NEVER
-  XAML. Before unloading, cancel its tracked modal dialogs and join it.
+  XAML. Before unloading, cancel its tracked modal dialogs and join it. Its CSV export writes on
+  a worker the ops own, reading only its job (a frozen snapshot, the destination, a cancel flag)
+  and the unload flags, never posting to the window (a timer polls it); the ops' destruction
+  cancels and joins it on every exit of the history thread, so that join covers it.
 - **Link launch threads** (`OpenUrl`, one per browser launch, tracked under the leaf
   `g_urlLaunchMutex`): `ShellExecuteExW` in an STA with error dialogs suppressed. `Wh_ModUninit`
   joins them after the login thread, which can start them; a stuck launch delays unload.
@@ -105,6 +110,9 @@ first, then reads/updates XAML.
   plain fields only.
 - Hold `g_authEpochMutex` only for short local auth/settings transactions, never across network
   I/O, dialogs, notifications, UI marshaling or `FinishSettingsApply`.
+- `UserPreferencesLock` (`core/user-storage.h`, a named mutex per Windows user) is a leaf
+  serializing consent and language writes and their migration across processes and sessions:
+  acquire nothing while holding it. It waits up to 2 s; a timeout fails the write.
 - `g_historyMutex` is an independent leaf: never hold settings/auth/UI locks across journal
   operations, or acquire them inside history operations. Clear invalidates in-flight batches via
   `g_historyEpoch`; settings publication updates the history admission generation and the
@@ -113,8 +121,8 @@ first, then reads/updates XAML.
   publication and Clear history reset it via `ResetBurnUpCurvesLocked` (under `g_dataMutex`).
   The fetch thread caches per-account journal tails and the history window keeps a snapshot by
   the journal's stamp, so any change to `g_historySamples` other than `AppendHistory` must bump
-  `g_historyEpoch` (Clear) or `g_historyRevision` (load, cap eviction, retention pruning, an
-  account's deletion). An account's deletion also notifies the windows
+  `g_historyEpoch` (Clear) or `g_historyRevision` (load, cap eviction, retention pruning,
+  Antigravity thinning, an account's deletion). An account's deletion also notifies the windows
   (`NotifySettingsWindowChanged`).
 - `g_settingsGeneration` gates published data. Code that publishes to `g_data` must re-check the
   generation under lock (see the existing publish block).
@@ -207,15 +215,28 @@ access token without refresh or expiry and sent only to its usage endpoint.
   plus a redirect). Save tokens only through `SaveStoredTokenIfCurrent`: a refresh with the epoch
   read in one `g_authEpochMutex` section with the token it refreshes, a sign-in with the epoch read
   when it started.
-- Usage history belongs in per-user LocalAppData, not Windhawk's machine-shared writable storage.
-  Recording consent and the language preference are separate HKCU settings
+- Per-user data lives in the mod's Windhawk storage, keyed by the user's SID
+  (`core/user-storage.h`), so Windhawk removes it with the mod: the journal, its lock and the
+  notifications' icon in `UserStorageFolder()` (`<Wh_GetModStoragePath>\<SID>`); recording consent
+  and the language preference as `recordHistory_<SID>` and `language_<SID>`
   (`Settings::historyEnabled`, `Settings::language`), never fields in machine-shared `settings_v1`.
+- Windhawk's storage is writable by every user. Refuse a storage root or user folder that is a
+  reparse point; open every handle written through there with `OpenUserStorageFile` (no reparse
+  point followed, plain file with one link) and write replacements to `CreateUserStagingFile`'s
+  unique `CREATE_NEW` names, then move them into place. It's a mitigation, not a guarantee.
+- Preference readers fall back to the HKCU values older versions wrote and never write; writes go
+  only to Windhawk storage, under `UserPreferencesLock`. Only the shell's fetch thread migrates
+  the HKCU values and the old LocalAppData journal (`MoveLegacyHistoryLocked`: copied under the
+  old lock, provenance recorded, an old journal deleted only when it matches the provenance or the
+  new journal, never merged).
 - Keep the journal's size cap (maintenance and appends apply it with a number of days; kept
-  forever, nothing may prune or cap it), checksum validation, atomic compaction and exclusive
-  writer handle. Loads read the whole file whatever the retention; one that stops part-way (out
-  of memory, unload) leaves the journal unwritable until Clear. Only the shell process records;
-  save pending history IDs before recording. History IDs are separate from auth identities and
-  follow configured entries, not verified logins.
+  forever, nothing may prune or cap it but Antigravity thinning, `history/thinning.h`), checksum
+  validation, atomic compaction and exclusive writer handle. Taking that handle is separate from
+  loading samples: nothing may treat a journal owned but not loaded as empty. Loads read the whole
+  file whatever the retention; one that stops part-way (out of memory, unload) leaves the journal
+  unwritable until Clear. Only the shell process records; save pending history IDs before
+  recording. History IDs are separate from auth identities and follow configured entries, not
+  verified logins.
 - User-facing recording/storage/export behavior: [docs/usage-history.md](../docs/usage-history.md);
   its manual runtime checks: [docs/usage-history-verification.md](../docs/usage-history-verification.md).
 

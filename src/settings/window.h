@@ -14,13 +14,11 @@ static void SetAppWindowIcons(HWND window, UINT dpi, std::array<HICON, 2>& icons
     }
 }
 
-// The app icon as a 256 px PNG at `path`, the notifications' icon: transparent, straight alpha,
-// its tracks in a fixed grey that suits light and dark backgrounds. The file is replaced only
-// once written whole. Any thread with COM initialized.
-static bool SaveAppIconPng(const std::wstring& path) {
+// The app icon as a 256 px PNG, the notifications' icon: transparent, straight alpha, its tracks in
+// a fixed grey that suits light and dark backgrounds; empty on failure. Encoded in memory, for the
+// caller to write through a checked handle. Any thread with COM initialized.
+static std::vector<BYTE> AppIconPng() {
     constexpr UINT kPixels = 256;
-    std::wstring temp = path + L".tmp";
-    bool written = false;
     try {
         UiGraphics graphics;
         UiCreateGraphics(graphics);
@@ -61,9 +59,8 @@ static bool SaveAppIconPng(const std::wstring& path) {
                 }
             }
         }
-        winrt::com_ptr<IWICStream> stream;
-        winrt::check_hresult(wic->CreateStream(stream.put()));
-        winrt::check_hresult(stream->InitializeFromFilename(temp.c_str(), GENERIC_WRITE));
+        winrt::com_ptr<IStream> stream;
+        winrt::check_hresult(CreateStreamOnHGlobal(nullptr, TRUE, stream.put()));
         winrt::com_ptr<IWICBitmapEncoder> encoder;
         winrt::check_hresult(wic->CreateEncoder(GUID_ContainerFormatPng, nullptr, encoder.put()));
         winrt::check_hresult(encoder->Initialize(stream.get(), WICBitmapEncoderNoCache));
@@ -77,13 +74,18 @@ static bool SaveAppIconPng(const std::wstring& path) {
         winrt::check_hresult(frame->WritePixels(kPixels, kPixels * 4, UINT(pixels.size()), pixels.data()));
         winrt::check_hresult(frame->Commit());
         winrt::check_hresult(encoder->Commit());
-        written = true;
+
+        STATSTG stat{};
+        winrt::check_hresult(stream->Stat(&stat, STATFLAG_NONAME));
+        std::vector<BYTE> png(size_t(stat.cbSize.QuadPart));
+        LARGE_INTEGER start{};
+        winrt::check_hresult(stream->Seek(start, STREAM_SEEK_SET, nullptr));
+        ULONG read = 0;
+        winrt::check_hresult(stream->Read(png.data(), ULONG(png.size()), &read));
+        if (read == png.size()) return png;
     } catch (...) {}
-    // The stream closed the file with the try block.
-    if (written && MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) return true;
-    DeleteFileW(temp.c_str());
-    Wh_Log(L"Could not write the notification icon");
-    return false;
+    Wh_Log(L"Could not draw the notification icon");
+    return {};
 }
 
 static UINT GetSettingsActivateMessage() {
