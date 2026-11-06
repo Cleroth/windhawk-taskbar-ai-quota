@@ -28,6 +28,9 @@ body**, not the branch's commit messages. There is no `@changelog` field or in-f
   Improve; no headings, implementation details, API-field explanations, or long parentheticals.
   Example: `- Fix quota bars not appearing on newer Windows 11 taskbars.` Add a brief `Note:`
   after the list only when users need migration or compatibility information.
+- A large update may group its bullets under bold category labels (`**Taskbar**`), never Markdown
+  headings: the catalog's changelog page puts each version under its own `##` heading. Small
+  updates stay one flat list.
 - AI-review responses, design rationale and minor-fix details go in PR comments.
 
 ## Workflow
