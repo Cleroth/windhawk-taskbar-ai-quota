@@ -67,7 +67,7 @@ limits that have no taskbar bar, each with its percentage, pace and reset: Anthr
 and per-surface limits (such as Sonnet and Opus weeklies), Antigravity's other reported quotas
 (named by the app) and, with their Display setting, OpenAI's additional rate limits. It shows
 Anthropic's and OpenAI's free rate-limit resets with the next one's expiry, the Claude plan (Pro,
-Max 5x, Max 20x, Team, ...), and "Not yet started" for a Claude window that hasn't begun; past
+Max, Ultra, Team, ...), and "Not yet started" for a Claude window that hasn't begun; past
 the screen's height its quota list scrolls.
 
 ## Provider outages

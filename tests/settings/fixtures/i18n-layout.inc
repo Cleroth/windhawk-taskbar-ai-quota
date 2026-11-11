@@ -41,7 +41,7 @@ static SettingsView I18nAccountsView(std::initializer_list<int> expanded = {}) {
     const SettingsAccountStatus statuses[] = {
         I18nAccountStatus(L"Plus", {}, true, true),
         I18nAccountStatus(L"Pro", {AccountErrorCode::NotSignedIn}, false, false, true),
-        I18nAccountStatus(L"Max 20x", {}, true, true),
+        I18nAccountStatus(L"Ultra", {}, true, true),
         I18nAccountStatus(L"", {}, false, false),
         I18nAccountStatus(L"Business", {}, false, false, false, true),
         I18nAccountStatus(L"", {}, false, true),

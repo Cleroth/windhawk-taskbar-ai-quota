@@ -47,14 +47,14 @@ static const SettingsDraft* DraftOf(const SettingsEdits& edits, uint64_t key, Se
 static constexpr SettingsField kLabel = SettingsField::AccountLabel;
 
 // The Accounts page as the mockups show it: OAI signed in (Plus), CC 1 needing a sign-in (Pro),
-// CC 2 signed in (Max 20x), Go with its local app running (AI Pro).
+// CC 2 signed in (Ultra), Go with its local app running (AI Pro).
 static SettingsView AccountsView(std::initializer_list<int> expanded = {}) {
     SettingsView view = TestView(SettingsUiPage::Accounts);
     AddTestAccounts(view.settings);
     const SettingsAccountStatus statuses[] = {
         {L"Plus", {}, true, true, false, false},
         {L"Pro", {AccountErrorCode::NotSignedIn}, false, false, true, false},
-        {L"Max 20x", {}, true, true, false, false},
+        {L"Ultra", {}, true, true, false, false},
         {L"AI Pro", {}, true, false, false, false},
     };
     for (int i = 0; i < 4; i++) {
@@ -80,7 +80,7 @@ static SettingsView NineAccountsView(std::vector<size_t> order, std::initializer
         SettingsAccountStatus status;
     };
     const Entry entries[] = {
-        {L"anthropic", L"Claude Max (personal)", {L"Max 20x", {}, true, true, false, false}},
+        {L"anthropic", L"Claude Max (personal)", {L"Ultra", {}, true, true, false, false}},
         {L"anthropic", L"Work", {L"Team", {}, true, true, false, false}},
         {L"openai", L"ChatGPT Pro", {L"Pro", {}, true, true, false, false}},
         {L"anthropic", L"Old login",
@@ -88,7 +88,7 @@ static SettingsView NineAccountsView(std::vector<size_t> order, std::initializer
         {L"antigravity", L"Gemini desktop", {L"AI Pro", {}, true, false, false, false}},
         {L"openai", L"Codex (team seat)", {L"Plus", {}, true, true, false, false}},
         {L"anthropic", L"Side project",
-         {L"Max 5x", {AccountErrorCode::Message, L"HTTP 429: rate limited, retrying in 5 minutes"}, true, true, false,
+         {L"Max", {AccountErrorCode::Message, L"HTTP 429: rate limited, retrying in 5 minutes"}, true, true, false,
           false}},
         {L"openai", L"Business", {L"Business", {}, true, true, false, false}},
         {L"antigravity", L"Laptop", {L"", {AccountErrorCode::AntigravityNotRunning}, false, false, false, false}},
@@ -510,7 +510,7 @@ static void RunAccountEditTests() {
             CHECK(visible && visible->kind == UiItemKind::Toggle && visible->selected && visible->action.value == 1);
         }
         CHECK(HasText(frame, L"Signed in") && HasText(frame, L"Sign-in needed") && HasText(frame, L"Local app running"));
-        CHECK(HasText(frame, L"Anthropic \u00B7 Max 20x \u00B7 "));
+        CHECK(HasText(frame, L"Anthropic \u00B7 Ultra \u00B7 "));
         // Only CC 1 offers Sign in in its header.
         CHECK(UiFindItem(frame, AccountId(2, SettingsField::AccountSignIn)) &&
               !UiFindItem(frame, AccountId(1, SettingsField::AccountSignIn)));

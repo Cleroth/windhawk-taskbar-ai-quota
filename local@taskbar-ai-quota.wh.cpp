@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.19.0
+// @version         2.19.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -13533,8 +13533,9 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
 }
 
 // The OAuth profile's plan: organization.organization_type ("claude_pro", "claude_max",
-// "claude_team", ...) as "Pro", "Max", "Team", ..., Max with its tier from rate_limit_tier
-// ("default_claude_max_20x"). Empty for a profile without one; nullopt for a malformed body.
+// "claude_team", ...) as "Pro", "Max", "Team", .... Anthropic sells the Max type's 20x
+// rate_limit_tier ("default_claude_max_20x") as Ultra. Empty for a profile without one; nullopt
+// for a malformed body.
 static std::optional<std::wstring> ParseAnthropicPlan(const std::string& body) {
     try {
         auto organization = GetObj(JsonObject::Parse(Utf8ToWide(body)), L"organization");
@@ -13546,11 +13547,8 @@ static std::optional<std::wstring> ParseAnthropicPlan(const std::string& body) {
             plan += ch == L'_' ? L' ' : wordStart ? (wchar_t)towupper(ch) : ch;
             wordStart = ch == L'_';
         }
-        if (plan == L"Max") {  // i18n-en
-            std::wstring tier = GetStr(organization, L"rate_limit_tier");
-            if (tier.find(L"20x") != std::wstring::npos) plan += L" 20x";
-            else if (tier.find(L"5x") != std::wstring::npos) plan += L" 5x";
-        }
+        if (plan == L"Max" && GetStr(organization, L"rate_limit_tier").find(L"20x") != std::wstring::npos)  // i18n-en
+            plan = L"Ultra";  // i18n-en
         return plan;
     } catch (...) {
         return std::nullopt;

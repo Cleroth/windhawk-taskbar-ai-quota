@@ -189,8 +189,9 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
 }
 
 // The OAuth profile's plan: organization.organization_type ("claude_pro", "claude_max",
-// "claude_team", ...) as "Pro", "Max", "Team", ..., Max with its tier from rate_limit_tier
-// ("default_claude_max_20x"). Empty for a profile without one; nullopt for a malformed body.
+// "claude_team", ...) as "Pro", "Max", "Team", .... Anthropic sells the Max type's 20x
+// rate_limit_tier ("default_claude_max_20x") as Ultra. Empty for a profile without one; nullopt
+// for a malformed body.
 static std::optional<std::wstring> ParseAnthropicPlan(const std::string& body) {
     try {
         auto organization = GetObj(JsonObject::Parse(Utf8ToWide(body)), L"organization");
@@ -202,11 +203,8 @@ static std::optional<std::wstring> ParseAnthropicPlan(const std::string& body) {
             plan += ch == L'_' ? L' ' : wordStart ? (wchar_t)towupper(ch) : ch;
             wordStart = ch == L'_';
         }
-        if (plan == L"Max") {  // i18n-en
-            std::wstring tier = GetStr(organization, L"rate_limit_tier");
-            if (tier.find(L"20x") != std::wstring::npos) plan += L" 20x";
-            else if (tier.find(L"5x") != std::wstring::npos) plan += L" 5x";
-        }
+        if (plan == L"Max" && GetStr(organization, L"rate_limit_tier").find(L"20x") != std::wstring::npos)  // i18n-en
+            plan = L"Ultra";  // i18n-en
         return plan;
     } catch (...) {
         return std::nullopt;
