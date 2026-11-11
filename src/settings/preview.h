@@ -588,24 +588,29 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 }
                 markOps(ops, meters, faceLeft + S, faceTop + float(meters.ringWarnTop), opacity, true);
             } else if (IsFaceTile(layout)) {
-                // Gauges and pies: the identity, then 6 DIP after it the face; a gauge's number
-                // and key centred across it, their cap heights on the model's centres.
+                // Gauges and pies: the identity, then 6 DIP after it the face; each gauge's number
+                // and key centred across it, their cap heights on the model's centres, or without
+                // a quota the dash in the number's place.
                 float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
                                             top + T / 2);
                 float faceLeft = x0 + padLeft + idWidth + 6, faceTop = top + (T - faceHeight) / 2;
                 faceShapes(faceLeft, faceTop);
                 if (layout == BarLayout::Gauge) {
-                    auto centred = [&](const std::wstring& s, const UiTextStyle& style, double center, uint32_t color,
+                    const double middle = meters.ring.size / 2;
+                    const UiTextStyle numberStyle{UiFamily::Display, float(meters.faceFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+                    const UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.faceKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL};
+                    auto centred = [&](const std::wstring& s, const UiTextStyle& style, double x, double y, uint32_t color,
                                        float alpha) {
                         Measured m = measure(s, style);
-                        label(ops, s, style, faceLeft + (faceWidth - m.width) / 2, faceTop + float(center) - m.cap / 2,
-                              m.width, DWRITE_TEXT_ALIGNMENT_LEADING, color, alpha, true);
+                        label(ops, s, style, faceLeft + float(x) - m.width / 2, faceTop + float(y) - m.cap / 2, m.width,
+                              DWRITE_TEXT_ALIGNMENT_LEADING, color, alpha, true);
                     };
-                    centred(meters.headline, {UiFamily::Display, float(meters.faceFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD},
-                            meters.faceNumberCenter, meters.headlineColor, 1);
-                    if (!meters.headlineKey.empty()) {
-                        centred(meters.headlineKey, {UiFamily::Taskbar, float(meters.faceKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL},
-                                meters.faceKeyCenter, text, 0.6f);
+                    if (!count) centred(meters.headline, numberStyle, middle, meters.faceNumberCenter, meters.headlineColor, 1);
+                    for (int w = 0; w < kQuotaBarCount; w++) {
+                        if (!(meters.barMask & (1 << w))) continue;
+                        const QuotaMeter& q = meters.quotas[w];
+                        centred(q.text, numberStyle, q.gaugeLeft + middle, q.gaugeTop + meters.faceNumberCenter, q.color, 1);
+                        centred(q.key, keyStyle, q.gaugeLeft + middle, q.gaugeTop + meters.faceKeyCenter, text, 0.6f);
                     }
                 }
                 width = padLeft + idWidth + 6 + faceWidth + padRight;

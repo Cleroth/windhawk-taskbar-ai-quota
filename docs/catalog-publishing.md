@@ -12,7 +12,8 @@ Catalog updates go by PR to `ramensoftware/windhawk-mods`, authored as `Cleroth`
   `src/taskbar-ai-quota.cpp`.
 - Every update bumps `@version`.
 - The catalog readme hot-links `screenshots/*.png` from this repo's `master`: push `master` before
-  the PR's checks run.
+  the PR's checks run. The published version's readme links the same way: keep a replaced
+  screenshot's old file until the update that drops its link merges, then delete it.
 
 ## PR title, body and changelog
 

@@ -327,7 +327,7 @@ static void RunI18nTaskbarTests() {
                                {L"7T", TileFont::TextSemiBold}, {L"40%", TileFont::TextSemiBold}, {L"Ex", TileFont::Text}}));
     });
 
-    Run("gauge key: shrinks from the key's font until it keeps 2 DIPs from the arc's ends, never under 6 DIPs", [] {
+    Run("gauge keys: shrink from the key's font until the widest shown keeps 2 DIPs from the arc's ends, never under 6 DIPs", [] {
         // The default 32 DIP gauge: a 3 DIP stroke at radius 14, its inner edge (12.5) ending 8.84
         // DIPs below and beside the centre, where the opening is narrowest; the number at 12 DIPs,
         // the key at 9/14 of it, 7.71. Fit: half the key's width and 2 within 8.84.
@@ -340,9 +340,10 @@ static void RunI18nTaskbarTests() {
             return meters.faceKeyFont;
         };
         const double key = 12.0 * 9 / 14;
-        // Extra usage the most used. English "Ex", 9.26 DIPs: fits as it is.
+        // English "5h", "7d" and "Ex", 9.26 DIPs each: they fit as they are.
         CHECK_NEAR(keyFont(L"en", {10, 20, -1, 90}), key);
-        // 额外, two ems: 7.71 + 2 past 8.84; four quarter-DIP steps down, 6.71 + 2 fits.
+        // 额外, two ems, the widest of the three: 7.71 + 2 past 8.84; four quarter-DIP steps down,
+        // 6.71 + 2 fits. Every gauge's key takes that font.
         CHECK_NEAR(keyFont(L"zh-Hans", {10, 20, -1, 90}), key - 1);
         // Measured at each size, not scaled: with 3 DIPs more under 7 DIPs (16.43 at 6.71), it
         // never fits and stops at 6.
@@ -351,8 +352,8 @@ static void RunI18nTaskbarTests() {
                                return TestWideMeasure(text, font, size) + (size < 7 ? 3 : 0);
                            }),
                    6);
-        // 周, an em (3.86 + 2): fits.
-        CHECK_NEAR(keyFont(L"zh-Hans", {10, 90, -1, 20}), key);
+        // Without extra usage: 5h (4.63 + 2) and 周, an em (3.86 + 2), fit.
+        CHECK_NEAR(keyFont(L"zh-Hans", {10, 90, -1, -1}), key);
         // The pseudo-locale's [Éẋ ], three ems: down to 6, where it still doesn't fit.
         CHECK_NEAR(keyFont(L"qps-ploc", {10, 20, -1, 90}), 6);
         // Without a reading, the key's font as it is.

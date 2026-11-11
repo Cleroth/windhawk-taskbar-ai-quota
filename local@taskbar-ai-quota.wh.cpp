@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.18.2
+// @version         2.19.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -53,7 +53,7 @@ Simplified Chinese (machine-translated), following your Windows display language
 
 ![Details flyout above the taskbar's quota tiles](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/screenshots/overview.png)
 
-![Tile styles in the settings window](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/screenshots/styles.png)
+![Tile styles in the settings window](https://raw.githubusercontent.com/Cleroth/windhawk-taskbar-ai-quota/master/screenshots/styles-2.png)
 
 ## Setup
 
@@ -9519,7 +9519,7 @@ enum class BarLayout {
     Vertical,
     SegmentedRing,
     ConcentricRings,
-    Gauge,          // The most-used quota's 270-degree arc around its number, the identity beside.
+    Gauge,          // A 270-degree arc per quota around its number, the identity beside.
     ClockPies,      // A pie per quota with an elapsed-time hand, the identity beside.
     RoundedSquare,  // Segmented-ring arcs along a rounded square around the identity.
     LogoHeadline,
@@ -10373,8 +10373,8 @@ struct SparkChartUi {
 // with a logo identity hold only the identity. Headline segment fills use AccountUiRefs::fills.
 struct TileUiRefs {
     BarLayout layout = BarLayout::Stacked;
-    // Face tiles (IsFaceTile): the face, holding the meters, with ring tiles' identity or a
-    // gauge's number and key on top. Sparklines: the face holding the charts, also the meters.
+    // Face tiles (IsFaceTile): the face, holding the meters, with ring tiles' identity or the
+    // gauges' numbers and keys on top. Sparklines: the face holding the charts, also the meters.
     Grid face{nullptr};
     // Meter shapes, regenerated whenever their TileShapeKey changes.
     Panel meters{nullptr};
@@ -10390,11 +10390,17 @@ struct TileUiRefs {
     TextBlock warn{nullptr};
     TextBlock outage{nullptr};
     TextBlock outageHalo{nullptr};
-    // Logo + headline and gauges: the most-used quota's number and window key; headline tiles
-    // with the countdown show it instead of their segments.
+    // Logo + headline: the most-used quota's number and window key; headline tiles with the
+    // countdown show it instead of their segments. Gauges: the number alone, for the dash shown
+    // without a quota.
     TextBlock headline{nullptr};
     TextBlock headlineKey{nullptr};
     TextBlock countdown{nullptr};
+    // Gauges: each quota slot's number and key.
+    std::array<TextBlock, kQuotaBarCount> gaugeNumbers{
+        TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
+    std::array<TextBlock, kQuotaBarCount> gaugeKeys{
+        TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
     // Sparklines: per quota slot, its chart.
     std::array<SparkChartUi, kQuotaBarCount> charts;
     // Quota matrix: each slot's cell, its key and number.
@@ -19246,7 +19252,7 @@ static bool IsRingTile(BarLayout layout) {
            layout == BarLayout::RoundedSquare;
 }
 
-// Tiles whose meters are outline shapes in a face (TileOutline): ring tiles, the gauge and the
+// Tiles whose meters are outline shapes in a face (TileOutline): ring tiles, the gauges and the
 // pies. Gauges and pies show the identity beside the face, as headline tiles do. Sparklines draw
 // outlines in their plots too, a chart per quota rather than a meter.
 static bool IsFaceTile(BarLayout layout) {
@@ -19390,9 +19396,9 @@ static constexpr TileArc kSegmentedArcs[kQuotaBarCount][kQuotaBarCount] = {
 };
 static constexpr TileArc kConcentricArc{270, 360};
 // A gauge's arc: open at the bottom, filling clockwise from its lower left. Its key's smallest
-// font, and its clearance from the arc's ends, in DIPs.
+// font, its clearance from the arc's ends, and the space between a tile's gauges, in DIPs.
 static constexpr TileArc kGaugeArc{135, 270};
-static constexpr double kGaugeKeyFontMin = 6, kGaugeKeyClear = 2;
+static constexpr double kGaugeKeyFontMin = 6, kGaugeKeyClear = 2, kGaugeGap = 4;
 // A rounded square's centreline corner radius, as a share of its size.
 static constexpr double kTileSquareCornerShare = 0.22;
 // Ring, square and pie pace ticks: a core over a halo, square ended, reaching past the meter.
@@ -19461,15 +19467,15 @@ struct TileOutlineFigure {
 
 using TileOutline = std::vector<TileOutlineFigure>;
 
-// The band between radii `inner` and `outer` around (center, center), clockwise from `from` to
+// The band between radii `inner` and `outer` around (centerX, centerY), clockwise from `from` to
 // `to` degrees (0 = right), its corners at either end rounded by `fromCorner` and `toCorner`; a
 // full annulus from 360 degrees on. Corners too wide for the span shrink together.
-static TileOutline TileSectorOutline(double center, double outer, double inner, double from,
+static TileOutline TileSectorOutline(double centerX, double centerY, double outer, double inner, double from,
                                      double to, double fromCorner, double toCorner) {
     constexpr double kDegrees = 180 / std::numbers::pi;
     auto at = [&](double radius, double degrees, double arc = 0, bool clockwise = true) {
-        return TileOutlineSegment{center + radius * std::cos(degrees / kDegrees),
-                                  center + radius * std::sin(degrees / kDegrees), arc, clockwise};
+        return TileOutlineSegment{centerX + radius * std::cos(degrees / kDegrees),
+                                  centerY + radius * std::sin(degrees / kDegrees), arc, clockwise};
     };
     // Edges in two halves, so none turns more than 180 degrees.
     auto edge = [&](std::vector<TileOutlineSegment>& segments, double radius, double start,
@@ -20311,7 +20317,7 @@ struct QuotaMeter {
     double textOffset = 0;     // Percent text shift.
     bool darkText = false;     // Black percent text over a light fill (yellow and orange by default).
     // Percent or amount; empty while unavailable. Also the quota matrix's number, "–" while
-    // unavailable.
+    // unavailable, and a gauge's, without "%".
     std::wstring text;
 
     // Tiles. Fill and pace in thousandths of the meter are the update keys; the geometry
@@ -20329,6 +20335,8 @@ struct QuotaMeter {
     TileOutline fill;          // Empty without usage.
     TileOutline paceHalo;      // Empty while the pace mark is hidden.
     TileOutline paceCore;
+    // Gauges: the quota's gauge, `gaugeLeft` DIPs from the face's left and `gaugeTop` from its top.
+    double gaugeLeft = 0, gaugeTop = 0;
     // Quota matrix: the cell, down the first column, then the second from the third quota on (on a
     // side taskbar, all down the first).
     int matrixRow = 0, matrixColumn = 0;
@@ -20360,13 +20368,16 @@ struct AccountMeters {
     double ringTextFont = 0;
     double ringTextWidth = 0;
     double ringWarnTop = 0;
-    // Face tiles (IsFaceTile): the face's size, holding the meter shapes. Gauges also put their
-    // number and key in it: fonts, and cap height centres from the face's top.
+    // Face tiles (IsFaceTile): the face's size, holding the meter shapes. Gauges: one per quota in
+    // the mask, the ring's size each, side by side in slot order, or on a side taskbar one under
+    // another, kGaugeGap apart; without a quota, one gauge's room. Each holds its quota's number
+    // (QuotaMeter::text) and key: their fonts, the key's the largest every shown key fits at, and
+    // their cap height centres from the gauge's top.
     double faceWidth = 0, faceHeight = 0;
     double faceFont = 0, faceKeyFont = 0;
     double faceNumberCenter = 0, faceKeyCenter = 0;
-    // Logo + headline tiles and gauges: the most-used quota's number (gauges: without "%"), window
-    // key and color.
+    // Logo + headline tiles: the most-used quota's number, window key and color. Gauges: only
+    // without a quota, the dash in the number's place.
     std::wstring headline;
     std::wstring headlineKey;
     uint32_t headlineColor = 0;
@@ -20460,15 +20471,11 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     auto timed = [&](int w) {
         return usage[w]->windowDurationMs > 0 && usage[w]->resetUnixMs > usage[w]->windowDurationMs;
     };
-    // The most-used tile quota: the headline's, and the only one a gauge shows.
+    // The most-used tile quota: the headline's.
     int top = -1;
     for (int w = 0; w < kQuotaBarCount; w++) {
         if (!(meters.barMask & (1 << w))) continue;
         if (top < 0 || usage[w]->pct > usage[top]->pct) top = w;
-    }
-    if (gauge) {
-        meters.barMask = top >= 0 ? 1 << top : 0;
-        count = meters.barMask ? 1 : 0;
     }
     if (spark) {
         // A chart per quota with a window; without any, the most-used quota's. Anthropic's extra
@@ -20550,8 +20557,13 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             meters.faceWidth = count ? columns * pieDiameter + (columns - 1) * pieGap : 0;
             meters.faceHeight = count ? rows * pieDiameter + (rows - 1) * pieGap : 0;
         } else {
-            meters.ring = TileRingLayout(concentric, size, display.ringThickness, count, display.logoScale);
+            // Each gauge is a ring of one arc.
+            meters.ring = TileRingLayout(concentric, size, display.ringThickness, gauge ? std::min(count, 1) : count,
+                                         display.logoScale);
             meters.faceWidth = meters.faceHeight = size;
+            if (gauge && count > 1) {
+                (display.sideWidth > 0 ? meters.faceHeight : meters.faceWidth) = count * size + (count - 1) * kGaugeGap;
+            }
         }
     }
     if (square) {
@@ -20568,15 +20580,17 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         meters.faceKeyCenter = g.size / 2 + g.radius * 0.75;
         // A key too wide for the opening shrinks a quarter DIP at a time, measured at each size,
         // down to kGaugeKeyFontMin, until it keeps kGaugeKeyClear DIPs from the arc's ends on
-        // either side. Over the key's line, from an em above its baseline down to it, the opening
-        // is narrowest where the arc's inner edge ends: below that the ends are cut along the
-        // radius, above it the inner edge closes in.
-        if (top >= 0) {
-            const double inner = g.radius - g.stroke / 2, outer = g.radius + g.stroke / 2;
-            const double end = (kGaugeArc.start + kGaugeArc.sweep - 360) * std::numbers::pi / 180;
-            const std::wstring key = QuotaKey(display.locale, account.provider, top);
+        // either side; the tile's gauges share the font its widest key takes. Over the key's line,
+        // from an em above its baseline down to it, the opening is narrowest where the arc's inner
+        // edge ends: below that the ends are cut along the radius, above it the inner edge closes
+        // in.
+        const double inner = g.radius - g.stroke / 2, outer = g.radius + g.stroke / 2;
+        const double end = (kGaugeArc.start + kGaugeArc.sweep - 360) * std::numbers::pi / 180;
+        for (int w = 0; w < kQuotaBarCount; w++) {
+            if (!(meters.barMask & (1 << w))) continue;
+            const std::wstring key = QuotaKey(display.locale, account.provider, w);
             // Whether the key clears the arc's ends at `size`, by half the opening's width over
-            // its line at that size, from the face's middle.
+            // its line at that size, from the gauge's middle.
             auto fits = [&](double size) {
                 double baseline = meters.faceKeyCenter - g.size / 2 + size * kTileCapShare / 2;
                 double y = std::clamp(inner * std::sin(end), baseline - size, baseline);
@@ -20585,9 +20599,9 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                                                            std::sqrt(std::max(inner * inner - y * y, 0.0));
                 return display.measure(key, TileFont::Text, size) / 2 + kGaugeKeyClear <= room;
             };
-            double size = meters.faceKeyFont;
-            while (size > kGaugeKeyFontMin && !fits(size)) size = std::max(size - 0.25, kGaugeKeyFontMin);
-            meters.faceKeyFont = size;
+            while (meters.faceKeyFont > kGaugeKeyFontMin && !fits(meters.faceKeyFont)) {
+                meters.faceKeyFont = std::max(meters.faceKeyFont - 0.25, kGaugeKeyFontMin);
+            }
         }
     }
     if (ring) {
@@ -20791,21 +20805,30 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         } else if (circular) {
             // Annular sectors with stroke / 4 corners at a partial arc's ends; full rings have
             // none. Fills start with the track's corners and end in a radial cut at their value.
-            double center = geometry.size / 2;
+            // A gauge is centred in its own place in the face, around its number.
+            double centerX = geometry.size / 2, centerY = centerX;
+            if (gauge) {
+                (display.sideWidth > 0 ? m.gaugeTop : m.gaugeLeft) = slotPosition * (geometry.size + kGaugeGap);
+                centerX += m.gaugeLeft;
+                centerY += m.gaugeTop;
+                wchar_t text[24];
+                swprintf(text, ARRAYSIZE(text), L"%.0f", shown);
+                m.text = text;
+            }
             double outer = m.radius + geometry.stroke / 2, inner = m.radius - geometry.stroke / 2;
             double corner = fullRing ? 0.0 : geometry.stroke / 4;
             double end = m.arc.start + m.arc.sweep;
             double low = std::min(m.arc.start, end), high = std::max(m.arc.start, end);
-            m.track = TileSectorOutline(center, outer, inner, low, high, corner, corner);
+            m.track = TileSectorOutline(centerX, centerY, outer, inner, low, high, corner, corner);
             m.fillSweep = m.arc.sweep * fill;
             m.fillEndRadius = std::max(0.0, corner - std::abs(m.arc.sweep - m.fillSweep) *
                                                          std::numbers::pi / 180 * m.radius);
             if (m.fillUnits) {
                 double fillEnd = m.arc.start + m.fillSweep;
                 m.fill = m.arc.sweep > 0 ?
-                    TileSectorOutline(center, outer, inner, m.arc.start, fillEnd, corner,
+                    TileSectorOutline(centerX, centerY, outer, inner, m.arc.start, fillEnd, corner,
                                       m.fillEndRadius) :
-                    TileSectorOutline(center, outer, inner, fillEnd, m.arc.start, m.fillEndRadius,
+                    TileSectorOutline(centerX, centerY, outer, inner, fillEnd, m.arc.start, m.fillEndRadius,
                                       corner);
             }
             m.paceAngle = m.arc.start + m.arc.sweep * pace;
@@ -20822,8 +20845,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 double inside = concentric && slotPosition < count - 1 ? between : kTilePaceOverhang;
                 double radians = m.paceAngle * std::numbers::pi / 180;
                 double dx = std::cos(radians), dy = std::sin(radians);
-                m.paceHalo = tick(center, center, dx, dy, inner - inside, outer + outside, kTilePaceHalo);
-                m.paceCore = tick(center, center, dx, dy, inner - inside + kTilePaceCoreInset,
+                m.paceHalo = tick(centerX, centerY, dx, dy, inner - inside, outer + outside, kTilePaceHalo);
+                m.paceCore = tick(centerX, centerY, dx, dy, inner - inside + kTilePaceCoreInset,
                                   outer + outside - kTilePaceCoreInset, kTilePaceCore);
             }
         } else if (spark) {
@@ -21071,14 +21094,15 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         }
     }
 
-    // Headline and gauge: the most-used tile quota, shown per the bar mode in its usage color.
-    if (layout == BarLayout::LogoHeadline || gauge) {
+    // Headline: the most-used tile quota, shown per the bar mode in its usage color. Gauges
+    // without a quota: the dash alone.
+    if (layout == BarLayout::LogoHeadline || (gauge && top < 0)) {
         bool countdown = layout == BarLayout::LogoHeadline && display.headlineCountdown;
         meters.headline = L"\u2013";  // i18n-en: no reading
         if (countdown) meters.headlineCountdown = std::wstring(kHeadlineCountdownArrow) + L"\u2013";  // i18n-en: no reading
         if (top >= 0) {
             wchar_t text[24];
-            swprintf(text, ARRAYSIZE(text), gauge ? L"%.0f" : L"%.0f%%", tileShown(usage[top]->pct));
+            swprintf(text, ARRAYSIZE(text), L"%.0f%%", tileShown(usage[top]->pct));
             meters.headline = text;
             meters.headlineKey = meters.quotas[top].key;
         }
@@ -21170,8 +21194,7 @@ static Grid LoadProviderLogo(std::wstring const& provider, Brush const& fill) {
 // Tile layouts: logo + headline %, the face tiles (rings, rounded square, gauge, clock pies), the
 // burn-up sparkline and the quota matrix. A tile shows the account's identity (provider logo,
 // optionally with a number badge, or short text) and its tile quotas: the meters the bar layouts
-// show, in slot order (a gauge: the most-used one). BuildAccountTile creates a tile;
-// UpdateAccountTile
+// show, in slot order. BuildAccountTile creates a tile; UpdateAccountTile
 // regenerates its meter shapes whenever their inputs change, then applies values in place. Bar
 // columns with a logo identity show the same identity (BuildTileIdentity, UpdateTileIdentity), and
 // every column takes the tiles' hover and open-flyout background. Values, identity text and
@@ -21488,28 +21511,35 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");  // i18n-en
 
     if (IsFaceTile(layout)) {
-        // Gauges and pies: the face beside the identity. A gauge's number and key are centred
-        // across it, moved down from its middle to their model centres (UpdateAccountTile).
+        // Gauges and pies: the face beside the identity. Gauges: each quota slot's number and key,
+        // and the dash shown without a quota, centred in the face and moved from its middle to
+        // their model centres (UpdateAccountTile).
         Grid face;
         face.IsHitTestVisible(false);
         face.VerticalAlignment(VerticalAlignment::Center);
         Grid meters;
         face.Children().Append(meters);
         if (layout == BarLayout::Gauge) {
-            auto centred = [&](TextBlock const& text) {
+            auto centred = [&](bool number) {
+                TextBlock text;
+                if (number) {
+                    text.FontFamily(displayFont);
+                    text.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+                } else {
+                    text.Opacity(0.6);
+                }
                 text.TextLineBounds(TextLineBounds::Tight);
                 text.HorizontalAlignment(HorizontalAlignment::Center);
                 text.VerticalAlignment(VerticalAlignment::Center);
                 text.RenderTransform(TranslateTransform{});
                 face.Children().Append(text);
+                return text;
             };
-            tile.headline = TextBlock{};
-            tile.headline.FontFamily(displayFont);
-            tile.headline.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-            centred(tile.headline);
-            tile.headlineKey = TextBlock{};
-            tile.headlineKey.Opacity(0.6);
-            centred(tile.headlineKey);
+            tile.headline = centred(true);
+            for (int w = 0; w < kQuotaBarCount; w++) {
+                tile.gaugeNumbers[w] = centred(true);
+                tile.gaugeKeys[w] = centred(false);
+            }
         }
         tile.face = face;
         tile.meters = meters;
@@ -21882,16 +21912,28 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                     tile.text.MaxWidth(meters.ringTextWidth);
                 }
                 tile.warn.Margin({0, meters.ringWarnTop, -3, 0});
-            } else if (tile.headline && tile.headlineKey) {
-                // A gauge's number at its font, and both at their centres; the key's font follows
-                // the key (below).
-                tile.headline.FontSize(meters.faceFont);
-                double middle = meters.faceHeight / 2;
-                if (auto shift = tile.headline.RenderTransform().try_as<TranslateTransform>()) {
-                    shift.Y(meters.faceNumberCenter - middle);
-                }
-                if (auto shift = tile.headlineKey.RenderTransform().try_as<TranslateTransform>()) {
-                    shift.Y(meters.faceKeyCenter - middle);
+            } else if (tile.headline) {
+                // Gauges: each shown quota's number and key at their fonts and centres in its
+                // gauge, and the dash in the first one's place.
+                auto place = [&](TextBlock const& text, double size, double x, double y) {
+                    text.FontSize(size);
+                    if (auto shift = text.RenderTransform().try_as<TranslateTransform>()) {
+                        shift.X(x - meters.faceWidth / 2);
+                        shift.Y(y - meters.faceHeight / 2);
+                    }
+                };
+                double middle = geometry.size / 2;
+                place(tile.headline, meters.faceFont, middle, meters.faceNumberCenter);
+                for (int w = 0; w < kQuotaBarCount; w++) {
+                    bool shown = barMask & (1 << w);
+                    for (TextBlock const& text : {tile.gaugeNumbers[w], tile.gaugeKeys[w]}) {
+                        text.Visibility(shown ? Visibility::Visible : Visibility::Collapsed);
+                    }
+                    if (!shown) continue;
+                    QuotaMeter const& m = meters.quotas[w];
+                    place(tile.gaugeNumbers[w], meters.faceFont, m.gaugeLeft + middle, m.gaugeTop + meters.faceNumberCenter);
+                    place(tile.gaugeKeys[w], meters.faceKeyFont, m.gaugeLeft + middle, m.gaugeTop + meters.faceKeyCenter);
+                    tile.gaugeKeys[w].Text(m.key);
                 }
             }
         } else if (!tile.countdown) {
@@ -22001,6 +22043,12 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     for (int w = 0; w < kQuotaBarCount && !matrix && !spark; w++) {
         if (!(barMask & (1 << w))) continue;
         QuotaMeter const& m = meters.quotas[w];
+        // A gauge's number, in its quota's usage color like the fill.
+        if (tile.gaugeNumbers[w] && (m.text != ap.percentTexts[w] || m.color != ap.fillColor[w])) {
+            tile.gaugeNumbers[w].Text(m.text);
+            tile.gaugeNumbers[w].Foreground(SolidColorBrush(ArgbColor(m.color)));
+            ap.percentTexts[w] = m.text;
+        }
         if (m.fillUnits != ap.fillPx[w] || m.color != ap.fillColor[w]) {
             if (face && tile.arcs[w]) {
                 // Face fills are flat.
@@ -22033,17 +22081,12 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         }
     }
 
-    if (tile.headlineKey) {
-        // A gauge's key font fits its key, so it follows the text.
-        std::wstring headline = meters.headline + L"\n" + meters.headlineKey + L"\n" + meters.headlineCountdown + L"\n" +
-                                std::to_wstring(meters.faceKeyFont);
+    if (tile.headline) {
+        std::wstring headline = meters.headline + L"\n" + meters.headlineKey + L"\n" + meters.headlineCountdown;
         if (headline != ap.headline || meters.headlineColor != ap.headlineColor) {
-            if (tile.headline) {
-                tile.headline.Text(meters.headline);
-                tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
-            }
-            if (face) tile.headlineKey.FontSize(meters.faceKeyFont);
-            tile.headlineKey.Text(meters.headlineKey);
+            tile.headline.Text(meters.headline);
+            tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
+            if (tile.headlineKey) tile.headlineKey.Text(meters.headlineKey);
             if (tile.countdown) tile.countdown.Text(meters.headlineCountdown);
             ap.headline = std::move(headline);
             ap.headlineColor = meters.headlineColor;
@@ -35774,24 +35817,29 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                 }
                 markOps(ops, meters, faceLeft + S, faceTop + float(meters.ringWarnTop), opacity, true);
             } else if (IsFaceTile(layout)) {
-                // Gauges and pies: the identity, then 6 DIP after it the face; a gauge's number
-                // and key centred across it, their cap heights on the model's centres.
+                // Gauges and pies: the identity, then 6 DIP after it the face; each gauge's number
+                // and key centred across it, their cap heights on the model's centres, or without
+                // a quota the dash in the number's place.
                 float idWidth = identityOps(ops, i, meters, float(kHeadlineLogoSide * display.logoScale), x0 + padLeft,
                                             top + T / 2);
                 float faceLeft = x0 + padLeft + idWidth + 6, faceTop = top + (T - faceHeight) / 2;
                 faceShapes(faceLeft, faceTop);
                 if (layout == BarLayout::Gauge) {
-                    auto centred = [&](const std::wstring& s, const UiTextStyle& style, double center, uint32_t color,
+                    const double middle = meters.ring.size / 2;
+                    const UiTextStyle numberStyle{UiFamily::Display, float(meters.faceFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+                    const UiTextStyle keyStyle{UiFamily::Taskbar, float(meters.faceKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL};
+                    auto centred = [&](const std::wstring& s, const UiTextStyle& style, double x, double y, uint32_t color,
                                        float alpha) {
                         Measured m = measure(s, style);
-                        label(ops, s, style, faceLeft + (faceWidth - m.width) / 2, faceTop + float(center) - m.cap / 2,
-                              m.width, DWRITE_TEXT_ALIGNMENT_LEADING, color, alpha, true);
+                        label(ops, s, style, faceLeft + float(x) - m.width / 2, faceTop + float(y) - m.cap / 2, m.width,
+                              DWRITE_TEXT_ALIGNMENT_LEADING, color, alpha, true);
                     };
-                    centred(meters.headline, {UiFamily::Display, float(meters.faceFont), 0, DWRITE_FONT_WEIGHT_SEMI_BOLD},
-                            meters.faceNumberCenter, meters.headlineColor, 1);
-                    if (!meters.headlineKey.empty()) {
-                        centred(meters.headlineKey, {UiFamily::Taskbar, float(meters.faceKeyFont), 0, DWRITE_FONT_WEIGHT_NORMAL},
-                                meters.faceKeyCenter, text, 0.6f);
+                    if (!count) centred(meters.headline, numberStyle, middle, meters.faceNumberCenter, meters.headlineColor, 1);
+                    for (int w = 0; w < kQuotaBarCount; w++) {
+                        if (!(meters.barMask & (1 << w))) continue;
+                        const QuotaMeter& q = meters.quotas[w];
+                        centred(q.text, numberStyle, q.gaugeLeft + middle, q.gaugeTop + meters.faceNumberCenter, q.color, 1);
+                        centred(q.key, keyStyle, q.gaugeLeft + middle, q.gaugeTop + meters.faceKeyCenter, text, 0.6f);
                     }
                 }
                 width = padLeft + idWidth + 6 + faceWidth + padRight;

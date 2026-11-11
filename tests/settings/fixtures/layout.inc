@@ -1510,7 +1510,7 @@ static void RunLayoutTests() {
     });
 
     Run("preview: gauges and pies beside the identity, the rounded square around it; the face sets the column", [] {
-        // One account with its logo alone (16 DIPs on tiles), the weekly quota the most used. A 10
+        // One account with its logo alone (16 DIPs on tiles) and its 5-hour and weekly quotas. A 10
         // DIP margin: tiles pad 7 before and 8 after, ring tiles 4 each.
         std::vector<AccountConfig> accounts = {Account(L"anthropic", L"A", {true, true, false, false})};
         accounts[0].tileIdentity = TileIdentity::Logo;
@@ -1526,25 +1526,41 @@ static void RunLayoutTests() {
         Settings s = StackedSettings();
         s.accountMargin = 10;
 
-        // Gauge: 7 + 16 + 6 + 32 + 8 DIPs; the logo centred on the 40 DIP tile, the face 6 DIPs after it.
+        // Gauges: 7 + 16 + 6 + 68 + 8 DIPs, two 32 DIP gauges 4 apart; the logo centred on the 40 DIP
+        // tile, the face 6 DIPs after it.
         s.barLayout = BarLayout::Gauge;
         SettingsPreviewStrip strip = StripOf(s, accounts, data);
-        CHECK(NearDip(strip.columns[0].left, 3) && NearDip(width(strip), 69) && NearDip(strip.width, 3 + 69 + 2));
+        CHECK(NearDip(strip.columns[0].left, 3) && NearDip(width(strip), 105) && NearDip(strip.width, 3 + 105 + 2));
         std::vector<SettingsPreviewOp> logo = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
         CHECK(logo.size() == 1 && NearDip(logo[0].rect.left, 10) && NearDip(logo[0].rect.top, 16) &&
               NearDip(logo[0].rect.right, 26) && NearDip(logo[0].rect.bottom, 32));
-        // The weekly arc alone: its track, then its orange fill.
+        // Both arcs in the one face: their tracks, then the green and the orange fill.
         std::vector<SettingsPreviewOp> shapes = shapesAt(strip, 32, 8);
-        CHECK(shapes.size() == 2 && shapes[0].color == track && shapes[1].color == 0xFFFB8C00);
-        // Its number without %, the key under it, both centred across the face, their cap heights
-        // centred 15.5 and 10.5 + 16 DIPs from its top.
-        std::vector<SettingsPreviewOp> number = TextOps(strip, L"80"), key = TextOps(strip, L"7d");
-        CHECK(number.size() == 1 && key.size() == 1 && TextOps(strip, L"80%").empty() && TextOps(strip, L"30").empty());
-        CHECK(NearDip(number[0].style.size, 12) && number[0].color == 0xFFFB8C00 && number[0].opacity == 1);
-        CHECK(NearDip(key[0].style.size, 12 * 9 / 14.0) && key[0].color == 0xFFFFFFFF && NearDip(key[0].opacity, 0.6));
-        CHECK(NearDip((number[0].rect.left + number[0].rect.right) / 2, 32 + 16) &&
-              NearDip((key[0].rect.left + key[0].rect.right) / 2, 32 + 16));
-        CHECK(NearDip(capCentre(number[0]), 8 + 15.5) && NearDip(capCentre(key[0]), 8 + 26.5));
+        CHECK(shapes.size() == 4 && shapes[0].color == track && shapes[1].color == track &&
+              shapes[2].color == 0xFF43A047 && shapes[3].color == 0xFFFB8C00);
+        // Each number without %, its key under it, both centred across their gauge (16 and 52 DIPs
+        // into the face), their cap heights centred 15.5 and 10.5 + 16 DIPs from its top.
+        struct Gauge {
+            PCWSTR number, key;
+            uint32_t color;
+            float centre;
+        };
+        for (const Gauge& gauge : {Gauge{L"30", L"5h", 0xFF43A047, 32 + 16}, Gauge{L"80", L"7d", 0xFFFB8C00, 32 + 52}}) {
+            std::vector<SettingsPreviewOp> number = TextOps(strip, gauge.number), key = TextOps(strip, gauge.key);
+            CHECK(number.size() == 1 && key.size() == 1);
+            CHECK(NearDip(number[0].style.size, 12) && number[0].color == gauge.color && number[0].opacity == 1);
+            CHECK(NearDip(key[0].style.size, 12 * 9 / 14.0) && key[0].color == 0xFFFFFFFF && NearDip(key[0].opacity, 0.6));
+            CHECK(NearDip((number[0].rect.left + number[0].rect.right) / 2, gauge.centre) &&
+                  NearDip((key[0].rect.left + key[0].rect.right) / 2, gauge.centre));
+            CHECK(NearDip(capCentre(number[0]), 8 + 15.5) && NearDip(capCentre(key[0]), 8 + 26.5));
+        }
+        CHECK(TextOps(strip, L"80%").empty() && TextOps(strip, L"\u2013").empty());
+        // Without a reading: the dash alone, grey, where a single gauge's number goes.
+        strip = StripOf(s, accounts, {Fresh()});
+        CHECK(NearDip(width(strip), 69) && OpsOfKind(strip, SettingsPreviewOp::Kind::Shape).empty());
+        std::vector<SettingsPreviewOp> texts = OpsOfKind(strip, SettingsPreviewOp::Kind::Text);
+        CHECK(texts.size() == 1 && texts[0].text == L"\u2013" && texts[0].color == 0xFF9E9E9E && NearDip(texts[0].style.size, 12));
+        CHECK(NearDip((texts[0].rect.left + texts[0].rect.right) / 2, 32 + 16) && NearDip(capCentre(texts[0]), 8 + 15.5));
 
         // Pies: two 18 DIP pies 3 apart, a 39 x 18 face centred on the tile; no text.
         s.barLayout = BarLayout::ClockPies;
@@ -1585,10 +1601,10 @@ static void RunLayoutTests() {
             }
             return OpsOfColor(strip, pace).size();
         };
-        // Pies and squares: one per quota, as on rings. Gauges: one per fresh account (Go is stale).
+        // One per quota, as on rings.
         size_t rings = ticks(BarLayout::SegmentedRing);
-        CHECK(rings > 0 && ticks(BarLayout::ClockPies) == rings && ticks(BarLayout::RoundedSquare) == rings);
-        CHECK(ticks(BarLayout::Gauge) == 3);
+        CHECK(rings > 0 && ticks(BarLayout::Gauge) == rings && ticks(BarLayout::ClockPies) == rings &&
+              ticks(BarLayout::RoundedSquare) == rings);
         Settings off = StackedSettings();
         off.showPaceTicks = false;
         for (BarLayout layout : {BarLayout::Gauge, BarLayout::ClockPies, BarLayout::RoundedSquare}) {
@@ -2167,8 +2183,8 @@ static void RunLayoutTests() {
                 s.barLayout = layout;
                 for (double taskbar : {0.0, 24.0, 48.0, 1e9}) {
                     // Per column two 500 DIP margins, a 32 DIP logo, 6 DIPs and a face (pies: 48
-                    // DIPs across; sparklines: three 120 DIP plots 4 apart), or bars: well under
-                    // 1000 + 600.
+                    // DIPs across; gauges: four of them 4 apart; sparklines: three 120 DIP plots 4
+                    // apart), or bars: well under 1000 + 600.
                     SettingsPreviewStrip strip = Strip(s, taskbar, false, 2.5f);
                     CHECK(Finite(strip));
                     CHECK(strip.width < 4 * 1600 && strip.height <= 96);

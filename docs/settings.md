@@ -39,7 +39,7 @@ With a live preview of the taskbar:
 - tile style: usage graph (the default for new installs; a chart per quota of its recorded usage
   across its window, side by side, with an even-use diagonal, the current reading, and a
   projection at its recent average rate, as described under [Usage history](usage-history.md)),
-  stacked bars, vertical bars, segmented ring, concentric rings, gauge % (the most-used quota's
+  stacked bars, vertical bars, segmented ring, concentric rings, gauge % (a gauge per quota: its
   arc around its number), clock pies (a pie per quota with an elapsed-time hand), rounded square
   (segmented-ring arcs along a rounded square around the identity), headline %, or quota matrix
   (each quota's key and percentage in up to two rows and columns); settings the chosen style

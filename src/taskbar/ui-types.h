@@ -91,8 +91,8 @@ struct SparkChartUi {
 // with a logo identity hold only the identity. Headline segment fills use AccountUiRefs::fills.
 struct TileUiRefs {
     BarLayout layout = BarLayout::Stacked;
-    // Face tiles (IsFaceTile): the face, holding the meters, with ring tiles' identity or a
-    // gauge's number and key on top. Sparklines: the face holding the charts, also the meters.
+    // Face tiles (IsFaceTile): the face, holding the meters, with ring tiles' identity or the
+    // gauges' numbers and keys on top. Sparklines: the face holding the charts, also the meters.
     Grid face{nullptr};
     // Meter shapes, regenerated whenever their TileShapeKey changes.
     Panel meters{nullptr};
@@ -108,11 +108,17 @@ struct TileUiRefs {
     TextBlock warn{nullptr};
     TextBlock outage{nullptr};
     TextBlock outageHalo{nullptr};
-    // Logo + headline and gauges: the most-used quota's number and window key; headline tiles
-    // with the countdown show it instead of their segments.
+    // Logo + headline: the most-used quota's number and window key; headline tiles with the
+    // countdown show it instead of their segments. Gauges: the number alone, for the dash shown
+    // without a quota.
     TextBlock headline{nullptr};
     TextBlock headlineKey{nullptr};
     TextBlock countdown{nullptr};
+    // Gauges: each quota slot's number and key.
+    std::array<TextBlock, kQuotaBarCount> gaugeNumbers{
+        TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
+    std::array<TextBlock, kQuotaBarCount> gaugeKeys{
+        TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}, TextBlock{nullptr}};
     // Sparklines: per quota slot, its chart.
     std::array<SparkChartUi, kQuotaBarCount> charts;
     // Quota matrix: each slot's cell, its key and number.

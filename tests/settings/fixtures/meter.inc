@@ -309,7 +309,7 @@ static void RunBarTests() {
         CHECK(graph.barMask == 0b1000 && graph.quotas[3].key == L"Mo" && graph.sparkExtraText.empty());
         CHECK(!graph.quotas[3].spark[kSparkNow].empty());
         AccountMeters gauge = AccountMeterState(Display(), BarLayout::Gauge, copilot, data, 0, 0);
-        CHECK(gauge.headline == L"40" && gauge.headlineKey == L"Mo");
+        CHECK(gauge.barMask == 0b1000 && gauge.quotas[3].text == L"40" && gauge.quotas[3].key == L"Mo");
         // An unlimited pooled allowance has no percentage: no meter once read.
         AccountData pooled = Fresh();
         pooled.copilotUnlimited = true;
@@ -759,7 +759,7 @@ static void RunTileTests() {
         const double half = 1 / std::sqrt(2.0);
         // Radii 10 and 6 around the origin, 0 to 90 degrees, square: the outer edge clockwise in
         // two halves, the radial cut inward, the inner edge back in two halves.
-        TileOutline square = TileSectorOutline(0, 10, 6, 0, 90, 0, 0);
+        TileOutline square = TileSectorOutline(0, 0, 10, 6, 0, 90, 0, 0);
         CHECK(square.size() == 1 && square[0].segments.size() == 5);
         const std::vector<TileOutlineSegment>& s = square[0].segments;
         point(square[0], 10, 0);
@@ -771,7 +771,7 @@ static void RunTileTests() {
         // 1 DIP corners, each a clockwise arc tangent to both edges. Outer corners' circles sit 9
         // out from the centre: they touch the radial edge sqrt(9^2 - 1) out and the outer edge
         // 10 / 9 off the radial line. Inner ones sit 7 out: sqrt(7^2 - 1) and 6 / 7.
-        TileOutline round = TileSectorOutline(0, 10, 6, 0, 90, 1, 1);
+        TileOutline round = TileSectorOutline(0, 0, 10, 6, 0, 90, 1, 1);
         CHECK(round.size() == 1 && round[0].segments.size() == 9);
         const std::vector<TileOutlineSegment>& r = round[0].segments;
         const double outerTouch = std::sqrt(100 - 100.0 / 81), innerTouch = std::sqrt(36 - 36.0 / 49);
@@ -785,13 +785,13 @@ static void RunTileTests() {
         point(r[6], 6 * half, 6 * half); arc(r[6], 6, false);
         point(r[7], innerTouch, 6.0 / 7); arc(r[7], 6, false);
         point(r[8], std::sqrt(48.0), 0); arc(r[8], 1, true);
-        // Offset by the centre; a rounded start with a square end has 7 segments.
-        TileOutline mixed = TileSectorOutline(16, 10, 6, 0, 90, 1, 0);
+        // Offset by the centre, across and down; a rounded start with a square end has 7 segments.
+        TileOutline mixed = TileSectorOutline(16, 20, 10, 6, 0, 90, 1, 0);
         CHECK(mixed[0].segments.size() == 7);
-        point(mixed[0], 16 + std::sqrt(80.0), 16);
-        point(mixed[0].segments[2], 16, 26); point(mixed[0].segments[3], 16, 22);
+        point(mixed[0], 16 + std::sqrt(80.0), 20);
+        point(mixed[0].segments[2], 16, 30); point(mixed[0].segments[3], 16, 26);
         // From 360 degrees on: an annulus, two circles each in two halves, corners ignored.
-        TileOutline annulus = TileSectorOutline(16, 15, 12, 270, 630, 1, 1);
+        TileOutline annulus = TileSectorOutline(16, 16, 15, 12, 270, 630, 1, 1);
         CHECK(annulus.size() == 2);
         for (int i = 0; i < 2; i++) {
             double radius = i ? 12 : 15;
@@ -809,14 +809,14 @@ static void RunTileTests() {
             double s = std::sin(degrees * std::numbers::pi / 180);
             return 6 * s / (1 - s);
         };
-        TileOutline both = TileSectorOutline(0, 10, 6, 0, 5, 1, 1);
+        TileOutline both = TileSectorOutline(0, 0, 10, 6, 0, 5, 1, 1);
         CHECK(both[0].segments.size() == 9);
         CHECK_NEAR(both[0].segments[0].radius, fit(2.5)); CHECK_NEAR(both[0].segments[3].radius, fit(2.5));
-        TileOutline one = TileSectorOutline(0, 10, 6, 0, 5, 1, 0);
+        TileOutline one = TileSectorOutline(0, 0, 10, 6, 0, 5, 1, 0);
         CHECK(one[0].segments.size() == 7);
         CHECK_NEAR(one[0].segments[0].radius, fit(5)); CHECK_NEAR(one[0].segments[6].radius, fit(5));
         // Corners that fit stay.
-        CHECK_NEAR(TileSectorOutline(0, 10, 6, 0, 20, 1, 1)[0].segments[0].radius, 1);
+        CHECK_NEAR(TileSectorOutline(0, 0, 10, 6, 0, 20, 1, 1)[0].segments[0].radius, 1);
     });
 
     Run("ring fill: track corners at its start, a radial cut at its value, rounded only near the end", [] {
@@ -1134,32 +1134,53 @@ static void RunFaceTileTests() {
         CHECK(kLastBarLayout == QuotaMatrix);
     });
 
-    Run("gauge: only the most-used tile quota; none without a reading", [] {
+    Run("gauges: one per selected quota with a reading, side by side in slot order; the dash without one", [] {
         auto gauge = [](std::array<double, kQuotaBarCount> pct, std::array<bool, kQuotaBarCount> bars = {true, true, true, true}) {
             return AccountMeterState(Display(), BarLayout::Gauge, Account(L"anthropic", L"A", bars), Fresh(pct), 0, 0);
         };
-        CHECK(gauge({10, 80, 30, 40}).barMask == 0b0010);
-        CHECK(gauge({90, 80, -1, 95}).barMask == 0b1000);
-        // A tie goes to the earlier slot.
-        CHECK(gauge({40, 80, 80, 20}).barMask == 0b0010);
-        // Only selected quotas count: the 5-hour one though the weekly one is higher.
-        CHECK(gauge({10, 90, -1, -1}, {true, false, false, false}).barMask == 0b0001);
-        // The other slots get no shapes.
-        AccountMeters weekly = gauge({10, 80, 30, 40});
-        CHECK(!weekly.quotas[1].track.empty() && !weekly.quotas[1].fill.empty());
-        for (int w : {0, 2, 3}) CHECK(weekly.quotas[w].track.empty() && weekly.quotas[w].fill.empty());
-        // Nothing reported, before the first success or after one: no meter.
+        // A gauge's place, and its centre from the top of its track's outer edge, 15.5 DIPs above.
+        auto at = [](const QuotaMeter& m, double left, double top) {
+            CHECK_NEAR(m.gaugeLeft, left); CHECK_NEAR(m.gaugeTop, top);
+            CHECK(m.track.size() == 1);
+            point(m.track[0].segments[1], left + 16, top + 0.5);
+        };
+        // Four 32 DIP gauges 4 DIPs apart: 140 DIPs across.
+        AccountMeters four = gauge({10, 80, 30, 40});
+        CHECK(four.barMask == 0b1111);
+        CHECK_NEAR(four.faceWidth, 140); CHECK_NEAR(four.faceHeight, 32);
+        at(four.quotas[0], 0, 0); at(four.quotas[1], 36, 0); at(four.quotas[2], 72, 0); at(four.quotas[3], 108, 0);
+        // Each a whole gauge: the count never thins the stroke or shortens the arc.
+        CHECK_NEAR(four.ring.stroke, 3);
+        for (const QuotaMeter& q : four.quotas) {
+            CHECK_NEAR(q.radius, 14); CHECK_NEAR(q.arc.start, 135); CHECK_NEAR(q.arc.sweep, 270);
+            CHECK(!q.fill.empty());
+        }
+        // A quota without a reading gets no gauge; the next one moves up.
+        AccountMeters gap = gauge({90, 80, -1, 95});
+        CHECK(gap.barMask == 0b1011); CHECK_NEAR(gap.faceWidth, 104);
+        at(gap.quotas[3], 72, 0);
+        CHECK(gap.quotas[2].track.empty() && gap.quotas[2].text.empty());
+        // Only selected quotas: the 5-hour one alone.
+        AccountMeters selected = gauge({10, 90, -1, -1}, {true, false, false, false});
+        CHECK(selected.barMask == 0b0001); CHECK_NEAR(selected.faceWidth, 32);
+        CHECK(selected.quotas[1].track.empty() && selected.quotas[1].text.empty());
+        // The dash is only for a tile without a gauge.
+        CHECK(four.headline.empty() && four.headlineKey.empty() && four.headlineColor == 0);
+        // Nothing reported, before the first success or after one: no meter, the dash in one
+        // gauge's room.
         AccountData before = Fresh();
         before.lastSuccessMs = 0;
         for (const AccountData& data : {before, Fresh()}) {
             AccountMeters none = AccountMeterState(Display(), BarLayout::Gauge, Account(L"anthropic", L"A", {true, true, true, true}),
                                                    data, 0, 0);
             CHECK(none.barMask == 0 && none.headline == L"\u2013" && none.headlineKey.empty());
-            for (const QuotaMeter& q : none.quotas) CHECK(q.track.empty());
+            CHECK(none.headlineColor == 0xFF9E9E9E);
+            CHECK_NEAR(none.faceWidth, 32); CHECK_NEAR(none.faceHeight, 32); CHECK_NEAR(none.faceNumberCenter, 15.5);
+            for (const QuotaMeter& q : none.quotas) CHECK(q.track.empty() && q.text.empty());
         }
     });
 
-    Run("gauge: its number without %, the window key and color, per bar mode; no countdown", [] {
+    Run("gauges: each quota's number without %, window key and color, per bar mode; no countdown", [] {
         auto gauge = [](std::array<double, kQuotaBarCount> pct, std::wstring provider = L"anthropic",
                         BarMode mode = BarMode::Used, bool countdown = false) {
             MeterDisplay d = Display(With([&](Settings& s) { s.barMode = mode; s.headlineCountdown = countdown; }));
@@ -1167,18 +1188,20 @@ static void RunFaceTileTests() {
             data.winWeek.resetUnixMs = kNow + 45 * kMinute;
             return AccountMeterState(d, BarLayout::Gauge, Account(provider, L"A", {true, true, false, true}), data, 0, 0);
         };
-        AccountMeters weekly = gauge({10, 80, -1, 40});
-        CHECK(weekly.headline == L"80" && weekly.headlineKey == L"7d");
-        CHECK(weekly.headlineColor == 0xFFFB8C00 && weekly.quotas[1].color == 0xFFFB8C00);
-        CHECK(weekly.quotas[1].fillUnits == 800); CHECK_NEAR(weekly.quotas[1].fillSweep, 216);
-        CHECK(gauge({10, 20, -1, 95}, L"openai").headlineKey == L"Cr");
-        CHECK(gauge({10, 20, -1, 95}).headlineKey == L"Ex");
-        CHECK(gauge({130, -1, -1, -1}).headline == L"100");
-        // Remaining: the most-used quota still, 20 left of it.
+        AccountMeters used = gauge({10, 80, -1, 40});
+        CHECK(used.barMask == 0b1011);
+        CHECK(used.quotas[0].text == L"10" && used.quotas[0].key == L"5h" && used.quotas[0].color == 0xFF43A047);
+        CHECK(used.quotas[1].text == L"80" && used.quotas[1].key == L"7d" && used.quotas[1].color == 0xFFFB8C00);
+        CHECK(used.quotas[3].text == L"40" && used.quotas[3].key == L"Ex");
+        CHECK(used.quotas[1].fillUnits == 800); CHECK_NEAR(used.quotas[1].fillSweep, 216);
+        CHECK(used.quotas[0].fillUnits == 100); CHECK_NEAR(used.quotas[0].fillSweep, 27);
+        CHECK(gauge({10, 20, -1, 95}, L"openai").quotas[3].key == L"Cr");
+        CHECK(gauge({130, -1, -1, -1}).quotas[0].text == L"100");
+        // Remaining: what is left of each, in its usage color still.
         AccountMeters left = gauge({10, 80, -1, 40}, L"anthropic", BarMode::Remaining);
-        CHECK(left.barMask == 0b0010 && left.headline == L"20" && left.headlineColor == 0xFFFB8C00);
+        CHECK(left.quotas[0].text == L"90" && left.quotas[1].text == L"20" && left.quotas[1].color == 0xFFFB8C00);
         CHECK(left.quotas[1].fillUnits == 200); CHECK_NEAR(left.quotas[1].fillSweep, 54);
-        CHECK(gauge({130, -1, -1, -1}, L"anthropic", BarMode::Remaining).headline == L"0");
+        CHECK(gauge({130, -1, -1, -1}, L"anthropic", BarMode::Remaining).quotas[0].text == L"0");
         CHECK(gauge({130, -1, -1, -1}, L"anthropic", BarMode::Remaining).quotas[0].fill.empty());
         // The countdown is the headline tiles'.
         CHECK(gauge({10, 80, -1, 40}, L"anthropic", BarMode::Used, true).headlineCountdown.empty());
@@ -1278,6 +1301,14 @@ static void RunFaceTileTests() {
         CHECK_NEAR(gauge(kFiveHours).paceAngle, 135 + pad);
         CHECK_NEAR(gauge(0).paceAngle, 405 - pad);
         CHECK(gauge(kFiveHours + 1000).paceHalo.empty());
+        // A second gauge's tick crosses its own arc, 36 DIPs along.
+        AccountData two = Fresh();
+        two.win5h = two.winWeek = Window(10, 9000000);
+        AccountMeters pair = AccountMeterState(Display(), BarLayout::Gauge, Account(L"anthropic", L"A", {true, true, false, false}),
+                                               two, 0, 0);
+        point(pair.quotas[0].paceHalo[0], 17.75, 5);
+        point(pair.quotas[1].paceHalo[0], 36 + 17.75, 5);
+        point(pair.quotas[1].paceCore[0].segments[1], 36 + 15, -0.5);
     });
 
     Run("pies: face sizes and pie centres per quota count, down the first column from the third", [] {
@@ -3678,6 +3709,28 @@ static void RunSideTests() {
         AccountMeters one = AccountMeterState(side(off), BarLayout::Sparkline,
                                               Account(L"anthropic", L"A", {true, false, false, false}), data, 0, 0);
         CHECK_NEAR(one.faceWidth, 40); CHECK_NEAR(one.faceHeight, 32);
+    });
+
+    Run("side taskbar: gauges stack down, each drawn as across", [] {
+        auto gauges = [](const MeterDisplay& d) {
+            return AccountMeterState(d, BarLayout::Gauge, Account(L"anthropic", L"A", {true, true, false, true}),
+                                     Fresh({10, 80, -1, 40}), 0, 0);
+        };
+        // Three 32 DIP gauges 4 DIPs apart: 32 across, 104 down, each track's top half a DIP into
+        // its place.
+        AccountMeters down = gauges(side());
+        CHECK(down.barMask == 0b1011);
+        CHECK_NEAR(down.faceWidth, 32); CHECK_NEAR(down.faceHeight, 104);
+        for (auto [w, top] : {std::pair{0, 0.0}, std::pair{1, 36.0}, std::pair{3, 72.0}}) {
+            CHECK_NEAR(down.quotas[w].gaugeLeft, 0); CHECK_NEAR(down.quotas[w].gaugeTop, top);
+            CHECK_NEAR(down.quotas[w].track[0].segments[1].x, 16); CHECK_NEAR(down.quotas[w].track[0].segments[1].y, top + 0.5);
+        }
+        // Across the screen: side by side, with the same fonts and centres in each gauge.
+        AccountMeters across = gauges(Display());
+        CHECK_NEAR(across.faceWidth, 104); CHECK_NEAR(across.faceHeight, 32);
+        CHECK_NEAR(across.quotas[3].gaugeLeft, 72); CHECK_NEAR(across.quotas[3].gaugeTop, 0);
+        CHECK_NEAR(down.faceFont, across.faceFont); CHECK_NEAR(down.faceKeyFont, across.faceKeyFont);
+        CHECK_NEAR(down.faceNumberCenter, across.faceNumberCenter); CHECK_NEAR(down.faceKeyCenter, across.faceKeyCenter);
     });
 
     Run("side taskbar: the quota matrix takes one column, at the number size", [] {

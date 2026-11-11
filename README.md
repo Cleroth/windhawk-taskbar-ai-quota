@@ -5,7 +5,7 @@ Can show on the primary taskbar only, all taskbars, or one specific monitor.
 
 ![Details flyout above the taskbar's quota tiles](screenshots/overview.png)
 
-![Tile styles in the settings window](screenshots/styles.png)
+![Tile styles in the settings window](screenshots/styles-2.png)
 
 ## What It Shows
 

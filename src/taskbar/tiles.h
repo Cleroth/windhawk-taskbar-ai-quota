@@ -1,8 +1,7 @@
 // Tile layouts: logo + headline %, the face tiles (rings, rounded square, gauge, clock pies), the
 // burn-up sparkline and the quota matrix. A tile shows the account's identity (provider logo,
 // optionally with a number badge, or short text) and its tile quotas: the meters the bar layouts
-// show, in slot order (a gauge: the most-used one). BuildAccountTile creates a tile;
-// UpdateAccountTile
+// show, in slot order. BuildAccountTile creates a tile; UpdateAccountTile
 // regenerates its meter shapes whenever their inputs change, then applies values in place. Bar
 // columns with a logo identity show the same identity (BuildTileIdentity, UpdateTileIdentity), and
 // every column takes the tiles' hover and open-flyout background. Values, identity text and
@@ -319,28 +318,35 @@ static StackPanel BuildAccountTile(std::vector<AccountConfig> const& accounts, s
     FontFamily displayFont(L"Segoe UI Variable Display, Segoe UI");  // i18n-en
 
     if (IsFaceTile(layout)) {
-        // Gauges and pies: the face beside the identity. A gauge's number and key are centred
-        // across it, moved down from its middle to their model centres (UpdateAccountTile).
+        // Gauges and pies: the face beside the identity. Gauges: each quota slot's number and key,
+        // and the dash shown without a quota, centred in the face and moved from its middle to
+        // their model centres (UpdateAccountTile).
         Grid face;
         face.IsHitTestVisible(false);
         face.VerticalAlignment(VerticalAlignment::Center);
         Grid meters;
         face.Children().Append(meters);
         if (layout == BarLayout::Gauge) {
-            auto centred = [&](TextBlock const& text) {
+            auto centred = [&](bool number) {
+                TextBlock text;
+                if (number) {
+                    text.FontFamily(displayFont);
+                    text.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+                } else {
+                    text.Opacity(0.6);
+                }
                 text.TextLineBounds(TextLineBounds::Tight);
                 text.HorizontalAlignment(HorizontalAlignment::Center);
                 text.VerticalAlignment(VerticalAlignment::Center);
                 text.RenderTransform(TranslateTransform{});
                 face.Children().Append(text);
+                return text;
             };
-            tile.headline = TextBlock{};
-            tile.headline.FontFamily(displayFont);
-            tile.headline.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-            centred(tile.headline);
-            tile.headlineKey = TextBlock{};
-            tile.headlineKey.Opacity(0.6);
-            centred(tile.headlineKey);
+            tile.headline = centred(true);
+            for (int w = 0; w < kQuotaBarCount; w++) {
+                tile.gaugeNumbers[w] = centred(true);
+                tile.gaugeKeys[w] = centred(false);
+            }
         }
         tile.face = face;
         tile.meters = meters;
@@ -713,16 +719,28 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
                     tile.text.MaxWidth(meters.ringTextWidth);
                 }
                 tile.warn.Margin({0, meters.ringWarnTop, -3, 0});
-            } else if (tile.headline && tile.headlineKey) {
-                // A gauge's number at its font, and both at their centres; the key's font follows
-                // the key (below).
-                tile.headline.FontSize(meters.faceFont);
-                double middle = meters.faceHeight / 2;
-                if (auto shift = tile.headline.RenderTransform().try_as<TranslateTransform>()) {
-                    shift.Y(meters.faceNumberCenter - middle);
-                }
-                if (auto shift = tile.headlineKey.RenderTransform().try_as<TranslateTransform>()) {
-                    shift.Y(meters.faceKeyCenter - middle);
+            } else if (tile.headline) {
+                // Gauges: each shown quota's number and key at their fonts and centres in its
+                // gauge, and the dash in the first one's place.
+                auto place = [&](TextBlock const& text, double size, double x, double y) {
+                    text.FontSize(size);
+                    if (auto shift = text.RenderTransform().try_as<TranslateTransform>()) {
+                        shift.X(x - meters.faceWidth / 2);
+                        shift.Y(y - meters.faceHeight / 2);
+                    }
+                };
+                double middle = geometry.size / 2;
+                place(tile.headline, meters.faceFont, middle, meters.faceNumberCenter);
+                for (int w = 0; w < kQuotaBarCount; w++) {
+                    bool shown = barMask & (1 << w);
+                    for (TextBlock const& text : {tile.gaugeNumbers[w], tile.gaugeKeys[w]}) {
+                        text.Visibility(shown ? Visibility::Visible : Visibility::Collapsed);
+                    }
+                    if (!shown) continue;
+                    QuotaMeter const& m = meters.quotas[w];
+                    place(tile.gaugeNumbers[w], meters.faceFont, m.gaugeLeft + middle, m.gaugeTop + meters.faceNumberCenter);
+                    place(tile.gaugeKeys[w], meters.faceKeyFont, m.gaugeLeft + middle, m.gaugeTop + meters.faceKeyCenter);
+                    tile.gaugeKeys[w].Text(m.key);
                 }
             }
         } else if (!tile.countdown) {
@@ -832,6 +850,12 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
     for (int w = 0; w < kQuotaBarCount && !matrix && !spark; w++) {
         if (!(barMask & (1 << w))) continue;
         QuotaMeter const& m = meters.quotas[w];
+        // A gauge's number, in its quota's usage color like the fill.
+        if (tile.gaugeNumbers[w] && (m.text != ap.percentTexts[w] || m.color != ap.fillColor[w])) {
+            tile.gaugeNumbers[w].Text(m.text);
+            tile.gaugeNumbers[w].Foreground(SolidColorBrush(ArgbColor(m.color)));
+            ap.percentTexts[w] = m.text;
+        }
         if (m.fillUnits != ap.fillPx[w] || m.color != ap.fillColor[w]) {
             if (face && tile.arcs[w]) {
                 // Face fills are flat.
@@ -864,17 +888,12 @@ static void UpdateAccountTile(QuotaUiInstance& state, size_t index, AccountMeter
         }
     }
 
-    if (tile.headlineKey) {
-        // A gauge's key font fits its key, so it follows the text.
-        std::wstring headline = meters.headline + L"\n" + meters.headlineKey + L"\n" + meters.headlineCountdown + L"\n" +
-                                std::to_wstring(meters.faceKeyFont);
+    if (tile.headline) {
+        std::wstring headline = meters.headline + L"\n" + meters.headlineKey + L"\n" + meters.headlineCountdown;
         if (headline != ap.headline || meters.headlineColor != ap.headlineColor) {
-            if (tile.headline) {
-                tile.headline.Text(meters.headline);
-                tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
-            }
-            if (face) tile.headlineKey.FontSize(meters.faceKeyFont);
-            tile.headlineKey.Text(meters.headlineKey);
+            tile.headline.Text(meters.headline);
+            tile.headline.Foreground(SolidColorBrush(ArgbColor(meters.headlineColor)));
+            if (tile.headlineKey) tile.headlineKey.Text(meters.headlineKey);
             if (tile.countdown) tile.countdown.Text(meters.headlineCountdown);
             ap.headline = std::move(headline);
             ap.headlineColor = meters.headlineColor;

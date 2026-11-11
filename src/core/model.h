@@ -45,7 +45,7 @@ enum class BarLayout {
     Vertical,
     SegmentedRing,
     ConcentricRings,
-    Gauge,          // The most-used quota's 270-degree arc around its number, the identity beside.
+    Gauge,          // A 270-degree arc per quota around its number, the identity beside.
     ClockPies,      // A pie per quota with an elapsed-time hand, the identity beside.
     RoundedSquare,  // Segmented-ring arcs along a rounded square around the identity.
     LogoHeadline,
