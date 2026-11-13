@@ -176,13 +176,13 @@ first, then reads/updates XAML.
   `HookTaskbarDllSymbols` and `TryGetTaskbarElementAbi` first. Positions depend on taskbar element
   names (tray anchors, `TaskbarFrame`/`RootGrid`/`TaskbarFrameRepeater`, Start's automation ID).
 - Symbols come from Windhawk's local cache, then the published mod's online cache entry, then
-  Microsoft's PDB. Windhawk skips the online cache for a `local@` build, so
-  `HookTaskbarDllSymbols` names the entry. Its offsets can be ported from the previous Windows
-  build without a PDB and are used unchecked, bar the `FrameHeight` prologue. A build hooking a
-  symbol the published version doesn't needs the PDB; when Microsoft hasn't published it, init
-  fails and Windhawk unloads the mod ("Unloaded" in `Engine\ModsWritable\mod-status`), then
-  throttles retries until its service restarts: 4 h for a load at Explorer start, 1 min for a
-  toggle, none with mod logging on.
+  Microsoft's PDB. The entry's offsets can be ported from the previous Windows build without a
+  PDB and are used unchecked, bar the `FrameHeight` prologue. Windhawk skips the online cache for
+  a `local@` build, and the mod never names a cache URL (the catalog maintainer's rule), so a
+  local build needs the PDB; when Microsoft hasn't published it, init fails and Windhawk unloads
+  the mod ("Unloaded" in `Engine\ModsWritable\mod-status`), then throttles retries until its
+  service restarts: 4 h for a load at Explorer start, 1 min for a toggle, none with mod logging
+  on.
 - Windows' native taskbar position setting docks a taskbar at any edge: RootGrid's
   `DockingStates` names it, and a move re-lays out the same tree (no `TrayUI::StartTaskbar`), so
   the edge watch rebuilds. Only that state picks the side layout, never the window's shape: a
