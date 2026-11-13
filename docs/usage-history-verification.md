@@ -94,6 +94,19 @@ history** or **Delete history...** removes that account's.
 - Switching groups changes neither recorded history nor CSV meters: exports of the same account
   scope and range from different groups hold the same meters.
 
+## Anthropic extra usage (an account with a spending limit, recorded since before 2.21.0)
+
+- The details flyout's extra usage row gives a reset at the next month's start (00:00 UTC on the
+  1st, in local time) and charts this month from its first recorded reading on, those recorded
+  before 2.21.0 included, with its pace line.
+- **Settings > Display > Extra usage chart**: **Week** spans the weekly quota's window, its now
+  line under the weekly chart's; **Off** shows the bar with its pace marker. Both keep the reset
+  line.
+- In the viewer, the extra usage line breaks at each month's start, not where 2.21.0 was
+  installed. A CSV export has no reset for extra usage, before or after it.
+- Across a month's start (or with the clock set past it): usage returns to 0, the reset moves a
+  month on, and the chart starts over.
+
 ## Antigravity thinning
 
 - With an Antigravity account recorded for more than 15 days, after a restart and its first

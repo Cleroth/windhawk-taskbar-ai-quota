@@ -102,6 +102,15 @@ enum class SparklineSpan {
     Hours36,
     Hours48,
 };
+
+// The details flyout's chart of Anthropic's extra usage, and a sparkline of its own: none (the
+// flyout's bar), over its month, or over the account's weekly window while that runs, on the
+// month's scale.
+enum class ExtraUsageChart {
+    Off,
+    Month,
+    Week,
+};
 // Logo size in percent of each style's standard size; the number badge's text size and offsets
 // in DIPs.
 static constexpr int kLogoScaleMin = 50;
@@ -293,6 +302,7 @@ struct Settings {
     bool showExtraBarAmounts = false;
     // additional_rate_limits lines (Codex Spark, gpt-reserve, ...) and the Spark plan name.
     bool showOpenAiExtraLimits = false;
+    ExtraUsageChart extraUsageChart = ExtraUsageChart::Month;
     UsagePalette usagePalette = UsagePalette::Default;
     // The Custom palette's colors, kept while another palette is chosen.
     std::array<COLORREF, 4> customUsageColors = kDefaultUsageColors;
@@ -319,6 +329,9 @@ struct WindowUsage {
     ULONGLONG resetUnixMs = 0;
     ULONGLONG windowDurationMs = 0;
     bool notYetStarted = false;  // Anthropic: no usage yet and an explicitly null reset.
+    // Anthropic extra usage: no reported reset, so the window is the calendar month (UTC). History
+    // records none for it and derives the month from each reading's time.
+    bool calendarMonth = false;
 };
 
 // A quota the details flyout lists after its main rows, without a taskbar bar, history or alerts:

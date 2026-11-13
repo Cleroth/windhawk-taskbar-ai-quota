@@ -20,6 +20,7 @@ struct FlyoutDisplay {
     bool warn = false;
     bool refreshing = false;
     bool visualTestMode = false;
+    ExtraUsageChart extraUsageChart = ExtraUsageChart::Month;  // MeterDisplay::extraUsageChart
     // What the provider's status page shows, and the taskbar mark's color for it (0: none).
     ProviderOutage outage;
     uint32_t outageColor = 0;
@@ -437,10 +438,9 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         details.Children().Append(row.visual);
 
         if (charted) {
-            // Usage chart: card-tinted plot and the even-pace diagonal from the window start to
-            // the reset (rising; UpdateAccountFlyout turns it in remaining mode), under the
-            // recorded usage (area, segments, isolated readings), projection, now line and
-            // current point, whose geometry UpdateAccountFlyout sets.
+            // Usage chart: card-tinted plot and the even-pace line, under the recorded usage
+            // (area, segments, isolated readings), projection, now line and current point;
+            // UpdateAccountFlyout sets their geometry.
             Grid chart;
             chart.Width(kFlyoutChartWidth);
             chart.Height(kFlyoutChartHeight);
@@ -465,10 +465,6 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
             bounds.Rect({0, 0, (float)kFlyoutChartWidth, (float)kFlyoutChartHeight});
             canvas.Clip(bounds);
             wuxs::Line pace;
-            pace.X1(0);
-            pace.Y1(kFlyoutChartHeight - kFlyoutChartInset);
-            pace.X2(kFlyoutChartWidth);
-            pace.Y2(kFlyoutChartInset);
             paceStroke(pace);
             canvas.Children().Append(pace);
             row.chartPace = pace;
@@ -925,20 +921,28 @@ static void UpdateAccountFlyout(
             show(row.projection, !projection.empty());
 
             // Usage chart in place of the bar: used %, or % left in remaining mode, over the
-            // displayed reading's window, with the projection. Shapes are regenerated only when
-            // the drawn geometry changes.
+            // displayed reading's window, with the projection; Anthropic's extra usage per its
+            // chart setting. Shapes are regenerated only when the drawn geometry changes.
             bool charted = row.chart && !trace.empty() && wu.windowDurationMs > 0 &&
-                           wu.resetUnixMs > wu.windowDurationMs;
+                           wu.resetUnixMs > wu.windowDurationMs &&
+                           !(r == kFlyoutExtraRow && account.provider == L"anthropic" &&
+                             display.extraUsageChart == ExtraUsageChart::Off);
             show(row.visual, !charted);
             show(row.chart, charted);
             if (charted) {
                 anyChart = true;
                 using winrt::Windows::Foundation::Point;
-                double start = (double)(wu.resetUnixMs - wu.windowDurationMs);
+                // A rolled-back clock can put now before the newest reading.
+                ULONGLONG now = std::max(display.now, trace.back().timeMs);
+                // The span drawn: the window; extra usage, its chart's (ExtraUsageChartSpan).
+                const ULONGLONG windowStart = wu.resetUnixMs - wu.windowDurationMs;
+                const WindowUsage& over = r == kFlyoutExtraRow ?
+                    ExtraUsageChartSpan(display.extraUsageChart, account, d, now) : wu;
+                const ULONGLONG start = over.resetUnixMs - over.windowDurationMs, span = over.windowDurationMs;
                 auto snap = [](double dip) { return (float)(std::round(dip * 4) / 4); };
                 auto xAt = [&](ULONGLONG timeMs) {
-                    return snap(std::clamp(((double)timeMs - start) / wu.windowDurationMs,
-                                           0.0, 1.0) * kFlyoutChartWidth);
+                    return snap(std::clamp(((double)timeMs - (double)start) / (double)span, 0.0, 1.0) *
+                                kFlyoutChartWidth);
                 };
                 auto yAt = [&](double used) {
                     double shown = std::clamp(remainingMode ? 100.0 - used : used, 0.0, 100.0);
@@ -946,25 +950,46 @@ static void UpdateAccountFlyout(
                                 (kFlyoutChartHeight - 2 * kFlyoutChartInset) * shown / 100.0);
                 };
                 FlyoutChartShape shape;
-                for (size_t begin = 0, end; begin < trace.size(); begin = end) {
-                    std::vector<Point> run{{xAt(trace[begin].timeMs), yAt(trace[begin].used)}};
-                    for (end = begin + 1; end < trace.size() && trace[end].connect; end++) {
-                        run.push_back({xAt(trace[end].timeMs), yAt(trace[end].used)});
+                // Readings before a span starting inside the window drop out.
+                const std::vector<TileTracePoint> plotted = start > windowStart ? TraceFrom(trace, start) : trace;
+                for (size_t begin = 0, end; begin < plotted.size(); begin = end) {
+                    std::vector<Point> run{{xAt(plotted[begin].timeMs), yAt(plotted[begin].used)}};
+                    for (end = begin + 1; end < plotted.size() && plotted[end].connect; end++) {
+                        run.push_back({xAt(plotted[end].timeMs), yAt(plotted[end].used)});
                     }
                     if (run.size() == 1) shape.dots.push_back(run.front());
                     else shape.lines.push_back(std::move(run));
                 }
-                // A rolled-back clock can put now before the newest reading.
-                ULONGLONG now = std::max(display.now, trace.back().timeMs);
                 shape.now = {xAt(now), yAt(wu.pct)};
-                if (projected) shape.projectionEnd = {xAt(projected->toMs), yAt(projected->toUsed)};
+                if (projected) {
+                    // Cut at the span's end, before a later reset or limit.
+                    ULONGLONG toMs = std::min(projected->toMs, start + span);
+                    double toUsed = projected->toUsed;
+                    if (toMs < projected->toMs) {
+                        toUsed = wu.pct + (toUsed - wu.pct) * ((double)toMs - (double)projected->fromMs) /
+                                              ((double)projected->toMs - (double)projected->fromMs);
+                    }
+                    shape.projectionEnd = {xAt(toMs), yAt(toUsed)};
+                }
+                // The window's even use, 0% at its start to 100% at its reset, over the part of
+                // it in the span.
+                const ULONGLONG paceFrom = std::max(start, windowStart), paceTo = std::min(start + span, wu.resetUnixMs);
+                if (paceFrom < paceTo) {
+                    auto even = [&](ULONGLONG time) {
+                        return 100.0 * double(time - windowStart) / double(wu.windowDurationMs);
+                    };
+                    shape.paceFrom = {xAt(paceFrom), yAt(even(paceFrom))};
+                    shape.paceTo = {xAt(paceTo), yAt(even(paceTo))};
+                }
                 shape.color = colorValue;
-                shape.remaining = remainingMode;
 
                 FlyoutChartShape& drawn = row.chartShape;
-                if (shape.remaining != drawn.remaining) {
-                    row.chartPace.Y1(yAt(0));
-                    row.chartPace.Y2(yAt(100));
+                if (shape.paceFrom != drawn.paceFrom || shape.paceTo != drawn.paceTo) {
+                    show(row.chartPace, shape.paceFrom.X >= 0);
+                    row.chartPace.X1(shape.paceFrom.X);
+                    row.chartPace.Y1(shape.paceFrom.Y);
+                    row.chartPace.X2(shape.paceTo.X);
+                    row.chartPace.Y2(shape.paceTo.Y);
                 }
                 if (shape.lines != drawn.lines || shape.dots != drawn.dots) {
                     // Each run is a stroked figure over a filled one closed to the plot bottom.

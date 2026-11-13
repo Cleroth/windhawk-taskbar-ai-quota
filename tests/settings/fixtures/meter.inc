@@ -2991,6 +2991,123 @@ static void RunSparklineTests() {
         reading(both.quotas[kExtraUsageBar], 50, 18);
     });
 
+    Run("sparkline: Anthropic's extra usage chart per its setting: its month, the weekly window on the month's scale, "
+        "or none of its own", [] {
+        const ULONGLONG kHour = 60 * kMinute, kDay = 24 * kHour;
+        // A week that started 3 days before kNow and a 30-day month that started 10 days before it,
+        // 40% of its budget used: a lone reading 6 days ago, then a run from 4 days ago. The corner
+        // text off, so extra usage has a chart of its own beside the weekly one.
+        AccountData data = Fresh();
+        data.winWeek = {45, kNow + 4 * kDay, kWeeklyWindowMs};
+        data.extraUsage = {40, kNow + 20 * kDay, 30 * kDay};
+        const std::vector<TileTracePoint> spent = {{kNow - 6 * kDay, 10, false}, {kNow - 4 * kDay, 20, false},
+                                                   {kNow - 2 * kDay, 30, true}, {kNow, 40, true}};
+        auto charts = [](ExtraUsageChart chart, const AccountData& data, const std::vector<TileTracePoint>& trace,
+                         std::array<bool, kQuotaBarCount> bars = {false, true, false, true},
+                         SparklineSpan span = SparklineSpan::Window, std::wstring provider = L"anthropic") {
+            MeterDisplay d = plot([&](Settings& s) {
+                s.sparklineExtra = SparklineExtra::Off;
+                s.extraUsageChart = chart;
+                s.sparklineSpan = span;
+            });
+            return AccountMeterState(d, BarLayout::Sparkline, Account(provider, L"A", bars), data, 0, 0,
+                                     [&](int slot, const WindowUsage&) {
+                                         return slot == kExtraUsageBar ? trace : std::vector<TileTracePoint>{};
+                                     });
+        };
+        CHECK(Display().extraUsageChart == ExtraUsageChart::Month);
+        CHECK(Display(With([](Settings& s) { s.extraUsageChart = ExtraUsageChart(7); })).extraUsageChart == ExtraUsageChart::Week);
+        CHECK(Display(With([](Settings& s) { s.extraUsageChart = ExtraUsageChart(-3); })).extraUsageChart == ExtraUsageChart::Off);
+
+        // Month, the default: the month across the plot, kNow a third in (33.33, drawn at 33.25); the
+        // lone reading a dot on day 4, the run from day 6; the month's diagonal; 4% a day reaches the
+        // limit 15 days on, at 83.33 (83.25), marked.
+        AccountMeters month = charts(ExtraUsageChart::Month, data, spent);
+        CHECK(month.barMask == 0b1010);
+        const auto& whole = month.quotas[kExtraUsageBar].spark;
+        reading(month.quotas[kExtraUsageBar], 33.25, 14);
+        circle(whole[kSparkDots], 13.25, 20, 1.5);
+        path(whole[kSparkLines], 20, 18, {{26.75, 16}, {33.25, 14}});
+        line(whole[kSparkPace], 0, 22, 100, 2);
+        line(whole[kSparkProjection], 33.25, 14, 83.25, 2);
+        circle(whole[kSparkLimit], 83.25, 2, 1.75);
+
+        // Week: the weekly window across the plot, as on the weekly chart beside it: kNow 3/7 across
+        // (42.86, at 42.75) on both. The dot before the week drops out; the run crosses the week's
+        // start at 25%: (0, 17), then 30% a day in (14.29, at 14.25). The month's diagonal across the
+        // week, from day 7 (23.33%, y 17.33 at 17.25) to day 14 (46.67%, y 12.67 at 12.75); the
+        // projection cut at the week's end, 4 days on at 56% (y 10.8, at 10.75), unmarked.
+        AccountMeters week = charts(ExtraUsageChart::Week, data, spent);
+        CHECK(week.barMask == 0b1010);
+        const auto& zoomed = week.quotas[kExtraUsageBar].spark;
+        reading(week.quotas[kWeeklyBar], 42.75, 13);
+        reading(week.quotas[kExtraUsageBar], 42.75, 14);
+        CHECK(zoomed[kSparkDots].empty());
+        path(zoomed[kSparkLines], 0, 17, {{14.25, 16}, {42.75, 14}});
+        line(zoomed[kSparkPace], 0, 17.25, 100, 12.75);
+        line(zoomed[kSparkProjection], 42.75, 14, 100, 10.75);
+        CHECK(zoomed[kSparkLimit].empty());
+        // A span around now narrows the week as it does the weekly chart: kNow half way on both, the
+        // run from 35% at the span's start (0, 15); the diagonal from day 9 (30%, y 16) to day 11
+        // (36.67%, y 14.67 at 14.75).
+        AccountMeters day = charts(ExtraUsageChart::Week, data, spent, {false, true, false, true}, SparklineSpan::Hours24);
+        reading(day.quotas[kWeeklyBar], 50, 13);
+        reading(day.quotas[kExtraUsageBar], 50, 14);
+        path(day.quotas[kExtraUsageBar].spark[kSparkLines], 0, 15, {{50, 14}});
+        line(day.quotas[kExtraUsageBar].spark[kSparkPace], 0, 16, 100, 14.75);
+
+        // A week that began before the month did (the month a day old, 5% used, 2% twelve hours
+        // ago): the week's span still, with the month's readings. The diagonal starts where the month
+        // does, 2/7 across (28.57, at 28.5), and reaches day 5's 16.67% (y 18.67, at 18.75) at the
+        // week's end; no projection in the month's first 5%.
+        AccountData young = data;
+        young.extraUsage = {5, kNow + 29 * kDay, 30 * kDay};
+        AccountMeters straddle = charts(ExtraUsageChart::Week, young, {{kNow - 12 * kHour, 2, false}, {kNow, 5, true}});
+        const auto& early = straddle.quotas[kExtraUsageBar].spark;
+        reading(straddle.quotas[kExtraUsageBar], 42.75, 21);
+        path(early[kSparkLines], 35.75, 21.5, {{42.75, 21}});
+        line(early[kSparkPace], 28.5, 22, 100, 18.75);
+        CHECK(early[kSparkProjection].empty());
+
+        // Week without a running weekly window (none reported, not yet started, its reset passed, or
+        // starting later), or on another provider's monthly quota: the month, as with Month.
+        for (WindowUsage weekly : {WindowUsage{-1, kNow + 4 * kDay, kWeeklyWindowMs}, WindowUsage{0, 0, kWeeklyWindowMs, true},
+                                   WindowUsage{45, kNow - kHour, kWeeklyWindowMs},
+                                   WindowUsage{45, kNow + 8 * kDay, kWeeklyWindowMs}}) {
+            AccountData other = data;
+            other.winWeek = weekly;
+            reading(charts(ExtraUsageChart::Week, other, spent, {false, false, false, true}).quotas[kExtraUsageBar], 33.25, 14);
+        }
+        AccountMeters monthly = charts(ExtraUsageChart::Week, data, spent, {false, true, false, true}, SparklineSpan::Window,
+                                       L"opencode");
+        reading(monthly.quotas[kExtraUsageBar], 33.25, 14);
+
+        // Off: no chart of its own beside the weekly one; alone, the quota as without a window, its
+        // reading at the plot's end. Other providers' monthly quotas keep their chart.
+        AccountMeters off = charts(ExtraUsageChart::Off, data, spent);
+        CHECK(off.barMask == 0b0010 && bare(off.quotas[kExtraUsageBar]));
+        AccountMeters alone = charts(ExtraUsageChart::Off, data, spent, {false, false, false, true});
+        CHECK(alone.barMask == 0b1000);
+        reading(alone.quotas[kExtraUsageBar], 96.4, 14);
+        CHECK(alone.quotas[kExtraUsageBar].spark[kSparkPace].empty() && alone.quotas[kExtraUsageBar].spark[kSparkLines].empty() &&
+              alone.quotas[kExtraUsageBar].spark[kSparkProjection].empty());
+        CHECK(charts(ExtraUsageChart::Off, data, spent, {false, true, false, true}, SparklineSpan::Window, L"opencode").barMask ==
+              0b1010);
+        // The bars keep its pace tick whatever the chart: a third of the month in.
+        AccountMeters bars = AccountMeterState(Display(With([](Settings& s) { s.extraUsageChart = ExtraUsageChart::Off; })),
+                                               BarLayout::Stacked, Account(L"anthropic", L"A", {false, false, false, true}),
+                                               data, 0, 0);
+        CHECK(bars.quotas[kExtraUsageBar].paceVisible);
+
+        // A span's start between readings fabricates nothing; at a reading it starts there; past the
+        // last one nothing is left.
+        std::vector<TileTracePoint> gap = TraceFrom(spent, kNow - 5 * kDay);
+        CHECK(gap.size() == 3 && gap[0].timeMs == kNow - 4 * kDay && gap[0].used == 20);
+        std::vector<TileTracePoint> exact = TraceFrom(spent, kNow - 2 * kDay);
+        CHECK(exact.size() == 2 && exact[0].timeMs == kNow - 2 * kDay && exact[0].used == 30 && exact[1].connect);
+        CHECK(TraceFrom(spent, kNow + 1).empty() && TraceFrom(spent, 0).size() == 4);
+    });
+
     Run("sparkline: remaining mode plots what is left, its runs over areas from the bottom, down to the limit", [] {
         // 100% left at the top inset, 0% at the bottom one: y = 2 + used / 5 on the 100 x 24 plot.
         const MeterDisplay left = plot([](Settings& s) { s.barMode = BarMode::Remaining; });

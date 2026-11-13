@@ -50,14 +50,14 @@ static void RunDisplayPageTests() {
             {SettingsField::UsageColorBelowYellow, 0x102030}, {SettingsField::UsageColorRed, 0xFFFFFF},
             {kYellow, 30}, {kOrange, 60}, {kRed, 80},
             {SettingsField::ShowStaleWarning, 0}, {SettingsField::ShowProviderOutages, 0},
-            {SettingsField::ShowOpenAiExtraLimits, 1}};
+            {SettingsField::ShowOpenAiExtraLimits, 1}, {SettingsField::ExtraUsageChart, 2}};
         for (auto [field, value] : values) {
             SettingsAssign(s, field, value);
             CHECK(SettingsFieldValue(s, field) == value);
         }
         CHECK(s.material == Material::TintedWallpaper && s.barMode == BarMode::Remaining &&
               s.usagePalette == UsagePalette::Custom && !s.showStaleWarning && !s.showProviderOutages &&
-              s.showOpenAiExtraLimits);
+              s.showOpenAiExtraLimits && s.extraUsageChart == ExtraUsageChart::Week);
         // Each color field sets its band's custom color only.
         CHECK((s.customUsageColors == std::array<COLORREF, 4>{0x102030, kDefaultUsageColors[1], kDefaultUsageColors[2],
                                                               0xFFFFFF}));
@@ -67,10 +67,17 @@ static void RunDisplayPageTests() {
             {SettingsField::Material, 5, 4}, {SettingsField::Material, INT_MAX, 4},
             {SettingsField::Material, -1, 0}, {SettingsField::Material, INT_MIN, 0},
             {SettingsField::UsagePalette, 3, 2}, {SettingsField::UsagePalette, -1, 0},
-            {SettingsField::UsageColorYellow, int(0xFF123456), 0x123456}, {SettingsField::UsageColorOrange, -1, 0xFFFFFF}};
+            {SettingsField::UsageColorYellow, int(0xFF123456), 0x123456}, {SettingsField::UsageColorOrange, -1, 0xFFFFFF},
+            {SettingsField::ExtraUsageChart, 3, 2}, {SettingsField::ExtraUsageChart, -1, 0}};
         for (auto [field, value, expected] : clamps) {
             SettingsAssign(s, field, value);
             CHECK(SettingsFieldValue(s, field) == expected);
+        }
+        // Extra usage chart values in the dropdown's order: Off, Month, Week.
+        const ExtraUsageChart charts[] = {ExtraUsageChart::Off, ExtraUsageChart::Month, ExtraUsageChart::Week};
+        for (int value = 0; value < 3; value++) {
+            SettingsAssign(s, SettingsField::ExtraUsageChart, value);
+            CHECK(s.extraUsageChart == charts[value]);
         }
         // Material values in the dropdown's order: Acrylic, Mica, Mica Alt, Tinted wallpaper, Solid.
         const Material materials[] = {Material::Acrylic, Material::Mica, Material::MicaAlt,
@@ -89,10 +96,11 @@ static void RunDisplayPageTests() {
             CHECK(SettingsFieldRange(field)->minimum == 0 && SettingsFieldRange(field)->maximum == 100);
         }
         CHECK(!SettingsFieldRange(SettingsField::BarMode) && !SettingsFieldRange(SettingsField::Material) &&
-              !SettingsFieldRange(SettingsField::UsagePalette) && !SettingsFieldRange(SettingsField::UsageColorRed));
+              !SettingsFieldRange(SettingsField::UsagePalette) && !SettingsFieldRange(SettingsField::UsageColorRed) &&
+              !SettingsFieldRange(SettingsField::ExtraUsageChart));
     });
 
-    Run("display reset: the thirteen Display fields back to defaults; every scalar setting in one page reset", [] {
+    Run("display reset: the fourteen Display fields back to defaults; every scalar setting in one page reset", [] {
         const Settings defaults;
         Settings changed;
         // Any material but the default.
@@ -106,6 +114,7 @@ static void RunDisplayPageTests() {
         changed.showStaleWarning = false;
         changed.showProviderOutages = false;
         changed.showOpenAiExtraLimits = true;
+        changed.extraUsageChart = ExtraUsageChart::Week;
         // Other pages' fields stay, the bar text's included.
         changed.barLength = 220;
         changed.percentTextVisibility = PercentTextVisibility::Always;
@@ -125,17 +134,18 @@ static void RunDisplayPageTests() {
         expected.showStaleWarning = defaults.showStaleWarning;
         expected.showProviderOutages = defaults.showProviderOutages;
         expected.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
+        expected.extraUsageChart = ExtraUsageChart::Month;
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetDisplay, 0);
         CHECK(reset == expected);
         std::vector<SettingsField> display = SettingsGroupFields(SettingsField::ResetDisplay);
-        CHECK(display.size() == 13 && display[0] == SettingsField::Material);
+        CHECK(display.size() == 14 && display[0] == SettingsField::Material);
         for (SettingsField field : display) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
             CHECK(SettingsFieldValue(changed, field) != SettingsFieldValue(defaults, field));
         }
 
-        // All 69 scalar settings changed: the four page resets restore every one, and no field
+        // All 70 scalar settings changed: the four page resets restore every one, and no field
         // belongs to two groups (Show on holds the monitor mode and number; Keep history and its
         // custom days both set the retention).
         Settings every = changed;
@@ -201,7 +211,7 @@ static void RunDisplayPageTests() {
         fresh.accounts = every.accounts;
         CHECK(restored == fresh);
         std::sort(seen.begin(), seen.end());
-        CHECK(seen.size() == 69 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+        CHECK(seen.size() == 70 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     });
 
     Run("projection: thresholds stay ordered while typing; out-of-range and bad text", [] {
@@ -286,6 +296,24 @@ static void RunDisplayPageTests() {
         CHECK(edits.drafts.empty() && store.settings.material == defaults.material);
     });
 
+    Run("controller: the extra usage chart saves its choice at once and shows it; the Display reset restores Month", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        CHECK(edits.Commit(0, SettingsField::ExtraUsageChart, int(ExtraUsageChart::Week)) == 0);
+        CHECK(store.Applied() == std::vector<std::wstring>{Op(SettingsField::ExtraUsageChart, 2)});
+        CHECK(store.settings.extraUsageChart == ExtraUsageChart::Week && edits.drafts.empty());
+        SettingsView view = TestView(SettingsUiPage::Display);
+        view.settings = edits.Projection();
+        CHECK(Control(DisplayFrame(view), SettingsField::ExtraUsageChart).text == L"Week");
+        CHECK(edits.Commit(0, SettingsField::ExtraUsageChart, int(ExtraUsageChart::Off)) == 0);
+        view.settings = edits.Projection();
+        CHECK(store.settings.extraUsageChart == ExtraUsageChart::Off &&
+              Control(DisplayFrame(view), SettingsField::ExtraUsageChart).text == L"Off");
+        CHECK(edits.Reset(SettingsField::ResetDisplay) == 0);
+        CHECK(store.settings.extraUsageChart == ExtraUsageChart::Month);
+    });
+
     Run("controller: the palette and custom colors save at once; the Display reset restores Default", [] {
         TestStore store;
         SettingsEdits edits(store);
@@ -339,6 +367,17 @@ static void RunDisplayPageTests() {
         CHECK(Control(frame, SettingsField::ShowStaleWarning).selected);
         CHECK(Control(frame, SettingsField::ShowProviderOutages).selected);
         CHECK(!Control(frame, SettingsField::ShowOpenAiExtraLimits).selected);
+        // The extra usage chart, under the OpenAI limits in the flyout's section: Month by default.
+        const UiItem& chart = Control(frame, SettingsField::ExtraUsageChart);
+        CHECK(chart.kind == UiItemKind::Dropdown && chart.text == L"Month" && chart.enabled &&
+              chart.action.value == int(ExtraUsageChart::Month) && chart.options.size() == 3);
+        for (int i = 0; i < std::min<int>(int(chart.options.size()), 3); i++) {
+            const PCWSTR names[] = {L"Off", L"Month", L"Week"};
+            CHECK(chart.options[size_t(i)].text == names[i] && chart.options[size_t(i)].value == i);
+        }
+        CHECK_NEAR(chart.rect.right - chart.rect.left, 200);
+        CHECK(chart.rect.top > Control(frame, SettingsField::ShowOpenAiExtraLimits).rect.bottom &&
+              chart.rect.bottom < Control(frame, SettingsField::ResetDisplay).rect.top && HasText(frame, L"Extra usage chart"));
         CHECK(Control(frame, SettingsField::ResetDisplay).text == L"Reset");
         for (PCWSTR text : {L"Appearance", L"Values", L"Usage colors", L"Status", L"Details flyout",
                             L"Reset Display to defaults", L"Usage below this is green.",

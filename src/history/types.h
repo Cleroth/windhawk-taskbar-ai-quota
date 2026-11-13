@@ -10,6 +10,23 @@ static ULONGLONG HistoryRetentionStart(int retentionDays, ULONGLONG now) {
     ULONGLONG age = ULONGLONG(std::clamp(retentionDays, 0, 3650)) * kHistoryDayMs;
     return age && now > age ? now - age : 0;
 }
+// The calendar month (UTC) holding `unixMs`, a time of the clock's or the journal's (the calendar
+// ends with the year 32767): when it ends and how long it is. Anthropic's extra usage runs over
+// it; its usage response names neither.
+struct UtcMonth {
+    ULONGLONG endMs = 0;
+    ULONGLONG durationMs = 0;
+};
+static UtcMonth UtcMonthOf(ULONGLONG unixMs) {
+    using namespace std::chrono;
+    const year_month_day day{floor<days>(sys_time<milliseconds>{milliseconds{(long long)unixMs}})};
+    auto startMs = [](year_month month) {
+        return (ULONGLONG)duration_cast<milliseconds>(sys_days{month / 1}.time_since_epoch()).count();
+    };
+    const year_month month = day.year() / day.month();
+    const ULONGLONG endMs = startMs(month + months{1});
+    return {endMs, endMs - startMs(month)};
+}
 struct HistoryValue {
     double value = -1;
     ULONGLONG resetMs = 0;

@@ -199,6 +199,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"{rows, plural, one{Экспортирована # строка показателей} few{Экспортированы # строки показателей} "
      L"many{Экспортировано # строк показателей} other{Экспортировано # строки показателей}} (выбранный "
      L"аккаунт) в {path}. Метки не включены; время в UTC."},
+    {L"", L"Extra usage chart", L"График доп. использования"},
     {L"", L"Free to use, modify and share.", L"Можно свободно использовать, изменять и распространять."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -230,6 +231,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"session every minute.",
      L"Как часто опрашиваются Anthropic, OpenAI, GitHub Copilot и OpenCode Go. Локальный сеанс Antigravity "
      L"опрашивается каждую минуту."},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"Как панель сведений показывает доп. использование Anthropic: за его месяц, за окно недельной квоты в том же "
+     L"масштабе или полосой. Плитки «График использования» делают так же, когда у доп. использования на них свой "
+     L"график."},
     {L"", L"Identity", L"Идентификация"},
     {L"", L"Identity gap", L"Отступ идентификации"},
     {L"", L"Identity position", L"Положение идентификации"},
@@ -826,6 +832,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"duration", L"{minutes}m", L"{minutes}\u00A0мин"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0мин {seconds}\u00A0с"},
     {L"duration", L"{seconds}s", L"{seconds}\u00A0с"},
+    {L"extra-usage-chart", L"Month", L"Месяц"},
+    {L"extra-usage-chart", L"Off", L"Откл."},
+    {L"extra-usage-chart", L"Week", L"Неделя"},
     {L"file-type", L"All files (*.*)", L"Все файлы (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"Файлы CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Данных пока нет"},

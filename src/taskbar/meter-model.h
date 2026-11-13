@@ -612,6 +612,7 @@ struct MeterDisplay {
     double sparklineReadingScale;  // kSparklineReadingScaleMin-kSparklineReadingScaleMax percent, as a fraction.
     // Long windows' charts span this before and after now (AccountMeters); 0: the whole window.
     ULONGLONG sparklineAroundMs;
+    ExtraUsageChart extraUsageChart;
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
     LogoBrands logoBrands;
     int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
@@ -694,6 +695,8 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& 
         .sparklineRing = settings.sparklineRing,
         .sparklineReadingScale = readingScale,
         .sparklineAroundMs = SparklineAroundMs(settings.sparklineSpan),
+        .extraUsageChart = ExtraUsageChart(std::clamp(int(settings.extraUsageChart), int(ExtraUsageChart::Off),
+                                                      int(ExtraUsageChart::Week))),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
         .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
@@ -968,6 +971,34 @@ static std::optional<UsageProjection> ProjectUsage(const WindowUsage& reading,
         projection.limit = true;
     }
     return projection;
+}
+
+// A trace from `start` on, for a chart whose span starts there: earlier readings drop out, and a
+// run across `start` begins there, at its usage then.
+static std::vector<TileTracePoint> TraceFrom(std::vector<TileTracePoint> trace, ULONGLONG start) {
+    auto first = std::lower_bound(trace.begin(), trace.end(), start,
+                                  [](const TileTracePoint& point, ULONGLONG time) { return point.timeMs < time; });
+    if (first != trace.begin() && first != trace.end() && first->connect && first->timeMs > start) {
+        const TileTracePoint &before = first[-1], &after = *first;
+        first[-1] = {start,
+                     before.used + (after.used - before.used) * double(start - before.timeMs) /
+                                       double(after.timeMs - before.timeMs),
+                     false};
+        --first;
+    }
+    trace.erase(trace.begin(), first);
+    return trace;
+}
+
+// The window whose span the chart of an account's extra usage is drawn over: its own or, for
+// Anthropic's under ExtraUsageChart::Week, the weekly quota's while that runs at `now`. The chart
+// keeps the extra usage's scale, pace and projection either way.
+static const WindowUsage& ExtraUsageChartSpan(ExtraUsageChart chart, const AccountConfig& account,
+                                              const AccountData& data, ULONGLONG now) {
+    const WindowUsage& week = data.winWeek;
+    bool running = week.pct >= 0 && week.windowDurationMs > 0 && week.resetUnixMs > week.windowDurationMs &&
+                   now >= week.resetUnixMs - week.windowDurationMs && now < week.resetUnixMs;
+    return chart == ExtraUsageChart::Week && account.provider == L"anthropic" && running ? week : data.extraUsage;
 }
 
 // Bar layouts' corners, thin rail, pace tick and percent text placement, in DIPs along and across
@@ -1399,8 +1430,12 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     bool circular = concentric || layout == BarLayout::SegmentedRing || gauge;
     bool ring = IsRingTile(layout);
     bool paceMarks = display.showPaceTicks && layout != BarLayout::LogoHeadline && !matrix;
+    // A sparkline's quotas with a window to chart; Anthropic's extra usage only per its chart
+    // setting.
     auto timed = [&](int w) {
-        return usage[w]->windowDurationMs > 0 && usage[w]->resetUnixMs > usage[w]->windowDurationMs;
+        return usage[w]->windowDurationMs > 0 && usage[w]->resetUnixMs > usage[w]->windowDurationMs &&
+               !(w == kExtraUsageBar && account.provider == L"anthropic" &&
+                 display.extraUsageChart == ExtraUsageChart::Off);
     };
     // The most-used tile quota: the headline's.
     int top = -1;
@@ -1411,7 +1446,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     if (spark) {
         // A chart per quota with a window; without any, the most-used quota's. Anthropic's extra
         // usage and OpenAI's credits go in the weekly chart's corner, instead of a chart of its
-        // own, while selected and reported; credits have no window, so never get a chart.
+        // own, while selected and reported; credits have no window, so never get a chart, nor
+        // does Anthropic's extra usage with its chart off.
         int charted = 0;
         for (int w = 0; w < kQuotaBarCount; w++) {
             if ((meters.barMask & (1 << w)) && timed(w)) charted |= 1 << w;
@@ -1795,13 +1831,18 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             // A rolled-back clock can put now before the newest reading: the time, the current
             // reading and the projection take the later of the two.
             ULONGLONG now = trace.empty() ? display.now : std::max(display.now, trace.back().timeMs);
-            // The span drawn: the window, or a long window's day each side of now, kept inside the
-            // window.
+            // The span drawn: the window (extra usage: its chart's, ExtraUsageChartSpan), or a long
+            // one's day each side of now, kept inside it.
             ULONGLONG windowStart = timed(w) ? wu.resetUnixMs - wu.windowDurationMs : 0;
             ULONGLONG start = windowStart, span = wu.windowDurationMs;
+            if (timed(w) && w == kExtraUsageBar) {
+                const WindowUsage& over = ExtraUsageChartSpan(display.extraUsageChart, account, data, now);
+                start = over.resetUnixMs - over.windowDurationMs;
+                span = over.windowDurationMs;
+            }
             const ULONGLONG around = display.sparklineAroundMs;
             if (timed(w) && around && span > 2 * around) {
-                start = std::min(now > windowStart + around ? now - around : windowStart, wu.resetUnixMs - 2 * around);
+                start = std::min(now > start + around ? now - around : start, start + span - 2 * around);
                 span = 2 * around;
             }
             auto xAt = [&](ULONGLONG timeMs) {
@@ -1863,27 +1904,17 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 return {std::move(figure)};
             };
             if (timed(w)) {
-                // The window's even use across the span: 0% to 100% across the whole window.
-                if (display.showPaceTicks) {
-                    double from = 100.0 * double(start - windowStart) / double(wu.windowDurationMs);
-                    double to = 100.0 * double(start + span - windowStart) / double(wu.windowDurationMs);
-                    shapes[kSparkPace] = {{0, yAt(from), {{width, yAt(to)}}}};
+                // The window's even use, 0% to 100% across the whole window, over the part of it in
+                // the span.
+                const ULONGLONG paceFrom = std::max(start, windowStart), paceTo = std::min(start + span, wu.resetUnixMs);
+                if (display.showPaceTicks && paceFrom < paceTo) {
+                    auto even = [&](ULONGLONG time) {
+                        return 100.0 * double(time - windowStart) / double(wu.windowDurationMs);
+                    };
+                    shapes[kSparkPace] = {{xAt(paceFrom), yAt(even(paceFrom)), {{xAt(paceTo), yAt(even(paceTo))}}}};
                 }
-                // Readings before a span around now drop out; a run across its start begins there.
-                std::vector<TileTracePoint> drawn = trace;
-                if (start > windowStart) {
-                    auto first = std::lower_bound(drawn.begin(), drawn.end(), start,
-                                                  [](const TileTracePoint& point, ULONGLONG time) { return point.timeMs < time; });
-                    if (first != drawn.begin() && first != drawn.end() && first->connect && first->timeMs > start) {
-                        const TileTracePoint &before = first[-1], &after = *first;
-                        first[-1] = {start,
-                                     before.used + (after.used - before.used) * double(start - before.timeMs) /
-                                                       double(after.timeMs - before.timeMs),
-                                     false};
-                        --first;
-                    }
-                    drawn.erase(drawn.begin(), first);
-                }
+                // Readings before a span starting inside the window drop out.
+                const std::vector<TileTracePoint> drawn = start > windowStart ? TraceFrom(trace, start) : trace;
                 for (size_t begin = 0, end; begin < drawn.size(); begin = end) {
                     TileOutlineFigure line{xAt(drawn[begin].timeMs), yAt(drawn[begin].used), {}};
                     for (end = begin + 1; end < drawn.size() && drawn[end].connect; end++) {

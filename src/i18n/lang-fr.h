@@ -209,6 +209,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"Labels omitted; times UTC.",
      L"{rows, plural, one{# ligne d’indicateur exportée} many{# de lignes d’indicateurs exportées} other{# lignes "
      L"d’indicateurs exportées}} (compte sélectionné) vers {path}. Libellés omis\u202F; heures en UTC."},
+    {L"", L"Extra usage chart", L"Graphique de l’utilisation supplémentaire"},
     {L"", L"Free to use, modify and share.", L"Libre d’utilisation, de modification et de partage."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -241,6 +242,11 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"session every minute.",
      L"Fréquence d’interrogation d’Anthropic, OpenAI, GitHub Copilot et OpenCode Go. Antigravity interroge sa session "
      L"locale toutes les minutes."},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"Comment le volet des détails représente l’utilisation supplémentaire Anthropic\u202F: sur son mois, sur la "
+     L"fenêtre du quota hebdomadaire à la même échelle, ou par une barre. Les vignettes Graphique d’utilisation font "
+     L"de même quand l’utilisation supplémentaire y a son propre graphique."},
     {L"", L"Identity", L"Identité"},
     {L"", L"Identity gap", L"Écart de l’identité"},
     {L"", L"Identity position", L"Position de l’identité"},
@@ -864,6 +870,9 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"duration", L"{minutes}m", L"{minutes}\u00A0min"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0min\u00A0{seconds}\u00A0s"},
     {L"duration", L"{seconds}s", L"{seconds}\u00A0s"},
+    {L"extra-usage-chart", L"Month", L"Mois"},
+    {L"extra-usage-chart", L"Off", L"Désactivé"},
+    {L"extra-usage-chart", L"Week", L"Semaine"},
     {L"file-type", L"All files (*.*)", L"Tous les fichiers (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"Fichiers CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Pas encore de données"},

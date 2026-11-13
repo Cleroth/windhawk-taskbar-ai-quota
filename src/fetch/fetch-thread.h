@@ -568,12 +568,21 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         if (m == 3 && sample.provider != 1 && sample.provider != 4 && sample.provider != 5) {
                             continue;
                         }
-                        sample.meters[m] = {windows[m]->pct, windows[m]->resetUnixMs,
-                                            windows[m]->windowDurationMs};
+                        // Only a reported window is recorded. Readers place a calendar-month
+                        // reading by the record's time (HistoryCalendarMonth), so one whose month
+                        // ended before that time (a poll across the month's end) is left out.
+                        const bool calendar = windows[m]->calendarMonth;
+                        if (calendar && sample.timeMs >= windows[m]->resetUnixMs) continue;
+                        sample.meters[m] = {windows[m]->pct, calendar ? 0 : windows[m]->resetUnixMs,
+                                            calendar ? 0 : windows[m]->windowDurationMs};
                     }
-                    if (sample.provider == 1) {
-                        sample.meters[6] = {results[i].extraUsedAmount,
-                                           results[i].extraUsage.resetUnixMs, 0};
+                    if (const WindowUsage& extra = results[i].extraUsage; sample.provider == 1) {
+                        // Its dollars, under the same rule.
+                        if (!extra.calendarMonth) {
+                            sample.meters[6] = {results[i].extraUsedAmount, extra.resetUnixMs, 0};
+                        } else if (sample.timeMs < extra.resetUnixMs) {
+                            sample.meters[6].value = results[i].extraUsedAmount;
+                        }
                     } else if (sample.provider == 2 && !results[i].creditsUnlimited) {
                         sample.meters[7].value = results[i].creditsBalance;
                     }

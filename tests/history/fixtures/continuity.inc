@@ -94,3 +94,64 @@
             CHECK(HistoryConnection(a, b, test.lane) == test.expected);
         });
     }
+// Anthropic (provider 1) extra usage, its budget % (lane 3) and dollars (lane 6): the provider
+// reports no window, so readings are recorded without one and belong to the calendar month (UTC)
+// they were taken in. baseTime is 2023-11-14 22:13:20 UTC; November ends at 1701388800000, 30
+// days long.
+    {
+        static constexpr ULONGLONG november = 1701388800000ULL, january = 1704067200000ULL;
+        // `reported`: with a window as a provider would report it.
+        auto reading = [](ULONGLONG time, bool reported = false) {
+            HistorySample sample{};
+            sample.accountId = 1; sample.provider = 1; sample.timeMs = time;
+            sample.intervalMs = 300000; sample.session = 1;
+            sample.meters[3] = {40, reported ? november : 0, reported ? 30 * kHistoryDayMs : 0};
+            sample.meters[6] = {400, reported ? november : 0, 0};
+            return sample;
+        };
+        Run("continuity/calendar months in UTC: their ends and lengths", [&] {
+            auto month = [](ULONGLONG time, ULONGLONG end, int days) {
+                UtcMonth m = UtcMonthOf(time);
+                CHECK(m.endMs == end); CHECK(m.durationMs == days * kHistoryDayMs);
+            };
+            month(baseTime, november, 30);
+            // A month's last millisecond, and the first of the next: December, ending with the year.
+            month(november - 1, november, 30);
+            month(november, january, 31);
+            // 2024-02-10: a leap February, ending 2024-03-01.
+            month(1707523200000ULL, 1709251200000ULL, 29);
+        });
+        Run("continuity/Anthropic extra usage without a window belongs to its calendar month, exactly", [&] {
+            for (int lane : {3, 6}) {
+                // Within November: one window, up to the month's last millisecond (a calendar month
+                // has no reset jitter to allow for).
+                CHECK(HistoryConnection(reading(baseTime), reading(baseTime + 300000), lane) == HistoryBreak::None);
+                CHECK(HistoryConnection(reading(november - 300000), reading(november - 60000), lane) == HistoryBreak::None);
+                CHECK(HistoryConnection(reading(november - 300000), reading(november - 1), lane) == HistoryBreak::None);
+                // Across the month's end, or with the later reading at December's first instant: a
+                // reset. Within December again: one window, from its first instant on.
+                CHECK(HistoryConnection(reading(november - 150000), reading(november + 150000), lane) == HistoryBreak::Reset);
+                CHECK(HistoryConnection(reading(november - 300000), reading(november), lane) == HistoryBreak::Reset);
+                CHECK(HistoryConnection(reading(november), reading(november + 300000), lane) == HistoryBreak::None);
+                CHECK(HistoryConnection(reading(january - 300000), reading(january - 1), lane) == HistoryBreak::None);
+                // A window a provider did report keeps the reported windows' rules: beside a reading
+                // without one it is another window, and its own end has its two minutes of jitter.
+                CHECK(HistoryConnection(reading(baseTime, true), reading(baseTime + 300000), lane) == HistoryBreak::Reset);
+                CHECK(HistoryConnection(reading(baseTime), reading(baseTime + 300000, true), lane) == HistoryBreak::Reset);
+                CHECK(HistoryConnection(reading(baseTime, true), reading(baseTime + 300000, true), lane) == HistoryBreak::None);
+                CHECK(HistoryConnection(reading(november - 300000, true), reading(november - 60000, true), lane) ==
+                      HistoryBreak::Reset);
+            }
+            // Only Anthropic's extra usage: its other lanes and other providers' monthly lanes keep a
+            // missing window as none, whatever the month.
+            HistorySample weekly = reading(november - 150000), next = reading(november + 150000);
+            weekly.meters[1] = next.meters[1] = {40, 0, 0};
+            CHECK(HistoryConnection(weekly, next, 1) == HistoryBreak::None);
+            HistorySample copilot = reading(november - 150000), later = reading(november + 150000);
+            copilot.provider = later.provider = 4;
+            CHECK(HistoryConnection(copilot, later, 3) == HistoryBreak::None);
+            CHECK(HistoryCalendarMonth(reading(baseTime), 3) && HistoryCalendarMonth(reading(baseTime), 6) &&
+                  !HistoryCalendarMonth(reading(baseTime, true), 3) && !HistoryCalendarMonth(weekly, 1) &&
+                  !HistoryCalendarMonth(copilot, 3));
+        });
+    }

@@ -149,7 +149,12 @@ static BurnUpCurve BuildBurnUpCurve(const std::deque<HistorySample>& samples, in
     while (newest && !HistoryHasValue(samples[newest - 1], meter)) --newest;
     if (!newest) return curve;
     const HistorySample* later = &samples[--newest];
-    const HistoryValue& window = later->meters[meter];
+    HistoryValue window = later->meters[meter];
+    if (HistoryCalendarMonth(*later, meter)) {
+        const UtcMonth month = UtcMonthOf(later->timeMs);
+        window.resetMs = month.endMs;
+        window.durationMs = month.durationMs;
+    }
     if (!window.resetMs || !window.durationMs || window.durationMs > kBurnUpMaxWindowMs ||
         window.durationMs > window.resetMs) return curve;
     ULONGLONG start = window.resetMs - window.durationMs;

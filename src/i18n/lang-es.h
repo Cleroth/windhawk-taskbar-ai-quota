@@ -200,6 +200,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"Labels omitted; times UTC.",
      L"{rows, plural, one{Se exportó # fila de métricas} many{Se exportaron # de filas de métricas} "
      L"other{Se exportaron # filas de métricas}} (cuenta seleccionada) a {path}. Sin etiquetas; horas en UTC."},
+    {L"", L"Extra usage chart", L"Gráfico del uso adicional"},
     {L"", L"Free to use, modify and share.", L"Libre para usar, modificar y compartir."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -231,6 +232,11 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"session every minute.",
      L"Con qué frecuencia se consultan Anthropic, OpenAI, GitHub Copilot y OpenCode Go. Antigravity consulta su sesión "
      L"local cada minuto."},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"Cómo representa el panel de detalles el uso adicional de Anthropic: a lo largo de su mes, a lo largo de la "
+     L"ventana de la cuota semanal con la misma escala, o como una barra. Los mosaicos Gráfico de uso hacen lo mismo "
+     L"cuando el uso adicional tiene en ellos un gráfico propio."},
     {L"", L"Identity", L"Identidad"},
     {L"", L"Identity gap", L"Separación de la identidad"},
     {L"", L"Identity position", L"Posición de la identidad"},
@@ -847,6 +853,9 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"duration", L"{minutes}m", L"{minutes}\u00A0min"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0min {seconds}\u00A0s"},
     {L"duration", L"{seconds}s", L"{seconds}\u00A0s"},
+    {L"extra-usage-chart", L"Month", L"Mes"},
+    {L"extra-usage-chart", L"Off", L"Desactivado"},
+    {L"extra-usage-chart", L"Week", L"Semana"},
     {L"file-type", L"All files (*.*)", L"Todos los archivos (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"Archivos CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Aún no hay datos"},

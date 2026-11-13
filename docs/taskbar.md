@@ -8,7 +8,9 @@ setting: [settings reference](settings.md).
 Each visible account gets one compact taskbar column with the provider's bars you select;
 selected bars auto-hide when the provider doesn't return that quota.
 
-- **Anthropic:** 5-hour, weekly, Fable weekly and monthly extra usage.
+- **Anthropic:** 5-hour, weekly, Fable weekly and monthly extra usage. Anthropic reports no reset
+  for extra usage: the mod takes the calendar month in UTC (a reset at 00:00 UTC on the 1st, as
+  observed), which its reset time, pace, chart and projection rest on.
 - **OpenAI:** 5-hour, weekly, and prepaid credits measured against a max you set (the API reports
   only the balance).
 - **Google Antigravity:** the available short-window and weekly Gemini pools and the Gemini Argon

@@ -13,6 +13,7 @@
 #include <array>
 #include <bit>
 #include <charconv>
+#include <chrono>
 #include <climits>
 #include <cmath>
 #include <cstdint>

@@ -153,6 +153,39 @@
             CHECK(build([](HistorySample&) {}).points.size() == 2);
             CHECK(BuildBurnUpCurve({}, 1).points.empty());
         });
+        Run("burn-up/Anthropic extra usage, recorded without a window, charts in its calendar month", [&] {
+            // November 2023 (UTC), which baseTime falls in, ends at 1701388800000; December has 31 days.
+            const ULONGLONG november = 1701388800000ULL, days = 30 * kHistoryDayMs;
+            auto extra = [&](ULONGLONG time, double used) {
+                HistorySample sample = reading(time, 50);
+                sample.meters[3] = {used, 0, 0};
+                return sample;
+            };
+            std::deque<HistorySample> samples;
+            for (int i = 0; i < 5; ++i) samples.push_back(extra(start + hour + i * poll, 10 + i));
+            auto curve = BuildBurnUpCurve(samples, 3);
+            CHECK(curve.resetMs == november); CHECK(curve.durationMs == days);
+            CHECK((joins(curve) == std::vector<bool>{false, true, true, true, true}));
+            CHECK(curve.points.front().used == 10 && curve.points.back().used == 14);
+            // October's readings stay out of November's curve, its last minute's too.
+            samples.push_front(extra(november - days - 60000, 91));
+            samples.push_front(extra(november - days - poll, 90));
+            CHECK(BuildBurnUpCurve(samples, 3).points.size() == 5);
+            // In the month's last minutes, to its last millisecond, the curve is still the whole
+            // month's: a new segment after the days without readings.
+            for (ULONGLONG before : {2 * poll, poll, ULONGLONG(1)}) samples.push_back(extra(november - before, 60));
+            curve = BuildBurnUpCurve(samples, 3);
+            CHECK(curve.resetMs == november);
+            CHECK((joins(curve) == std::vector<bool>{false, true, true, true, true, false, true, true}));
+            // December's first reading starts its curve.
+            samples.push_back(extra(november + poll / 2, 1));
+            curve = BuildBurnUpCurve(samples, 3);
+            CHECK(curve.resetMs == november + 31 * kHistoryDayMs); CHECK(curve.durationMs == 31 * kHistoryDayMs);
+            CHECK((times(curve) == std::vector<ULONGLONG>{november + poll / 2}));
+            // Another provider's monthly quota without a window has no curve.
+            for (auto& sample : samples) sample.provider = 4;
+            CHECK(BuildBurnUpCurve(samples, 3).points.empty());
+        });
         Run("burn-up/reduction keeps extrema, endpoints and breaks", [&] {
             auto at = [&](int i) { return start + poll + ULONGLONG(i) * (poll / 2); };
             auto value = [](int i) { return i == 300 ? 1.0 : i == 500 ? 99.0 : 20 + i * 0.03; };

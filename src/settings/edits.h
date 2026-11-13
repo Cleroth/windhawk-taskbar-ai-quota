@@ -88,6 +88,7 @@ enum class SettingsField : uint8_t {
     ShowStaleWarning,
     ShowProviderOutages,
     ShowOpenAiExtraLimits,
+    ExtraUsageChart,        // An ExtraUsageChart
     // Accounts: fields of the account a draft's key names
     AccountLabel,         // Text, trimmed; unique per provider
     AccountTileIdentity,  // A TileIdentity
@@ -213,7 +214,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::UsageColorOrange,    SettingsField::UsageColorRed,
                     SettingsField::YellowThreshold,     SettingsField::OrangeThreshold,
                     SettingsField::RedThreshold,        SettingsField::ShowStaleWarning,
-                    SettingsField::ShowProviderOutages, SettingsField::ShowOpenAiExtraLimits};
+                    SettingsField::ShowProviderOutages, SettingsField::ShowOpenAiExtraLimits,
+                    SettingsField::ExtraUsageChart};
         default: return {};
     }
 }
@@ -297,6 +299,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::ShowStaleWarning: return s.showStaleWarning;
         case SettingsField::ShowProviderOutages: return s.showProviderOutages;
         case SettingsField::ShowOpenAiExtraLimits: return s.showOpenAiExtraLimits;
+        case SettingsField::ExtraUsageChart: return int(s.extraUsageChart);
         default: return 0;
     }
 }
@@ -432,6 +435,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::ShowStaleWarning: s.showStaleWarning = value != 0; break;
         case SettingsField::ShowProviderOutages: s.showProviderOutages = value != 0; break;
         case SettingsField::ShowOpenAiExtraLimits: s.showOpenAiExtraLimits = value != 0; break;
+        case SettingsField::ExtraUsageChart:
+            s.extraUsageChart = ExtraUsageChart(std::clamp(value, int(ExtraUsageChart::Off), int(ExtraUsageChart::Week)));
+            break;
         case SettingsField::ResetDisplay:
             s.material = defaults.material;
             s.barMode = defaults.barMode;
@@ -443,6 +449,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.showStaleWarning = defaults.showStaleWarning;
             s.showProviderOutages = defaults.showProviderOutages;
             s.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
+            s.extraUsageChart = defaults.extraUsageChart;
             break;
         case SettingsField::ResetLayout:
             s.barLayout = defaults.barLayout;

@@ -1,7 +1,7 @@
 // Settings > Display: the material of the details flyout and the windows, the bar mode, the
-// meters' usage colors and thresholds, the stale and outage marks and the OpenAI details (approved mockup
-// display.png, Appearance aside). The preview card is in the shell's pinned header
-// (settings/preview.h). Pure builder.
+// meters' usage colors and thresholds, the stale and outage marks, the OpenAI details and the
+// extra usage chart (approved mockup display.png, Appearance aside). The preview card is in the
+// shell's pinned header (settings/preview.h). Pure builder.
 
 // Lays out the page from content y; returns the bottom of the last card.
 static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
@@ -133,6 +133,18 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
         spec.description = {{text(Tr(L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in "
                                      L"OpenAI details."))}};
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowOpenAiExtraLimits);
+    }
+    {
+        UiCardSpec spec;
+        spec.title = text(Tr(L"Extra usage chart"));
+        spec.description = {{text(Tr(L"How the details flyout charts Anthropic extra usage: over its month, over the "
+                                     L"weekly quota\u2019s window on the same scale, or as a bar. Usage graph tiles "
+                                     L"follow it for an extra usage chart of their own."))}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ExtraUsageChart, 200,
+                                    {{text(TrCtx(L"extra-usage-chart", L"Off")), int(ExtraUsageChart::Off)},
+                                     {text(TrCtx(L"extra-usage-chart", L"Month")), int(ExtraUsageChart::Month)},
+                                     {text(TrCtx(L"extra-usage-chart", L"Week")), int(ExtraUsageChart::Week)}},
+                                    int(s.extraUsageChart));
     }
 
     UiCardSpec reset;

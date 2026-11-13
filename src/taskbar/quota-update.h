@@ -304,6 +304,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                 display.usageColors, settings.showOpenAiExtraLimits,
                                                 meters.stale, meters.warn, accountRefreshing,
                                                 visualTestMode};
+                    flyoutDisplay.extraUsageChart = display.extraUsageChart;
                     flyoutDisplay.outage = outage;
                     flyoutDisplay.outageColor = meters.mark == IdentityMark::Outage ? meters.markColor : 0;
                     flyoutDisplay.locale = display.locale;

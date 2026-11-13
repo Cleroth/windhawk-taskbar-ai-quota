@@ -153,6 +153,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
      L"已将 {rows, plural, other{# 行指标数据}}（所选账户）导出到 {path}。已省略标签；时间为 UTC。"},
+    {L"", L"Extra usage chart", L"额外用量图表"},
     {L"", L"Free to use, modify and share.", L"可自由使用、修改和分享。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -177,6 +178,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"轮询 Anthropic、OpenAI、GitHub Copilot 和 OpenCode Go 的频率。Antigravity 每分钟轮询其本地会话。"},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"详情浮窗显示 Anthropic 额外用量的方式：按其所在月份绘制图表、按每周配额的时段以相同刻度绘制图表，或显示为条形。“用量图表”磁贴中额外用量有单独图表时，也遵循此设置。"},
     {L"", L"Identity", L"标识"},
     {L"", L"Identity gap", L"标识间距"},
     {L"", L"Identity position", L"标识位置"},
@@ -666,6 +670,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"duration", L"{minutes}m", L"{minutes} 分钟"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes} 分钟 {seconds} 秒"},
     {L"duration", L"{seconds}s", L"{seconds} 秒"},
+    {L"extra-usage-chart", L"Month", L"月"},
+    {L"extra-usage-chart", L"Off", L"关闭"},
+    {L"extra-usage-chart", L"Week", L"周"},
     {L"file-type", L"All files (*.*)", L"所有文件 (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"CSV 文件 (*.csv)"},
     {L"flyout-footer", L"No data yet", L"暂无数据"},

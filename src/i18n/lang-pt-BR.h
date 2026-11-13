@@ -202,6 +202,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"{rows, plural, one{# linha de medidor exportada} many{# de linhas de medidores exportadas} "
      L"other{# linhas de medidores exportadas}} (conta selecionada) para {path}. Rótulos omitidos; horários em "
      L"UTC."},
+    {L"", L"Extra usage chart", L"Gráfico do uso adicional"},
     {L"", L"Free to use, modify and share.", L"Livre para usar, modificar e compartilhar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -233,6 +234,11 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"session every minute.",
      L"Com que frequência Anthropic, OpenAI, GitHub Copilot e OpenCode Go são consultados. O Antigravity consulta sua "
      L"sessão local a cada minuto."},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"Como o painel de detalhes representa o uso adicional da Anthropic: ao longo do seu mês, ao longo da janela da "
+     L"cota semanal na mesma escala, ou como uma barra. Os blocos Gráfico de uso fazem o mesmo quando o uso "
+     L"adicional tem neles um gráfico próprio."},
     {L"", L"Identity", L"Identidade"},
     {L"", L"Identity gap", L"Espaço da identidade"},
     {L"", L"Identity position", L"Posição da identidade"},
@@ -833,6 +839,9 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"duration", L"{minutes}m", L"{minutes}\u00A0min"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0min\u00A0{seconds}\u00A0s"},
     {L"duration", L"{seconds}s", L"{seconds}\u00A0s"},
+    {L"extra-usage-chart", L"Month", L"Mês"},
+    {L"extra-usage-chart", L"Off", L"Desativado"},
+    {L"extra-usage-chart", L"Week", L"Semana"},
     {L"file-type", L"All files (*.*)", L"Todos os arquivos (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"Arquivos CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Ainda sem dados"},

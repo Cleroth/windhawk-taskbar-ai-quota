@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.20.1
+// @version         2.21.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -80,7 +80,8 @@ signed-in local app or CLI session, which must remain running.
 - **Display:** Material of the details flyout and the settings and history windows (Acrylic,
   Mica, Mica Alt, Tinted wallpaper or Solid; needs Windows transparency effects), used or
   remaining, usage colors (default, colorblind or your own) and thresholds, stale marker,
-  provider outages.
+  provider outages, and how the details flyout charts Anthropic extra usage (its month, the
+  weekly window, or a bar).
 - **Behavior:** Choose the language, displays, hover details, polling, and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
   default) or for a number of days, and choose recording per account independently of taskbar
@@ -770,6 +771,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"Labels omitted; times UTC.",
      L"{rows, plural, one{# Messwertzeile} other{# Messwertzeilen}} (ausgewähltes Konto) nach {path} "
      L"exportiert. Ohne Bezeichnungen; Zeiten in UTC."},
+    {L"", L"Extra usage chart", L"Diagramm der Zusatznutzung"},
     {L"", L"Free to use, modify and share.", L"Frei nutzbar, veränderbar und weitergebbar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -802,6 +804,11 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"session every minute.",
      L"Wie oft Anthropic, OpenAI, GitHub Copilot und OpenCode Go abgefragt werden. Antigravity fragt seine lokale "
      L"Sitzung jede Minute ab."},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"Wie die Detailansicht die Zusatznutzung von Anthropic darstellt: über ihren Monat, über das Zeitfenster des "
+     L"wöchentlichen Kontingents im selben Maßstab oder als Balken. Kacheln im Stil „Nutzungsdiagramm“ folgen dem, "
+     L"wenn die Zusatznutzung dort ein eigenes Diagramm hat."},
     {L"", L"Identity", L"Identität"},
     {L"", L"Identity gap", L"Identitätsabstand"},
     {L"", L"Identity position", L"Identitätsposition"},
@@ -1432,6 +1439,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"duration", L"{minutes}m", L"{minutes}\u00A0Min."},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0Min. {seconds}\u00A0Sek."},
     {L"duration", L"{seconds}s", L"{seconds}\u00A0Sek."},
+    {L"extra-usage-chart", L"Month", L"Monat"},
+    {L"extra-usage-chart", L"Off", L"Aus"},
+    {L"extra-usage-chart", L"Week", L"Woche"},
     {L"file-type", L"All files (*.*)", L"Alle Dateien (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"CSV-Dateien (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Noch keine Daten"},
@@ -2050,6 +2060,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"Labels omitted; times UTC.",
      L"{rows, plural, one{Se exportó # fila de métricas} many{Se exportaron # de filas de métricas} "
      L"other{Se exportaron # filas de métricas}} (cuenta seleccionada) a {path}. Sin etiquetas; horas en UTC."},
+    {L"", L"Extra usage chart", L"Gráfico del uso adicional"},
     {L"", L"Free to use, modify and share.", L"Libre para usar, modificar y compartir."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -2081,6 +2092,11 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"session every minute.",
      L"Con qué frecuencia se consultan Anthropic, OpenAI, GitHub Copilot y OpenCode Go. Antigravity consulta su sesión "
      L"local cada minuto."},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"Cómo representa el panel de detalles el uso adicional de Anthropic: a lo largo de su mes, a lo largo de la "
+     L"ventana de la cuota semanal con la misma escala, o como una barra. Los mosaicos Gráfico de uso hacen lo mismo "
+     L"cuando el uso adicional tiene en ellos un gráfico propio."},
     {L"", L"Identity", L"Identidad"},
     {L"", L"Identity gap", L"Separación de la identidad"},
     {L"", L"Identity position", L"Posición de la identidad"},
@@ -2697,6 +2713,9 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"duration", L"{minutes}m", L"{minutes}\u00A0min"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0min {seconds}\u00A0s"},
     {L"duration", L"{seconds}s", L"{seconds}\u00A0s"},
+    {L"extra-usage-chart", L"Month", L"Mes"},
+    {L"extra-usage-chart", L"Off", L"Desactivado"},
+    {L"extra-usage-chart", L"Week", L"Semana"},
     {L"file-type", L"All files (*.*)", L"Todos los archivos (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"Archivos CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Aún no hay datos"},
@@ -3331,6 +3350,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"Labels omitted; times UTC.",
      L"{rows, plural, one{# ligne d’indicateur exportée} many{# de lignes d’indicateurs exportées} other{# lignes "
      L"d’indicateurs exportées}} (compte sélectionné) vers {path}. Libellés omis\u202F; heures en UTC."},
+    {L"", L"Extra usage chart", L"Graphique de l’utilisation supplémentaire"},
     {L"", L"Free to use, modify and share.", L"Libre d’utilisation, de modification et de partage."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -3363,6 +3383,11 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"session every minute.",
      L"Fréquence d’interrogation d’Anthropic, OpenAI, GitHub Copilot et OpenCode Go. Antigravity interroge sa session "
      L"locale toutes les minutes."},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"Comment le volet des détails représente l’utilisation supplémentaire Anthropic\u202F: sur son mois, sur la "
+     L"fenêtre du quota hebdomadaire à la même échelle, ou par une barre. Les vignettes Graphique d’utilisation font "
+     L"de même quand l’utilisation supplémentaire y a son propre graphique."},
     {L"", L"Identity", L"Identité"},
     {L"", L"Identity gap", L"Écart de l’identité"},
     {L"", L"Identity position", L"Position de l’identité"},
@@ -3986,6 +4011,9 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"duration", L"{minutes}m", L"{minutes}\u00A0min"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0min\u00A0{seconds}\u00A0s"},
     {L"duration", L"{seconds}s", L"{seconds}\u00A0s"},
+    {L"extra-usage-chart", L"Month", L"Mois"},
+    {L"extra-usage-chart", L"Off", L"Désactivé"},
+    {L"extra-usage-chart", L"Week", L"Semaine"},
     {L"file-type", L"All files (*.*)", L"Tous les fichiers (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"Fichiers CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Pas encore de données"},
@@ -4569,6 +4597,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
      L"{rows, plural, other{メーター # 行}} (選択したアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
+    {L"", L"Extra usage chart", L"追加使用量のグラフ"},
     {L"", L"Free to use, modify and share.", L"自由に使用、変更、共有できます。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -4596,6 +4625,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"Anthropic、OpenAI、GitHub Copilot、OpenCode Go をポーリングする頻度です。Antigravity はローカル セッションを 1 分ごとにポーリングします。"},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"詳細フライアウトでの Anthropic の追加使用量の表示方法: その月のグラフ、週間クォータの期間に合わせた同じ目盛りのグラフ、またはバー。［使用量グラフ］のタイルで追加使用量に専用のグラフがある場合も、この設定に従います。"},
     {L"", L"Identity", L"識別表示"},
     {L"", L"Identity gap", L"識別表示との間隔"},
     {L"", L"Identity position", L"識別表示の位置"},
@@ -5105,6 +5137,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"duration", L"{minutes}m", L"{minutes}分"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}分{seconds}秒"},
     {L"duration", L"{seconds}s", L"{seconds}秒"},
+    {L"extra-usage-chart", L"Month", L"月"},
+    {L"extra-usage-chart", L"Off", L"オフ"},
+    {L"extra-usage-chart", L"Week", L"週"},
     {L"file-type", L"All files (*.*)", L"すべてのファイル (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"CSV ファイル (*.csv)"},
     {L"flyout-footer", L"No data yet", L"データはまだありません"},
@@ -5700,6 +5735,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"{rows, plural, one{# linha de medidor exportada} many{# de linhas de medidores exportadas} "
      L"other{# linhas de medidores exportadas}} (conta selecionada) para {path}. Rótulos omitidos; horários em "
      L"UTC."},
+    {L"", L"Extra usage chart", L"Gráfico do uso adicional"},
     {L"", L"Free to use, modify and share.", L"Livre para usar, modificar e compartilhar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -5731,6 +5767,11 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"session every minute.",
      L"Com que frequência Anthropic, OpenAI, GitHub Copilot e OpenCode Go são consultados. O Antigravity consulta sua "
      L"sessão local a cada minuto."},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"Como o painel de detalhes representa o uso adicional da Anthropic: ao longo do seu mês, ao longo da janela da "
+     L"cota semanal na mesma escala, ou como uma barra. Os blocos Gráfico de uso fazem o mesmo quando o uso "
+     L"adicional tem neles um gráfico próprio."},
     {L"", L"Identity", L"Identidade"},
     {L"", L"Identity gap", L"Espaço da identidade"},
     {L"", L"Identity position", L"Posição da identidade"},
@@ -6331,6 +6372,9 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"duration", L"{minutes}m", L"{minutes}\u00A0min"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0min\u00A0{seconds}\u00A0s"},
     {L"duration", L"{seconds}s", L"{seconds}\u00A0s"},
+    {L"extra-usage-chart", L"Month", L"Mês"},
+    {L"extra-usage-chart", L"Off", L"Desativado"},
+    {L"extra-usage-chart", L"Week", L"Semana"},
     {L"file-type", L"All files (*.*)", L"Todos os arquivos (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"Arquivos CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Ainda sem dados"},
@@ -6954,6 +6998,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"{rows, plural, one{Экспортирована # строка показателей} few{Экспортированы # строки показателей} "
      L"many{Экспортировано # строк показателей} other{Экспортировано # строки показателей}} (выбранный "
      L"аккаунт) в {path}. Метки не включены; время в UTC."},
+    {L"", L"Extra usage chart", L"График доп. использования"},
     {L"", L"Free to use, modify and share.", L"Можно свободно использовать, изменять и распространять."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -6985,6 +7030,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"session every minute.",
      L"Как часто опрашиваются Anthropic, OpenAI, GitHub Copilot и OpenCode Go. Локальный сеанс Antigravity "
      L"опрашивается каждую минуту."},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"Как панель сведений показывает доп. использование Anthropic: за его месяц, за окно недельной квоты в том же "
+     L"масштабе или полосой. Плитки «График использования» делают так же, когда у доп. использования на них свой "
+     L"график."},
     {L"", L"Identity", L"Идентификация"},
     {L"", L"Identity gap", L"Отступ идентификации"},
     {L"", L"Identity position", L"Положение идентификации"},
@@ -7581,6 +7631,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"duration", L"{minutes}m", L"{minutes}\u00A0мин"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}\u00A0мин {seconds}\u00A0с"},
     {L"duration", L"{seconds}s", L"{seconds}\u00A0с"},
+    {L"extra-usage-chart", L"Month", L"Месяц"},
+    {L"extra-usage-chart", L"Off", L"Откл."},
+    {L"extra-usage-chart", L"Week", L"Неделя"},
     {L"file-type", L"All files (*.*)", L"Все файлы (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"Файлы CSV (*.csv)"},
     {L"flyout-footer", L"No data yet", L"Данных пока нет"},
@@ -8158,6 +8211,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
      L"已将 {rows, plural, other{# 行指标数据}}（所选账户）导出到 {path}。已省略标签；时间为 UTC。"},
+    {L"", L"Extra usage chart", L"额外用量图表"},
     {L"", L"Free to use, modify and share.", L"可自由使用、修改和分享。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -8182,6 +8236,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"轮询 Anthropic、OpenAI、GitHub Copilot 和 OpenCode Go 的频率。Antigravity 每分钟轮询其本地会话。"},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"详情浮窗显示 Anthropic 额外用量的方式：按其所在月份绘制图表、按每周配额的时段以相同刻度绘制图表，或显示为条形。“用量图表”磁贴中额外用量有单独图表时，也遵循此设置。"},
     {L"", L"Identity", L"标识"},
     {L"", L"Identity gap", L"标识间距"},
     {L"", L"Identity position", L"标识位置"},
@@ -8671,6 +8728,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"duration", L"{minutes}m", L"{minutes} 分钟"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes} 分钟 {seconds} 秒"},
     {L"duration", L"{seconds}s", L"{seconds} 秒"},
+    {L"extra-usage-chart", L"Month", L"月"},
+    {L"extra-usage-chart", L"Off", L"关闭"},
+    {L"extra-usage-chart", L"Week", L"周"},
     {L"file-type", L"All files (*.*)", L"所有文件 (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"CSV 文件 (*.csv)"},
     {L"flyout-footer", L"No data yet", L"暂无数据"},
@@ -9662,6 +9722,15 @@ enum class SparklineSpan {
     Hours36,
     Hours48,
 };
+
+// The details flyout's chart of Anthropic's extra usage, and a sparkline of its own: none (the
+// flyout's bar), over its month, or over the account's weekly window while that runs, on the
+// month's scale.
+enum class ExtraUsageChart {
+    Off,
+    Month,
+    Week,
+};
 // Logo size in percent of each style's standard size; the number badge's text size and offsets
 // in DIPs.
 static constexpr int kLogoScaleMin = 50;
@@ -9853,6 +9922,7 @@ struct Settings {
     bool showExtraBarAmounts = false;
     // additional_rate_limits lines (Codex Spark, gpt-reserve, ...) and the Spark plan name.
     bool showOpenAiExtraLimits = false;
+    ExtraUsageChart extraUsageChart = ExtraUsageChart::Month;
     UsagePalette usagePalette = UsagePalette::Default;
     // The Custom palette's colors, kept while another palette is chosen.
     std::array<COLORREF, 4> customUsageColors = kDefaultUsageColors;
@@ -9879,6 +9949,9 @@ struct WindowUsage {
     ULONGLONG resetUnixMs = 0;
     ULONGLONG windowDurationMs = 0;
     bool notYetStarted = false;  // Anthropic: no usage yet and an explicitly null reset.
+    // Anthropic extra usage: no reported reset, so the window is the calendar month (UTC). History
+    // records none for it and derives the month from each reading's time.
+    bool calendarMonth = false;
 };
 
 // A quota the details flyout lists after its main rows, without a taskbar bar, history or alerts:
@@ -10248,6 +10321,23 @@ static ULONGLONG HistoryRetentionStart(int retentionDays, ULONGLONG now) {
     ULONGLONG age = ULONGLONG(std::clamp(retentionDays, 0, 3650)) * kHistoryDayMs;
     return age && now > age ? now - age : 0;
 }
+// The calendar month (UTC) holding `unixMs`, a time of the clock's or the journal's (the calendar
+// ends with the year 32767): when it ends and how long it is. Anthropic's extra usage runs over
+// it; its usage response names neither.
+struct UtcMonth {
+    ULONGLONG endMs = 0;
+    ULONGLONG durationMs = 0;
+};
+static UtcMonth UtcMonthOf(ULONGLONG unixMs) {
+    using namespace std::chrono;
+    const year_month_day day{floor<days>(sys_time<milliseconds>{milliseconds{(long long)unixMs}})};
+    auto startMs = [](year_month month) {
+        return (ULONGLONG)duration_cast<milliseconds>(sys_days{month / 1}.time_since_epoch()).count();
+    };
+    const year_month month = day.year() / day.month();
+    const ULONGLONG endMs = startMs(month + months{1});
+    return {endMs, endMs - startMs(month)};
+}
 struct HistoryValue {
     double value = -1;
     ULONGLONG resetMs = 0;
@@ -10609,8 +10699,10 @@ struct FlyoutChartShape {
     std::vector<winrt::Windows::Foundation::Point> dots;                // Isolated readings.
     winrt::Windows::Foundation::Point now{-1.f, -1.f};    // Current point; X is the now line.
     winrt::Windows::Foundation::Point projectionEnd{-1.f, -1.f};  // X < 0 without a projection.
+    // The even-pace line's ends; X < 0 without one.
+    winrt::Windows::Foundation::Point paceFrom{-1.f, -1.f};
+    winrt::Windows::Foundation::Point paceTo{-1.f, -1.f};
     uint32_t color = 0;
-    bool remaining = false;  // Plots % left; the even-pace diagonal falls.
 
     bool operator==(const FlyoutChartShape&) const = default;
 };
@@ -13577,7 +13669,16 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
             double utilization = GetNum(eu, L"utilization");
             bool limitIsNull = eu.HasKey(L"monthly_limit") &&
                                eu.GetNamedValue(L"monthly_limit").ValueType() == JsonValueType::Null;
+            // The reset the response names, back to the same day of the month before; without one,
+            // extra usage runs over the calendar month (UTC).
             d->extraUsage.resetUnixMs = ParseIso8601Ms(GetStr(eu, L"resets_at"));
+            ULONGLONG cycleMs = MonthBeforeMs(d->extraUsage.resetUnixMs);
+            if (!d->extraUsage.resetUnixMs) {
+                const UtcMonth month = UtcMonthOf(NowUnixMs());
+                d->extraUsage.resetUnixMs = month.endMs;
+                d->extraUsage.calendarMonth = true;
+                cycleMs = month.durationMs;
+            }
             if (limitIsNull) {
                 // Reported spending is usable history even without a percentage ceiling.
                 if (std::isfinite(usedCents) && usedCents >= 0) {
@@ -13593,9 +13694,7 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
                 d->extraUsage.pct = utilization;
                 d->extraUsedAmount = std::max(usedCents, 0.0) / 100.0;
                 d->extraLimitAmount = limitCents / 100.0;
-                // The API omits the cycle start: the previous monthly billing boundary, from its
-                // authoritative next-reset timestamp.
-                d->extraUsage.windowDurationMs = MonthBeforeMs(d->extraUsage.resetUnixMs);
+                d->extraUsage.windowDurationMs = cycleMs;
             }
         }
 
@@ -14942,10 +15041,21 @@ static bool HistoryHasValue(const HistorySample& sample, int meter) {
 
 enum class HistoryBreak { None, Gap, Reset, Unavailable };
 
+// Whether a reading's window is the calendar month (UTC) it was taken in (UtcMonthOf): Anthropic
+// (provider 1) reports no window for extra usage, its budget % (meter 3) and dollars (meter 6),
+// which runs over that month, so the journal holds none.
+static bool HistoryCalendarMonth(const HistorySample& sample, int meter) {
+    return sample.provider == 1 && (meter == 3 || meter == 6) && !sample.meters[meter].resetMs;
+}
+
 // Whether two valid readings of a meter, b later than a, belong to one quota window,
 // regardless of how they were sampled.
 static HistoryBreak HistoryWindowConnection(const HistorySample& a, const HistorySample& b,
                                             int meter) {
+    // Calendar months are exact, without a reported reset's jitter.
+    if (HistoryCalendarMonth(a, meter) && HistoryCalendarMonth(b, meter)) {
+        return UtcMonthOf(a.timeMs).endMs == UtcMonthOf(b.timeMs).endMs ? HistoryBreak::None : HistoryBreak::Reset;
+    }
     ULONGLONG gap = b.timeMs - a.timeMs;
     const auto& av = a.meters[meter];
     const auto& bv = b.meters[meter];
@@ -16358,7 +16468,12 @@ static BurnUpCurve BuildBurnUpCurve(const std::deque<HistorySample>& samples, in
     while (newest && !HistoryHasValue(samples[newest - 1], meter)) --newest;
     if (!newest) return curve;
     const HistorySample* later = &samples[--newest];
-    const HistoryValue& window = later->meters[meter];
+    HistoryValue window = later->meters[meter];
+    if (HistoryCalendarMonth(*later, meter)) {
+        const UtcMonth month = UtcMonthOf(later->timeMs);
+        window.resetMs = month.endMs;
+        window.durationMs = month.durationMs;
+    }
     if (!window.resetMs || !window.durationMs || window.durationMs > kBurnUpMaxWindowMs ||
         window.durationMs > window.resetMs) return curve;
     ULONGLONG start = window.resetMs - window.durationMs;
@@ -18049,12 +18164,21 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         if (m == 3 && sample.provider != 1 && sample.provider != 4 && sample.provider != 5) {
                             continue;
                         }
-                        sample.meters[m] = {windows[m]->pct, windows[m]->resetUnixMs,
-                                            windows[m]->windowDurationMs};
+                        // Only a reported window is recorded. Readers place a calendar-month
+                        // reading by the record's time (HistoryCalendarMonth), so one whose month
+                        // ended before that time (a poll across the month's end) is left out.
+                        const bool calendar = windows[m]->calendarMonth;
+                        if (calendar && sample.timeMs >= windows[m]->resetUnixMs) continue;
+                        sample.meters[m] = {windows[m]->pct, calendar ? 0 : windows[m]->resetUnixMs,
+                                            calendar ? 0 : windows[m]->windowDurationMs};
                     }
-                    if (sample.provider == 1) {
-                        sample.meters[6] = {results[i].extraUsedAmount,
-                                           results[i].extraUsage.resetUnixMs, 0};
+                    if (const WindowUsage& extra = results[i].extraUsage; sample.provider == 1) {
+                        // Its dollars, under the same rule.
+                        if (!extra.calendarMonth) {
+                            sample.meters[6] = {results[i].extraUsedAmount, extra.resetUnixMs, 0};
+                        } else if (sample.timeMs < extra.resetUnixMs) {
+                            sample.meters[6].value = results[i].extraUsedAmount;
+                        }
                     } else if (sample.provider == 2 && !results[i].creditsUnlimited) {
                         sample.meters[7].value = results[i].creditsBalance;
                     }
@@ -19821,6 +19945,7 @@ struct MeterDisplay {
     double sparklineReadingScale;  // kSparklineReadingScaleMin-kSparklineReadingScaleMax percent, as a fraction.
     // Long windows' charts span this before and after now (AccountMeters); 0: the whole window.
     ULONGLONG sparklineAroundMs;
+    ExtraUsageChart extraUsageChart;
     double logoScale;         // kLogoScaleMin-kLogoScaleMax percent, as a fraction.
     LogoBrands logoBrands;
     int badgeSize;            // kBadgeSizeMin-kBadgeSizeMax DIPs.
@@ -19903,6 +20028,8 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& 
         .sparklineRing = settings.sparklineRing,
         .sparklineReadingScale = readingScale,
         .sparklineAroundMs = SparklineAroundMs(settings.sparklineSpan),
+        .extraUsageChart = ExtraUsageChart(std::clamp(int(settings.extraUsageChart), int(ExtraUsageChart::Off),
+                                                      int(ExtraUsageChart::Week))),
         .logoScale = std::clamp(settings.logoScale, kLogoScaleMin, kLogoScaleMax) / 100.0,
         .logoBrands = settings.logoBrands,
         .badgeSize = std::clamp(settings.badgeSize, kBadgeSizeMin, kBadgeSizeMax),
@@ -20177,6 +20304,34 @@ static std::optional<UsageProjection> ProjectUsage(const WindowUsage& reading,
         projection.limit = true;
     }
     return projection;
+}
+
+// A trace from `start` on, for a chart whose span starts there: earlier readings drop out, and a
+// run across `start` begins there, at its usage then.
+static std::vector<TileTracePoint> TraceFrom(std::vector<TileTracePoint> trace, ULONGLONG start) {
+    auto first = std::lower_bound(trace.begin(), trace.end(), start,
+                                  [](const TileTracePoint& point, ULONGLONG time) { return point.timeMs < time; });
+    if (first != trace.begin() && first != trace.end() && first->connect && first->timeMs > start) {
+        const TileTracePoint &before = first[-1], &after = *first;
+        first[-1] = {start,
+                     before.used + (after.used - before.used) * double(start - before.timeMs) /
+                                       double(after.timeMs - before.timeMs),
+                     false};
+        --first;
+    }
+    trace.erase(trace.begin(), first);
+    return trace;
+}
+
+// The window whose span the chart of an account's extra usage is drawn over: its own or, for
+// Anthropic's under ExtraUsageChart::Week, the weekly quota's while that runs at `now`. The chart
+// keeps the extra usage's scale, pace and projection either way.
+static const WindowUsage& ExtraUsageChartSpan(ExtraUsageChart chart, const AccountConfig& account,
+                                              const AccountData& data, ULONGLONG now) {
+    const WindowUsage& week = data.winWeek;
+    bool running = week.pct >= 0 && week.windowDurationMs > 0 && week.resetUnixMs > week.windowDurationMs &&
+                   now >= week.resetUnixMs - week.windowDurationMs && now < week.resetUnixMs;
+    return chart == ExtraUsageChart::Week && account.provider == L"anthropic" && running ? week : data.extraUsage;
 }
 
 // Bar layouts' corners, thin rail, pace tick and percent text placement, in DIPs along and across
@@ -20608,8 +20763,12 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     bool circular = concentric || layout == BarLayout::SegmentedRing || gauge;
     bool ring = IsRingTile(layout);
     bool paceMarks = display.showPaceTicks && layout != BarLayout::LogoHeadline && !matrix;
+    // A sparkline's quotas with a window to chart; Anthropic's extra usage only per its chart
+    // setting.
     auto timed = [&](int w) {
-        return usage[w]->windowDurationMs > 0 && usage[w]->resetUnixMs > usage[w]->windowDurationMs;
+        return usage[w]->windowDurationMs > 0 && usage[w]->resetUnixMs > usage[w]->windowDurationMs &&
+               !(w == kExtraUsageBar && account.provider == L"anthropic" &&
+                 display.extraUsageChart == ExtraUsageChart::Off);
     };
     // The most-used tile quota: the headline's.
     int top = -1;
@@ -20620,7 +20779,8 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     if (spark) {
         // A chart per quota with a window; without any, the most-used quota's. Anthropic's extra
         // usage and OpenAI's credits go in the weekly chart's corner, instead of a chart of its
-        // own, while selected and reported; credits have no window, so never get a chart.
+        // own, while selected and reported; credits have no window, so never get a chart, nor
+        // does Anthropic's extra usage with its chart off.
         int charted = 0;
         for (int w = 0; w < kQuotaBarCount; w++) {
             if ((meters.barMask & (1 << w)) && timed(w)) charted |= 1 << w;
@@ -21004,13 +21164,18 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             // A rolled-back clock can put now before the newest reading: the time, the current
             // reading and the projection take the later of the two.
             ULONGLONG now = trace.empty() ? display.now : std::max(display.now, trace.back().timeMs);
-            // The span drawn: the window, or a long window's day each side of now, kept inside the
-            // window.
+            // The span drawn: the window (extra usage: its chart's, ExtraUsageChartSpan), or a long
+            // one's day each side of now, kept inside it.
             ULONGLONG windowStart = timed(w) ? wu.resetUnixMs - wu.windowDurationMs : 0;
             ULONGLONG start = windowStart, span = wu.windowDurationMs;
+            if (timed(w) && w == kExtraUsageBar) {
+                const WindowUsage& over = ExtraUsageChartSpan(display.extraUsageChart, account, data, now);
+                start = over.resetUnixMs - over.windowDurationMs;
+                span = over.windowDurationMs;
+            }
             const ULONGLONG around = display.sparklineAroundMs;
             if (timed(w) && around && span > 2 * around) {
-                start = std::min(now > windowStart + around ? now - around : windowStart, wu.resetUnixMs - 2 * around);
+                start = std::min(now > start + around ? now - around : start, start + span - 2 * around);
                 span = 2 * around;
             }
             auto xAt = [&](ULONGLONG timeMs) {
@@ -21072,27 +21237,17 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 return {std::move(figure)};
             };
             if (timed(w)) {
-                // The window's even use across the span: 0% to 100% across the whole window.
-                if (display.showPaceTicks) {
-                    double from = 100.0 * double(start - windowStart) / double(wu.windowDurationMs);
-                    double to = 100.0 * double(start + span - windowStart) / double(wu.windowDurationMs);
-                    shapes[kSparkPace] = {{0, yAt(from), {{width, yAt(to)}}}};
+                // The window's even use, 0% to 100% across the whole window, over the part of it in
+                // the span.
+                const ULONGLONG paceFrom = std::max(start, windowStart), paceTo = std::min(start + span, wu.resetUnixMs);
+                if (display.showPaceTicks && paceFrom < paceTo) {
+                    auto even = [&](ULONGLONG time) {
+                        return 100.0 * double(time - windowStart) / double(wu.windowDurationMs);
+                    };
+                    shapes[kSparkPace] = {{xAt(paceFrom), yAt(even(paceFrom)), {{xAt(paceTo), yAt(even(paceTo))}}}};
                 }
-                // Readings before a span around now drop out; a run across its start begins there.
-                std::vector<TileTracePoint> drawn = trace;
-                if (start > windowStart) {
-                    auto first = std::lower_bound(drawn.begin(), drawn.end(), start,
-                                                  [](const TileTracePoint& point, ULONGLONG time) { return point.timeMs < time; });
-                    if (first != drawn.begin() && first != drawn.end() && first->connect && first->timeMs > start) {
-                        const TileTracePoint &before = first[-1], &after = *first;
-                        first[-1] = {start,
-                                     before.used + (after.used - before.used) * double(start - before.timeMs) /
-                                                       double(after.timeMs - before.timeMs),
-                                     false};
-                        --first;
-                    }
-                    drawn.erase(drawn.begin(), first);
-                }
+                // Readings before a span starting inside the window drop out.
+                const std::vector<TileTracePoint> drawn = start > windowStart ? TraceFrom(trace, start) : trace;
                 for (size_t begin = 0, end; begin < drawn.size(); begin = end) {
                     TileOutlineFigure line{xAt(drawn[begin].timeMs), yAt(drawn[begin].used), {}};
                     for (end = begin + 1; end < drawn.size() && drawn[end].connect; end++) {
@@ -22624,6 +22779,7 @@ struct FlyoutDisplay {
     bool warn = false;
     bool refreshing = false;
     bool visualTestMode = false;
+    ExtraUsageChart extraUsageChart = ExtraUsageChart::Month;  // MeterDisplay::extraUsageChart
     // What the provider's status page shows, and the taskbar mark's color for it (0: none).
     ProviderOutage outage;
     uint32_t outageColor = 0;
@@ -23041,10 +23197,9 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         details.Children().Append(row.visual);
 
         if (charted) {
-            // Usage chart: card-tinted plot and the even-pace diagonal from the window start to
-            // the reset (rising; UpdateAccountFlyout turns it in remaining mode), under the
-            // recorded usage (area, segments, isolated readings), projection, now line and
-            // current point, whose geometry UpdateAccountFlyout sets.
+            // Usage chart: card-tinted plot and the even-pace line, under the recorded usage
+            // (area, segments, isolated readings), projection, now line and current point;
+            // UpdateAccountFlyout sets their geometry.
             Grid chart;
             chart.Width(kFlyoutChartWidth);
             chart.Height(kFlyoutChartHeight);
@@ -23069,10 +23224,6 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
             bounds.Rect({0, 0, (float)kFlyoutChartWidth, (float)kFlyoutChartHeight});
             canvas.Clip(bounds);
             wuxs::Line pace;
-            pace.X1(0);
-            pace.Y1(kFlyoutChartHeight - kFlyoutChartInset);
-            pace.X2(kFlyoutChartWidth);
-            pace.Y2(kFlyoutChartInset);
             paceStroke(pace);
             canvas.Children().Append(pace);
             row.chartPace = pace;
@@ -23529,20 +23680,28 @@ static void UpdateAccountFlyout(
             show(row.projection, !projection.empty());
 
             // Usage chart in place of the bar: used %, or % left in remaining mode, over the
-            // displayed reading's window, with the projection. Shapes are regenerated only when
-            // the drawn geometry changes.
+            // displayed reading's window, with the projection; Anthropic's extra usage per its
+            // chart setting. Shapes are regenerated only when the drawn geometry changes.
             bool charted = row.chart && !trace.empty() && wu.windowDurationMs > 0 &&
-                           wu.resetUnixMs > wu.windowDurationMs;
+                           wu.resetUnixMs > wu.windowDurationMs &&
+                           !(r == kFlyoutExtraRow && account.provider == L"anthropic" &&
+                             display.extraUsageChart == ExtraUsageChart::Off);
             show(row.visual, !charted);
             show(row.chart, charted);
             if (charted) {
                 anyChart = true;
                 using winrt::Windows::Foundation::Point;
-                double start = (double)(wu.resetUnixMs - wu.windowDurationMs);
+                // A rolled-back clock can put now before the newest reading.
+                ULONGLONG now = std::max(display.now, trace.back().timeMs);
+                // The span drawn: the window; extra usage, its chart's (ExtraUsageChartSpan).
+                const ULONGLONG windowStart = wu.resetUnixMs - wu.windowDurationMs;
+                const WindowUsage& over = r == kFlyoutExtraRow ?
+                    ExtraUsageChartSpan(display.extraUsageChart, account, d, now) : wu;
+                const ULONGLONG start = over.resetUnixMs - over.windowDurationMs, span = over.windowDurationMs;
                 auto snap = [](double dip) { return (float)(std::round(dip * 4) / 4); };
                 auto xAt = [&](ULONGLONG timeMs) {
-                    return snap(std::clamp(((double)timeMs - start) / wu.windowDurationMs,
-                                           0.0, 1.0) * kFlyoutChartWidth);
+                    return snap(std::clamp(((double)timeMs - (double)start) / (double)span, 0.0, 1.0) *
+                                kFlyoutChartWidth);
                 };
                 auto yAt = [&](double used) {
                     double shown = std::clamp(remainingMode ? 100.0 - used : used, 0.0, 100.0);
@@ -23550,25 +23709,46 @@ static void UpdateAccountFlyout(
                                 (kFlyoutChartHeight - 2 * kFlyoutChartInset) * shown / 100.0);
                 };
                 FlyoutChartShape shape;
-                for (size_t begin = 0, end; begin < trace.size(); begin = end) {
-                    std::vector<Point> run{{xAt(trace[begin].timeMs), yAt(trace[begin].used)}};
-                    for (end = begin + 1; end < trace.size() && trace[end].connect; end++) {
-                        run.push_back({xAt(trace[end].timeMs), yAt(trace[end].used)});
+                // Readings before a span starting inside the window drop out.
+                const std::vector<TileTracePoint> plotted = start > windowStart ? TraceFrom(trace, start) : trace;
+                for (size_t begin = 0, end; begin < plotted.size(); begin = end) {
+                    std::vector<Point> run{{xAt(plotted[begin].timeMs), yAt(plotted[begin].used)}};
+                    for (end = begin + 1; end < plotted.size() && plotted[end].connect; end++) {
+                        run.push_back({xAt(plotted[end].timeMs), yAt(plotted[end].used)});
                     }
                     if (run.size() == 1) shape.dots.push_back(run.front());
                     else shape.lines.push_back(std::move(run));
                 }
-                // A rolled-back clock can put now before the newest reading.
-                ULONGLONG now = std::max(display.now, trace.back().timeMs);
                 shape.now = {xAt(now), yAt(wu.pct)};
-                if (projected) shape.projectionEnd = {xAt(projected->toMs), yAt(projected->toUsed)};
+                if (projected) {
+                    // Cut at the span's end, before a later reset or limit.
+                    ULONGLONG toMs = std::min(projected->toMs, start + span);
+                    double toUsed = projected->toUsed;
+                    if (toMs < projected->toMs) {
+                        toUsed = wu.pct + (toUsed - wu.pct) * ((double)toMs - (double)projected->fromMs) /
+                                              ((double)projected->toMs - (double)projected->fromMs);
+                    }
+                    shape.projectionEnd = {xAt(toMs), yAt(toUsed)};
+                }
+                // The window's even use, 0% at its start to 100% at its reset, over the part of
+                // it in the span.
+                const ULONGLONG paceFrom = std::max(start, windowStart), paceTo = std::min(start + span, wu.resetUnixMs);
+                if (paceFrom < paceTo) {
+                    auto even = [&](ULONGLONG time) {
+                        return 100.0 * double(time - windowStart) / double(wu.windowDurationMs);
+                    };
+                    shape.paceFrom = {xAt(paceFrom), yAt(even(paceFrom))};
+                    shape.paceTo = {xAt(paceTo), yAt(even(paceTo))};
+                }
                 shape.color = colorValue;
-                shape.remaining = remainingMode;
 
                 FlyoutChartShape& drawn = row.chartShape;
-                if (shape.remaining != drawn.remaining) {
-                    row.chartPace.Y1(yAt(0));
-                    row.chartPace.Y2(yAt(100));
+                if (shape.paceFrom != drawn.paceFrom || shape.paceTo != drawn.paceTo) {
+                    show(row.chartPace, shape.paceFrom.X >= 0);
+                    row.chartPace.X1(shape.paceFrom.X);
+                    row.chartPace.Y1(shape.paceFrom.Y);
+                    row.chartPace.X2(shape.paceTo.X);
+                    row.chartPace.Y2(shape.paceTo.Y);
                 }
                 if (shape.lines != drawn.lines || shape.dots != drawn.dots) {
                     // Each run is a stroked figure over a filled one closed to the plot bottom.
@@ -25437,6 +25617,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                 display.usageColors, settings.showOpenAiExtraLimits,
                                                 meters.stale, meters.warn, accountRefreshing,
                                                 visualTestMode};
+                    flyoutDisplay.extraUsageChart = display.extraUsageChart;
                     flyoutDisplay.outage = outage;
                     flyoutDisplay.outageColor = meters.mark == IdentityMark::Outage ? meters.markColor : 0;
                     flyoutDisplay.locale = display.locale;
@@ -32123,6 +32304,9 @@ static bool NormalizeSettings(Settings* s) {
     if (s->sparklineSpan < SparklineSpan::Window || s->sparklineSpan > SparklineSpan::Hours48) {
         s->sparklineSpan = SparklineSpan::Window;
     }
+    if (s->extraUsageChart < ExtraUsageChart::Off || s->extraUsageChart > ExtraUsageChart::Week) {
+        s->extraUsageChart = ExtraUsageChart::Month;
+    }
     if (s->sparklineHoverSpan &&
         (*s->sparklineHoverSpan < SparklineSpan::Window || *s->sparklineHoverSpan > SparklineSpan::Hours48)) {
         s->sparklineHoverSpan = SparklineSpan::Hours24;
@@ -32316,6 +32500,8 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"showBarLabels", s.showBarLabels);
         setBool(L"extraBarAmounts", s.showExtraBarAmounts);
         setBool(L"openAiExtraLimits", s.showOpenAiExtraLimits);
+        setString(L"extraUsageChart", s.extraUsageChart == ExtraUsageChart::Off ? L"off" :
+                                      s.extraUsageChart == ExtraUsageChart::Week ? L"week" : L"month");
         setNumber(L"yellowThreshold", s.yellowThreshold);
         setNumber(L"orangeThreshold", s.orangeThreshold);
         setNumber(L"redThreshold", s.redThreshold);
@@ -32573,6 +32759,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         // "showCodexSpark" is the pre-1.6.2 key for the same toggle.
         s.showOpenAiExtraLimits = getBoolDefault(L"openAiExtraLimits",
                                                  getBoolDefault(L"showCodexSpark", false));
+        std::wstring extraUsageChart = GetStr(root, L"extraUsageChart");
+        s.extraUsageChart = extraUsageChart == L"off" ? ExtraUsageChart::Off :
+                            extraUsageChart == L"week" ? ExtraUsageChart::Week : ExtraUsageChart::Month;
         s.yellowThreshold = (int)GetNum(root, L"yellowThreshold", 50);
         s.orangeThreshold = (int)GetNum(root, L"orangeThreshold", 75);
         s.redThreshold = (int)GetNum(root, L"redThreshold", 90);
@@ -33336,6 +33525,7 @@ enum class SettingsField : uint8_t {
     ShowStaleWarning,
     ShowProviderOutages,
     ShowOpenAiExtraLimits,
+    ExtraUsageChart,        // An ExtraUsageChart
     // Accounts: fields of the account a draft's key names
     AccountLabel,         // Text, trimmed; unique per provider
     AccountTileIdentity,  // A TileIdentity
@@ -33461,7 +33651,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::UsageColorOrange,    SettingsField::UsageColorRed,
                     SettingsField::YellowThreshold,     SettingsField::OrangeThreshold,
                     SettingsField::RedThreshold,        SettingsField::ShowStaleWarning,
-                    SettingsField::ShowProviderOutages, SettingsField::ShowOpenAiExtraLimits};
+                    SettingsField::ShowProviderOutages, SettingsField::ShowOpenAiExtraLimits,
+                    SettingsField::ExtraUsageChart};
         default: return {};
     }
 }
@@ -33545,6 +33736,7 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::ShowStaleWarning: return s.showStaleWarning;
         case SettingsField::ShowProviderOutages: return s.showProviderOutages;
         case SettingsField::ShowOpenAiExtraLimits: return s.showOpenAiExtraLimits;
+        case SettingsField::ExtraUsageChart: return int(s.extraUsageChart);
         default: return 0;
     }
 }
@@ -33680,6 +33872,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::ShowStaleWarning: s.showStaleWarning = value != 0; break;
         case SettingsField::ShowProviderOutages: s.showProviderOutages = value != 0; break;
         case SettingsField::ShowOpenAiExtraLimits: s.showOpenAiExtraLimits = value != 0; break;
+        case SettingsField::ExtraUsageChart:
+            s.extraUsageChart = ExtraUsageChart(std::clamp(value, int(ExtraUsageChart::Off), int(ExtraUsageChart::Week)));
+            break;
         case SettingsField::ResetDisplay:
             s.material = defaults.material;
             s.barMode = defaults.barMode;
@@ -33691,6 +33886,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.showStaleWarning = defaults.showStaleWarning;
             s.showProviderOutages = defaults.showProviderOutages;
             s.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
+            s.extraUsageChart = defaults.extraUsageChart;
             break;
         case SettingsField::ResetLayout:
             s.barLayout = defaults.barLayout;
@@ -37664,9 +37860,9 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
 
 // src/settings/page-display.h
 // Settings > Display: the material of the details flyout and the windows, the bar mode, the
-// meters' usage colors and thresholds, the stale and outage marks and the OpenAI details (approved mockup
-// display.png, Appearance aside). The preview card is in the shell's pinned header
-// (settings/preview.h). Pure builder.
+// meters' usage colors and thresholds, the stale and outage marks, the OpenAI details and the
+// extra usage chart (approved mockup display.png, Appearance aside). The preview card is in the
+// shell's pinned header (settings/preview.h). Pure builder.
 
 // Lays out the page from content y; returns the bottom of the last card.
 static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
@@ -37798,6 +37994,18 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
         spec.description = {{text(Tr(L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in "
                                      L"OpenAI details."))}};
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowOpenAiExtraLimits);
+    }
+    {
+        UiCardSpec spec;
+        spec.title = text(Tr(L"Extra usage chart"));
+        spec.description = {{text(Tr(L"How the details flyout charts Anthropic extra usage: over its month, over the "
+                                     L"weekly quota\u2019s window on the same scale, or as a bar. Usage graph tiles "
+                                     L"follow it for an extra usage chart of their own."))}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ExtraUsageChart, 200,
+                                    {{text(TrCtx(L"extra-usage-chart", L"Off")), int(ExtraUsageChart::Off)},
+                                     {text(TrCtx(L"extra-usage-chart", L"Month")), int(ExtraUsageChart::Month)},
+                                     {text(TrCtx(L"extra-usage-chart", L"Week")), int(ExtraUsageChart::Week)}},
+                                    int(s.extraUsageChart));
     }
 
     UiCardSpec reset;

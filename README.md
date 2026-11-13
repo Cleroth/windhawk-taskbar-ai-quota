@@ -40,7 +40,7 @@ Right-click any quota column and choose **Settings**. The window follows the Win
 
 - **Accounts:** add, reorder, show or hide, rename, choose taskbar quotas and identity, record history, sign in or out, remove
 - **Layout**, with a live taskbar preview: tile style, position on the taskbar, sizes, logo and number badge, identity position, bar text, pace markers, spacing
-- **Display:** material, used or remaining, usage colors and thresholds, stale marker, provider outages, additional OpenAI rate limits
+- **Display:** material, used or remaining, usage colors and thresholds, stale marker, provider outages, additional OpenAI rate limits, the extra usage chart
 - **Behavior:** language, displays, hover details, polling, hidden accounts, threshold notifications
 - **History:** recording, retention, the usage history window's default time span, storage folder
 - **About:** version info for bug reports, links, contributors, credits, license

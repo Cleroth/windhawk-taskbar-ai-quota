@@ -113,6 +113,9 @@ static bool NormalizeSettings(Settings* s) {
     if (s->sparklineSpan < SparklineSpan::Window || s->sparklineSpan > SparklineSpan::Hours48) {
         s->sparklineSpan = SparklineSpan::Window;
     }
+    if (s->extraUsageChart < ExtraUsageChart::Off || s->extraUsageChart > ExtraUsageChart::Week) {
+        s->extraUsageChart = ExtraUsageChart::Month;
+    }
     if (s->sparklineHoverSpan &&
         (*s->sparklineHoverSpan < SparklineSpan::Window || *s->sparklineHoverSpan > SparklineSpan::Hours48)) {
         s->sparklineHoverSpan = SparklineSpan::Hours24;
@@ -306,6 +309,8 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"showBarLabels", s.showBarLabels);
         setBool(L"extraBarAmounts", s.showExtraBarAmounts);
         setBool(L"openAiExtraLimits", s.showOpenAiExtraLimits);
+        setString(L"extraUsageChart", s.extraUsageChart == ExtraUsageChart::Off ? L"off" :
+                                      s.extraUsageChart == ExtraUsageChart::Week ? L"week" : L"month");
         setNumber(L"yellowThreshold", s.yellowThreshold);
         setNumber(L"orangeThreshold", s.orangeThreshold);
         setNumber(L"redThreshold", s.redThreshold);
@@ -563,6 +568,9 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         // "showCodexSpark" is the pre-1.6.2 key for the same toggle.
         s.showOpenAiExtraLimits = getBoolDefault(L"openAiExtraLimits",
                                                  getBoolDefault(L"showCodexSpark", false));
+        std::wstring extraUsageChart = GetStr(root, L"extraUsageChart");
+        s.extraUsageChart = extraUsageChart == L"off" ? ExtraUsageChart::Off :
+                            extraUsageChart == L"week" ? ExtraUsageChart::Week : ExtraUsageChart::Month;
         s.yellowThreshold = (int)GetNum(root, L"yellowThreshold", 50);
         s.orangeThreshold = (int)GetNum(root, L"orangeThreshold", 75);
         s.redThreshold = (int)GetNum(root, L"redThreshold", 90);

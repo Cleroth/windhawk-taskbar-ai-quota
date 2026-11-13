@@ -100,6 +100,11 @@ polls, sleep, restarts, and recording/settings changes break graph continuity. N
 backfilled. With **Do not poll hidden accounts** on, hidden accounts have no new samples. Turn
 it off to poll hidden accounts only when both global and per-account recording are enabled.
 
+Anthropic reports no reset for extra usage, so its readings are recorded without one, in the
+journal and the CSV. The viewer and the charts place each in the calendar month (UTC) it was
+taken in, readings from before 2.21.0 included, so a month's start is a reset on that line, as
+with other quotas. A poll that runs across a month's end records no extra usage.
+
 History follows the **configured account entry**, not a verified provider login. Renaming keeps
 its history. Use a new entry for a different provider or login, including an Antigravity login
 changed in its app. Removing an entry retains anonymous history until expiry, Clear, or
@@ -196,6 +201,9 @@ time near the limit) are estimates from the readings kept and can differ from be
   there drops the custom colors.
 - A version without **Forever** keeps 3650 days but applies its size cap, permanently discarding
   samples beyond the newest 250,000.
+- Versions before 2.21.0 have no window for Anthropic extra usage: they show its bar instead of a
+  chart and draw its line through a month's start, and saving settings there drops the extra
+  usage chart choice, so it is Month after updating back.
 - Versions before 2.18.0 read the journal, recording choice and language from their old places
   (`%LOCALAPPDATA%`, HKCU). Once this version moved them, such a version starts with recording on
   and the language on Automatic, and records a new journal in the old folder. Updating again keeps

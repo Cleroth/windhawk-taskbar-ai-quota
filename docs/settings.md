@@ -81,7 +81,8 @@ With a live preview of the taskbar:
   it: the amount (`$` for Anthropic extra usage, credits for OpenAI; default), the percentage of
   the limit (the amount without one), or off, spent in used mode and left in remaining mode.
   OpenAI credits never get a chart of their own; GitHub Copilot's monthly AI credits and OpenCode
-  Go's monthly do
+  Go's monthly do, and so does Anthropic extra usage with this off or without a 7d chart, per
+  Display's extra usage chart
 - identity position (left, right, top, bottom, or hidden) for stacked and vertical bars, the label
   font size for label identities, and the identity gap
 - logo size (50 to 200% of the standard size; ring logos stay inside the hole), and the number
@@ -135,6 +136,13 @@ With the same preview:
   no status pages
 - additional OpenAI rate limits as rows in the details flyout, one per window (Codex Spark, hidden
   model lanes such as `gpt-reserve`), hidden by default
+- extra usage chart: how the details flyout charts Anthropic extra usage: **Month** (default;
+  across its calendar month), **Week** (across the current weekly quota's window, lined up with
+  the weekly chart: still the share of the monthly budget, with the month's pace and projection;
+  only this month's readings, so the part of a week before the 1st stays empty; the month again
+  while the account has no running weekly window) or **Off** (the bar). A usage graph tile's own
+  extra usage chart follows it; off, extra usage has no chart there (alone on its tile, only its
+  current reading). The reset time, pace and projection show either way
 
 ## Behavior
 

@@ -10,10 +10,21 @@ static bool HistoryHasValue(const HistorySample& sample, int meter) {
 
 enum class HistoryBreak { None, Gap, Reset, Unavailable };
 
+// Whether a reading's window is the calendar month (UTC) it was taken in (UtcMonthOf): Anthropic
+// (provider 1) reports no window for extra usage, its budget % (meter 3) and dollars (meter 6),
+// which runs over that month, so the journal holds none.
+static bool HistoryCalendarMonth(const HistorySample& sample, int meter) {
+    return sample.provider == 1 && (meter == 3 || meter == 6) && !sample.meters[meter].resetMs;
+}
+
 // Whether two valid readings of a meter, b later than a, belong to one quota window,
 // regardless of how they were sampled.
 static HistoryBreak HistoryWindowConnection(const HistorySample& a, const HistorySample& b,
                                             int meter) {
+    // Calendar months are exact, without a reported reset's jitter.
+    if (HistoryCalendarMonth(a, meter) && HistoryCalendarMonth(b, meter)) {
+        return UtcMonthOf(a.timeMs).endMs == UtcMonthOf(b.timeMs).endMs ? HistoryBreak::None : HistoryBreak::Reset;
+    }
     ULONGLONG gap = b.timeMs - a.timeMs;
     const auto& av = a.meters[meter];
     const auto& bv = b.meters[meter];

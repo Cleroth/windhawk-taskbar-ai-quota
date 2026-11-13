@@ -117,7 +117,16 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
             double utilization = GetNum(eu, L"utilization");
             bool limitIsNull = eu.HasKey(L"monthly_limit") &&
                                eu.GetNamedValue(L"monthly_limit").ValueType() == JsonValueType::Null;
+            // The reset the response names, back to the same day of the month before; without one,
+            // extra usage runs over the calendar month (UTC).
             d->extraUsage.resetUnixMs = ParseIso8601Ms(GetStr(eu, L"resets_at"));
+            ULONGLONG cycleMs = MonthBeforeMs(d->extraUsage.resetUnixMs);
+            if (!d->extraUsage.resetUnixMs) {
+                const UtcMonth month = UtcMonthOf(NowUnixMs());
+                d->extraUsage.resetUnixMs = month.endMs;
+                d->extraUsage.calendarMonth = true;
+                cycleMs = month.durationMs;
+            }
             if (limitIsNull) {
                 // Reported spending is usable history even without a percentage ceiling.
                 if (std::isfinite(usedCents) && usedCents >= 0) {
@@ -133,9 +142,7 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
                 d->extraUsage.pct = utilization;
                 d->extraUsedAmount = std::max(usedCents, 0.0) / 100.0;
                 d->extraLimitAmount = limitCents / 100.0;
-                // The API omits the cycle start: the previous monthly billing boundary, from its
-                // authoritative next-reset timestamp.
-                d->extraUsage.windowDurationMs = MonthBeforeMs(d->extraUsage.resetUnixMs);
+                d->extraUsage.windowDurationMs = cycleMs;
             }
         }
 

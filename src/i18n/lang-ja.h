@@ -157,6 +157,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Exported {rows, plural, one{# meter rows} other{# meter rows}} (selected account) to {path}. "
           L"Labels omitted; times UTC.",
      L"{rows, plural, other{メーター # 行}} (選択したアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
+    {L"", L"Extra usage chart", L"追加使用量のグラフ"},
     {L"", L"Free to use, modify and share.", L"自由に使用、変更、共有できます。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -184,6 +185,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"Anthropic、OpenAI、GitHub Copilot、OpenCode Go をポーリングする頻度です。Antigravity はローカル セッションを 1 分ごとにポーリングします。"},
+    {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
+          L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
+     L"詳細フライアウトでの Anthropic の追加使用量の表示方法: その月のグラフ、週間クォータの期間に合わせた同じ目盛りのグラフ、またはバー。［使用量グラフ］のタイルで追加使用量に専用のグラフがある場合も、この設定に従います。"},
     {L"", L"Identity", L"識別表示"},
     {L"", L"Identity gap", L"識別表示との間隔"},
     {L"", L"Identity position", L"識別表示の位置"},
@@ -693,6 +697,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"duration", L"{minutes}m", L"{minutes}分"},
     {L"duration", L"{minutes}m {seconds}s", L"{minutes}分{seconds}秒"},
     {L"duration", L"{seconds}s", L"{seconds}秒"},
+    {L"extra-usage-chart", L"Month", L"月"},
+    {L"extra-usage-chart", L"Off", L"オフ"},
+    {L"extra-usage-chart", L"Week", L"週"},
     {L"file-type", L"All files (*.*)", L"すべてのファイル (*.*)"},
     {L"file-type", L"CSV files (*.csv)", L"CSV ファイル (*.csv)"},
     {L"flyout-footer", L"No data yet", L"データはまだありません"},
