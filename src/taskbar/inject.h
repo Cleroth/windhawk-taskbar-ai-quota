@@ -830,5 +830,10 @@ static bool HookTaskbarDllSymbols() {
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &Std_Ref_Decref_Original},  // i18n-en: symbol names
         {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"}, &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},  // i18n-en: symbol names
     };
-    return WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
+    // Windhawk skips its online symbol cache for a local build (a `local@` ID), which then needs
+    // Microsoft's PDB and stays unloaded on a Windows build that has none published. Naming the
+    // published mod's entry, the catalog build's default, lets both resolve the same way.
+    WH_HOOK_SYMBOLS_OPTIONS options{sizeof(options)};
+    options.onlineCacheUrl = L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/taskbar-ai-quota/";
+    return WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks), &options);
 }
