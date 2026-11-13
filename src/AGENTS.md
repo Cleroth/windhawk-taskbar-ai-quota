@@ -182,7 +182,12 @@ first, then reads/updates XAML.
   local build needs the PDB; when Microsoft hasn't published it, init fails and Windhawk unloads
   the mod ("Unloaded" in `Engine\ModsWritable\mod-status`), then throttles retries until its
   service restarts: 4 h for a load at Explorer start, 1 min for a toggle, none with mod logging
-  on.
+  on. `pwsh seed-symbol-cache.ps1` then copies the published entry for the installed
+  `taskbar.dll` into the local build's cache (one value under
+  `HKLM\SOFTWARE\Windhawk\Engine\ModsWritable\local@taskbar-ai-quota\SymbolCache`, no elevation;
+  `-WhatIf` reports only; an entry already cached is kept unless `-Force`); disable and re-enable
+  the mod after. It works only while the published version hooks every symbol the build resolves,
+  optional ones included.
 - Windows' native taskbar position setting docks a taskbar at any edge: RootGrid's
   `DockingStates` names it, and a move re-lays out the same tree (no `TrayUI::StartTaskbar`), so
   the edge watch rebuilds. Only that state picks the side layout, never the window's shape: a
