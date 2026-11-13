@@ -46,7 +46,10 @@ byte-identical, newer than the catalog version, and the only changed file. It th
 PR validation on it (the clone's `.github/pr_validation.py`, as gh's user) and fails on any
 warning; `generate-mod.ps1 -Locate` maps its line numbers. The PR description's checks run only on
 GitHub. It never commits, pushes, or edits PR text; `-Verify` rechecks the worktree without
-changing it. Then:
+changing it.
+
+Show the user the drafted PR title and changelog and wait for their approval before committing,
+pushing or opening the PR; later edits to either need it too. Then:
 
 ```pwsh
 $wt = "$env:LOCALAPPDATA\windhawk-taskbar-ai-quota\windhawk-mods"
