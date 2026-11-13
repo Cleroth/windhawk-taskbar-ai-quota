@@ -193,6 +193,10 @@ first, then reads/updates XAML.
   took, and write only from owner-thread code that teardown revokes (`LayoutUpdated`, injection,
   removal), never from deferred dispatcher work that could run after unload. Revoke callbacks
   before giving the margin back.
+- The bounds the taskbar reports to the shell for its buttons are the repeater's layout's, converted
+  as if they were the frame's: they leave out the repeater's margin. The optional
+  `CTaskListWnd::_ComputeJumpViewPosition` hook adds Left side's room back to the jump list's
+  anchor; a margin on a repeater child (Start's) needs nothing.
 
 ## Credentials and history storage
 

@@ -817,6 +817,35 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     if (g_refreshEvent) SetEvent(g_refreshEvent);
 }
 
+using CTaskListWnd_ComputeJumpViewPosition_t = HRESULT(WINAPI*)(void*, void*, int, winrt::Windows::Foundation::Point*,
+                                                                HorizontalAlignment*, VerticalAlignment*);
+static CTaskListWnd_ComputeJumpViewPosition_t CTaskListWnd_ComputeJumpViewPosition_Original = nullptr;
+
+// A taskbar button's jump list opens at a point (raw desktop pixels) found from the bounds the
+// taskbar's layout reports for the button. Those are the repeater's own, taken for the taskbar's:
+// they leave out the repeater's margin, so Left side's room there moves the buttons and not their
+// menus. The point takes our share of that margin.
+static HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(
+    void* pThis, void* group, int index, winrt::Windows::Foundation::Point* point,
+    HorizontalAlignment* horizontal, VerticalAlignment* vertical) {
+    HRESULT hr = CTaskListWnd_ComputeJumpViewPosition_Original(pThis, group, index, point, horizontal, vertical);
+    if (g_unloading || FAILED(hr) || !point) return hr;
+
+    std::lock_guard<std::mutex> lock(g_placementMutex);
+    for (const PlacementRecord& record : g_placementRecords) {
+        RECT taskbar{};
+        if (record.start || record.lost || record.applied <= 0.5 || !GetWindowRect(record.hWnd, &taskbar)) continue;
+        // Only a button on the taskbar itself, whose point is on the button's edge (the bottom one
+        // under a top taskbar): one in the overflow flyout, off the taskbar, isn't in the repeater.
+        if (point->X >= taskbar.left && point->X <= taskbar.right && point->Y >= taskbar.top &&
+            point->Y <= taskbar.bottom) {
+            point->X += (float)(record.applied * WindowDpi(record.hWnd) / 96.0);
+            break;
+        }
+    }
+    return hr;
+}
+
 static bool HookTaskbarDllSymbols() {
     HMODULE h = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!h) return false;
@@ -829,6 +858,9 @@ static bool HookTaskbarDllSymbols() {
         {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &TaskbarHost_FrameHeight_Original},  // i18n-en: symbol names
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &Std_Ref_Decref_Original},  // i18n-en: symbol names
         {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"}, &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},  // i18n-en: symbol names
+        // Optional: on a Windows build without it the bars still show, and Left side's jump lists open
+        // off their buttons. Its symbols must still resolve, like the others'.
+        {{LR"(protected: long __cdecl CTaskListWnd::_ComputeJumpViewPosition(struct ITaskBtnGroup *,int,struct Windows::Foundation::Point &,enum Windows::UI::Xaml::HorizontalAlignment &,enum Windows::UI::Xaml::VerticalAlignment &)const )"}, &CTaskListWnd_ComputeJumpViewPosition_Original, CTaskListWnd_ComputeJumpViewPosition_Hook, true},  // i18n-en: symbol names
     };
     // Windhawk skips its online symbol cache for a local build (a `local@` ID), which then needs
     // Microsoft's PDB and stays unloaded on a Windows build that has none published. Naming the
