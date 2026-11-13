@@ -883,6 +883,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Connexion requise. Cliquez sur les barres pour vous connecter."},
     {L"flyout-note", L"extra usage: unlimited", L"utilisation supplémentaire\u202F: illimitée"},
     {L"flyout-note", L"rate limits: none reported", L"limites de débit\u202F: aucune signalée"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, one{# réinitialisation Fable disponible} many{# de réinitialisations Fable disponibles} "
+     L"other{# réinitialisations Fable disponibles}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, one{# réinitialisation de cinq heures disponible} many{# de réinitialisations de cinq heures "
+     L"disponibles} other{# réinitialisations de cinq heures disponibles}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# réinitialisation gratuite disponible} many{# de réinitialisations gratuites disponibles} "
      L"other{# réinitialisations gratuites disponibles}}"},
@@ -890,6 +896,14 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
                      L"{when}",
      L"{count, plural, one{# réinitialisation gratuite disponible} many{# de réinitialisations gratuites disponibles} "
      L"other{# réinitialisations gratuites disponibles}} · la prochaine expire {when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, one{# réinitialisation complète disponible} many{# de réinitialisations complètes "
+     L"disponibles} other{# réinitialisations complètes disponibles}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, one{# réinitialisation hebdomadaire disponible} many{# de réinitialisations hebdomadaires "
+     L"disponibles} other{# réinitialisations hebdomadaires disponibles}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · expire {when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · la prochaine expire {when}"},
     {L"history-about", L"Axes and units", L"Axes et unités"},
     {L"history-about", L"Cards", L"Cartes"},
     {L"history-about", L"Legend and readout", L"Légende et lecture des valeurs"},

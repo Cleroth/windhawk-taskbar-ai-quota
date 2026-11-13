@@ -808,8 +808,10 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
                  {yellow, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.45), kWeeklyWindowMs}, kWeeklyWindowMs},
                 {L"Opus", {0, 0, kWeeklyWindowMs, true}, kWeeklyWindowMs},  // i18n-en
             };
-            accountData.freeResets = 2;
+            accountData.freeResets = 3;
             accountData.freeResetsExpiryMs = now + 3 * 24 * 60 * 60000ULL;
+            accountData.freeResetKinds[kFableReset] = {2, now + 40 * 24 * 60 * 60000ULL};
+            accountData.freeResetKinds[kWeeklyReset] = {1, accountData.freeResetsExpiryMs};
         } else if (openAi) {
             accountData.extraQuotas = {
                 {L"Spark",  // i18n-en

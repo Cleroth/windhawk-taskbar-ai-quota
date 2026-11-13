@@ -606,8 +606,8 @@ static void RunI18nTaskbarTests() {
         CHECK(pseudo.find(L"45%") < pseudo.find(L'x'));
     });
 
-    Run("details flyout templates on the production catalogs: Russian free resets by plural form and with "
-        "the next expiry; the French outage line's others (one for 0 and 1) and a Russian one through its "
+    Run("details flyout templates on the production catalogs: Russian free resets by plural form, with the "
+        "next expiry and of a kind; the French outage line's others (one for 0 and 1) and a Russian one through its "
         "start and incident; a German reset line and retry; a Russian Copilot amount; English as before", [] {
         const I18nLocale ru = TestLocale(L"ru"), fr = TestLocale(L"fr"), de = TestLocale(L"de");
         auto freeResets = [](const I18nLocale& locale, int count) {
@@ -638,6 +638,21 @@ static void RunI18nTaskbarTests() {
               L"\u044B\u0445 \u0441\u0431\u0440\u043E\u0441\u0430 \u00B7 \u0431\u043B\u0438\u0436\u0430\u0439\u0448"
               L"\u0438\u0439 \u0438\u0441\u0442\u0435\u043A\u0430\u0435\u0442 \u0447\u0435\u0440\u0435\u0437 2\u00A0"
               L"\u0434");
+        // A kind's resets in the line of their expiry: Доступно 3 сброса Fable · ближайший истекает через 2 д;
+        // the only one's in English.
+        std::wstring fable = I18nText(ru, TrCtx(L"free-resets", L"{count, plural, one{# Fable reset available} "
+                                                                L"other{# Fable resets available}}"),
+                                      {{L"count", 3}});
+        CHECK(I18nText(ru, TrCtx(L"free-resets", L"{resets} \u00B7 next expires {when}"),
+                       {{L"resets", fable}, {L"when", when}}) ==
+              L"\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E 3 \u0441\u0431\u0440\u043E\u0441\u0430 Fable \u00B7 "
+              L"\u0431\u043B\u0438\u0436\u0430\u0439\u0448\u0438\u0439 \u0438\u0441\u0442\u0435\u043A\u0430\u0435\u0442 "
+              L"\u0447\u0435\u0440\u0435\u0437 2\u00A0\u0434");
+        std::wstring weekly = I18nText({}, TrCtx(L"free-resets", L"{count, plural, one{# weekly reset available} "
+                                                                 L"other{# weekly resets available}}"),
+                                       {{L"count", 1}});
+        CHECK(I18nText({}, TrCtx(L"free-resets", L"{resets} \u00B7 expires {when}"),
+                       {{L"resets", weekly}, {L"when", L"in 2d"}}) == L"1 weekly reset available \u00B7 expires in 2d");
 
         auto others = [](const I18nLocale& locale, int count) {
             return I18nText(locale, TrCtx(L"outage-line", L"{component} and {count, plural, one{# more} other{# more}}: "

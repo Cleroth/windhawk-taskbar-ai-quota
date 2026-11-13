@@ -2,7 +2,7 @@
 
 // Claude Code's user agent: the usage response reports free resets (cedar_ember) only to a recent
 // Claude Code CLI. Keep it at a recent Claude Code release.
-static constexpr PCWSTR kClaudeCliUserAgent = L"claude-cli/2.1.318 (external, cli)";  // i18n-en
+static constexpr PCWSTR kClaudeCliUserAgent = L"claude-cli/2.1.323 (external, cli)";  // i18n-en
 
 static bool ParseAnthropicUsage(const std::string& body, AccountData* d, AccountError* error) {
     try {
@@ -140,8 +140,11 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
         }
 
         // Free resets, reported with ?cedar_ember=1: {eligible, grants[{id, resets_left, ends_at,
-        // paused, usable_now}], next_grant_id}. As Claude Code counts them: the resets left of the
-        // live grants (unpaused, usable now, not ended), none unless the next grant is live.
+        // paused, usable_now, gives_back_weekly, type, clears[]}], next_grant_id}. As Claude Code
+        // counts them: the resets left of the live grants (unpaused, usable now, not ended), none
+        // unless the next grant is live. And as it names their kinds: a grant that gives back to
+        // the week is a Fable reset; another has its type (session, weekly, full) or, without
+        // one, what it clears (five_hour alone, weekly limits alone, else everything).
         auto cedarEmber = GetObj(usage, L"cedar_ember");
         if (!cedarEmber) cedarEmber = GetObj(root, L"cedar_ember");
         if (cedarEmber && GetBool(cedarEmber, L"eligible")) {
@@ -150,6 +153,7 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
             double count = 0;
             bool nextLive = false;
             ULONGLONG nextEndsMs = 0;
+            decltype(d->freeResetKinds) kinds{};
             if (cedarEmber.HasKey(L"grants") &&
                 cedarEmber.GetNamedValue(L"grants").ValueType() == JsonValueType::Array) {
                 for (const auto& value : cedarEmber.GetNamedArray(L"grants")) {
@@ -172,10 +176,30 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
                         nextLive = true;
                         nextEndsMs = endsMs;
                     }
+
+                    std::wstring type = GetStr(grant, L"type");
+                    bool fiveHour = type == L"session";
+                    bool week = type == L"weekly";
+                    if (!fiveHour && !week && type != L"full" && grant.HasKey(L"clears") &&
+                        grant.GetNamedValue(L"clears").ValueType() == JsonValueType::Array) {
+                        for (const auto& limit : grant.GetNamedArray(L"clears")) {
+                            if (limit.ValueType() != JsonValueType::String) continue;
+                            auto name = limit.GetString();
+                            fiveHour |= name == L"five_hour";
+                            week |= std::wstring_view(name).starts_with(L"seven_day");
+                        }
+                    }
+                    auto& kind = kinds[GetBool(grant, L"gives_back_weekly") ? kFableReset :
+                                       fiveHour == week                     ? kFullReset :
+                                       fiveHour                             ? kFiveHourReset :
+                                                                              kWeeklyReset];
+                    kind.count = (int)std::min(kind.count + left, 999.0);
+                    if (left > 0 && endsMs && (!kind.expiryMs || endsMs < kind.expiryMs)) kind.expiryMs = endsMs;
                 }
             }
             d->freeResets = nextLive ? (int)std::min(count, 999.0) : 0;
             d->freeResetsExpiryMs = nextLive ? nextEndsMs : 0;
+            if (nextLive) d->freeResetKinds = kinds;
         }
 
         bool parsed = d->win5h.pct >= 0 || d->winWeek.pct >= 0 || d->fableWeek.pct >= 0 ||

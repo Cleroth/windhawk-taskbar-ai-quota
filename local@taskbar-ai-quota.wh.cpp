@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.19.1
+// @version         2.20.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -1452,12 +1452,22 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Anmeldung erforderlich. Klicken Sie auf die Balken, um sich anzumelden."},
     {L"flyout-note", L"extra usage: unlimited", L"Zusatznutzung: unbegrenzt"},
     {L"flyout-note", L"rate limits: none reported", L"Ratenlimits: keine gemeldet"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, one{# Fable-Reset verfügbar} other{# Fable-Resets verfügbar}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, one{# Fünf-Stunden-Reset verfügbar} other{# Fünf-Stunden-Resets verfügbar}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# kostenloser Reset verfügbar} other{# kostenlose Resets verfügbar}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
                      L"{when}",
      L"{count, plural, one{# kostenloser Reset verfügbar} other{# kostenlose Resets verfügbar}} · nächster läuft "
      L"{when} ab"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, one{# vollständiger Reset verfügbar} other{# vollständige Resets verfügbar}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, one{# Wochen-Reset verfügbar} other{# Wochen-Resets verfügbar}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · läuft {when} ab"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · nächster läuft {when} ab"},
     {L"history-about", L"Axes and units", L"Achsen und Einheiten"},
     {L"history-about", L"Cards", L"Karten"},
     {L"history-about", L"Legend and readout", L"Legende und Werteanzeige"},
@@ -2706,6 +2716,12 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Debes iniciar sesión. Haz clic en las barras para hacerlo."},
     {L"flyout-note", L"extra usage: unlimited", L"uso adicional: ilimitado"},
     {L"flyout-note", L"rate limits: none reported", L"límites de frecuencia: no se informó ninguno"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, one{# reinicio de Fable disponible} many{# reinicios de Fable disponibles} other{# reinicios "
+     L"de Fable disponibles}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, one{# reinicio de cinco horas disponible} many{# reinicios de cinco horas disponibles} "
+     L"other{# reinicios de cinco horas disponibles}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# reinicio gratuito disponible} many{# reinicios gratuitos disponibles} other{# reinicios "
      L"gratuitos disponibles}}"},
@@ -2713,6 +2729,14 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
                      L"{when}",
      L"{count, plural, one{# reinicio gratuito disponible} many{# reinicios gratuitos disponibles} other{# reinicios "
      L"gratuitos disponibles}} · el próximo caduca {when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, one{# reinicio completo disponible} many{# reinicios completos disponibles} other{# "
+     L"reinicios completos disponibles}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, one{# reinicio semanal disponible} many{# reinicios semanales disponibles} other{# reinicios "
+     L"semanales disponibles}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · caduca {when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · el próximo caduca {when}"},
     {L"history-about", L"Axes and units", L"Ejes y unidades"},
     {L"history-about", L"Cards", L"Tarjetas"},
     {L"history-about", L"Legend and readout", L"Leyenda y lectura de valores"},
@@ -3981,6 +4005,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Connexion requise. Cliquez sur les barres pour vous connecter."},
     {L"flyout-note", L"extra usage: unlimited", L"utilisation supplémentaire\u202F: illimitée"},
     {L"flyout-note", L"rate limits: none reported", L"limites de débit\u202F: aucune signalée"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, one{# réinitialisation Fable disponible} many{# de réinitialisations Fable disponibles} "
+     L"other{# réinitialisations Fable disponibles}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, one{# réinitialisation de cinq heures disponible} many{# de réinitialisations de cinq heures "
+     L"disponibles} other{# réinitialisations de cinq heures disponibles}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# réinitialisation gratuite disponible} many{# de réinitialisations gratuites disponibles} "
      L"other{# réinitialisations gratuites disponibles}}"},
@@ -3988,6 +4018,14 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
                      L"{when}",
      L"{count, plural, one{# réinitialisation gratuite disponible} many{# de réinitialisations gratuites disponibles} "
      L"other{# réinitialisations gratuites disponibles}} · la prochaine expire {when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, one{# réinitialisation complète disponible} many{# de réinitialisations complètes "
+     L"disponibles} other{# réinitialisations complètes disponibles}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, one{# réinitialisation hebdomadaire disponible} many{# de réinitialisations hebdomadaires "
+     L"disponibles} other{# réinitialisations hebdomadaires disponibles}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · expire {when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · la prochaine expire {when}"},
     {L"history-about", L"Axes and units", L"Axes et unités"},
     {L"history-about", L"Cards", L"Cartes"},
     {L"history-about", L"Legend and readout", L"Légende et lecture des valeurs"},
@@ -5085,11 +5123,21 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"サインインが必要です。バーをクリックしてサインインしてください。"},
     {L"flyout-note", L"extra usage: unlimited", L"追加使用量: 無制限"},
     {L"flyout-note", L"rate limits: none reported", L"レート制限: 報告なし"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, other{Fable リセットが # 回利用可能}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, other{5 時間リセットが # 回利用可能}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, other{無料リセットが # 回利用可能}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
                      L"{when}",
      L"{count, plural, other{無料リセットが # 回利用可能}} · 次回の期限: {when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, other{完全リセットが # 回利用可能}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, other{週間リセットが # 回利用可能}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · 期限: {when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · 次回の期限: {when}"},
     {L"history-about", L"Axes and units", L"軸と単位"},
     {L"history-about", L"Cards", L"カード"},
     {L"history-about", L"Legend and readout", L"凡例と値の表示"},
@@ -6302,6 +6350,12 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"É necessário entrar. Clique nas barras para entrar."},
     {L"flyout-note", L"extra usage: unlimited", L"uso adicional: ilimitado"},
     {L"flyout-note", L"rate limits: none reported", L"limites de taxa: nenhum informado"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, one{# reinício do Fable disponível} many{# de reinícios do Fable disponíveis} other{# "
+     L"reinícios do Fable disponíveis}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, one{# reinício de cinco horas disponível} many{# de reinícios de cinco horas disponíveis} "
+     L"other{# reinícios de cinco horas disponíveis}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# reinício gratuito disponível} many{# de reinícios gratuitos disponíveis} other{# "
      L"reinícios gratuitos disponíveis}}"},
@@ -6309,6 +6363,14 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
                      L"{when}",
      L"{count, plural, one{# reinício gratuito disponível} many{# de reinícios gratuitos disponíveis} other{# "
      L"reinícios gratuitos disponíveis}} · o próximo expira {when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, one{# reinício completo disponível} many{# de reinícios completos disponíveis} other{# "
+     L"reinícios completos disponíveis}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, one{# reinício semanal disponível} many{# de reinícios semanais disponíveis} other{# "
+     L"reinícios semanais disponíveis}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · expira {when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · o próximo expira {when}"},
     {L"history-about", L"Axes and units", L"Eixos e unidades"},
     {L"history-about", L"Cards", L"Cartões"},
     {L"history-about", L"Legend and readout", L"Legenda e leitura"},
@@ -7537,6 +7599,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"Требуется вход. Щёлкните полосы, чтобы войти."},
     {L"flyout-note", L"extra usage: unlimited", L"доп. использование: без ограничений"},
     {L"flyout-note", L"rate limits: none reported", L"лимиты запросов: нет данных"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, one{Доступен # сброс Fable} few{Доступно # сброса Fable} many{Доступно # сбросов Fable} "
+     L"other{Доступно # сброса Fable}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, one{Доступен # пятичасовой сброс} few{Доступно # пятичасовых сброса} many{Доступно # "
+     L"пятичасовых сбросов} other{Доступно # пятичасового сброса}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{Доступен # бесплатный сброс} few{Доступно # бесплатных сброса} many{Доступно # бесплатных "
      L"сбросов} other{Доступно # бесплатного сброса}}"},
@@ -7544,6 +7612,14 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
                      L"{when}",
      L"{count, plural, one{Доступен # бесплатный сброс} few{Доступно # бесплатных сброса} many{Доступно # бесплатных "
      L"сбросов} other{Доступно # бесплатного сброса}} · ближайший истекает {when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, one{Доступен # полный сброс} few{Доступно # полных сброса} many{Доступно # полных сбросов} "
+     L"other{Доступно # полного сброса}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, one{Доступен # недельный сброс} few{Доступно # недельных сброса} many{Доступно # недельных "
+     L"сбросов} other{Доступно # недельного сброса}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · истекает {when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · ближайший истекает {when}"},
     {L"history-about", L"Axes and units", L"Оси и единицы измерения"},
     {L"history-about", L"Cards", L"Карточки"},
     {L"history-about", L"Legend and readout", L"Легенда и подсказка"},
@@ -8613,11 +8689,21 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"需要登录。单击条形以登录。"},
     {L"flyout-note", L"extra usage: unlimited", L"额外用量：无限制"},
     {L"flyout-note", L"rate limits: none reported", L"速率限制：未报告"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, other{可用 Fable 重置 # 次}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, other{可用 5 小时重置 # 次}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, other{可用免费重置 # 次}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}} · next expires "
                      L"{when}",
      L"{count, plural, other{可用免费重置 # 次}} · 下一次过期：{when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, other{可用完整重置 # 次}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, other{可用每周重置 # 次}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · 过期：{when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · 下一次过期：{when}"},
     {L"history-about", L"Axes and units", L"坐标轴和单位"},
     {L"history-about", L"Cards", L"卡片"},
     {L"history-about", L"Legend and readout", L"图例和读数"},
@@ -9887,6 +9973,16 @@ enum class AccountNote : uint8_t {
     NoAiCreditAllowance,
 };
 
+// What an Anthropic free reset refills, in the details flyout's order: the 5-hour window, Fable's
+// weekly allowance (giving back what Fable used of the week), the week, or every window.
+enum FreeResetKind {
+    kFiveHourReset,
+    kFableReset,
+    kWeeklyReset,
+    kFullReset,
+    kFreeResetKindCount,
+};
+
 struct AccountData {
     WindowUsage win5h;
     WindowUsage winWeek;
@@ -9901,6 +9997,13 @@ struct AccountData {
     // when unknown or none.
     int freeResets = -1;
     ULONGLONG freeResetsExpiryMs = 0;
+    // Anthropic's free resets by FreeResetKind, adding up to freeResets: each kind's count and
+    // soonest expiry, 0 when unknown or none.
+    struct FreeResetGroup {
+        int count = 0;
+        ULONGLONG expiryMs = 0;
+    };
+    std::array<FreeResetGroup, kFreeResetKindCount> freeResetKinds{};
     // Amounts behind the extra-usage slot, in dollars (Anthropic) or credits (OpenAI, GitHub
     // Copilot); -1 when unknown. Left = limit - used. Used may go negative if a credits balance
     // exceeds the configured max.
@@ -11269,7 +11372,10 @@ static std::wstring FormatShortDuration(const I18nLocale& locale, ULONGLONG seco
 
 // When a reset comes, as running text continues it: "in 3d 4h (Fri 04:59)" (rounded up to the
 // minute; the local time, with its weekday from a day ahead), "now" once due, "?" without one.
-static std::wstring FormatReset(const I18nLocale& locale, ULONGLONG unixMs) {
+// With `farDate`, one a week or more ahead has its date instead, which a weekday no longer tells:
+// "in 116d 2h (March 9)", or the region's short date, with its year, from 300 days ahead.
+// GetDateFormatEx refuses DATE_MONTHDAY, so the month and day take the region's picture.
+static std::wstring FormatReset(const I18nLocale& locale, ULONGLONG unixMs, bool farDate = false) {
     if (!unixMs) return L"?";
     LONGLONG delta = (LONGLONG)(unixMs - NowUnixMs());
     if (delta <= 0) return I18nText(locale, TrCtx(L"reset-when", L"now"));
@@ -11279,9 +11385,19 @@ static std::wstring FormatReset(const I18nLocale& locale, ULONGLONG unixMs) {
     if (!UnixMsToLocalSystemTime(unixMs, &local)) {
         return I18nText(locale, TrCtx(L"reset-when", L"in {duration}"), {{L"duration", duration}});
     }
+    constexpr LONGLONG kDayMs = 24LL * 3600 * 1000;
+    std::wstring time = delta < kDayMs ? FormatLocalTime(local) : FormatLocalDayTime(local);
+    if (farDate && delta >= 7 * kDayMs) {
+        wchar_t picture[80], date[80];
+        bool monthDay = delta < 300 * kDayMs &&
+                        GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SMONTHDAY, picture, ARRAYSIZE(picture)) > 0;
+        if (GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, monthDay ? 0 : DATE_SHORTDATE, &local,
+                            monthDay ? picture : nullptr, date, ARRAYSIZE(date), nullptr) > 0) {
+            time = date;
+        }
+    }
     return I18nText(locale, TrCtx(L"reset-when", L"in {duration} ({time})"),
-                    {{L"duration", duration},
-                     {L"time", delta < 24LL * 3600 * 1000 ? FormatLocalTime(local) : FormatLocalDayTime(local)}});
+                    {{L"duration", duration}, {L"time", time}});
 }
 
 // The details flyout's last update; an unreadable time shows as "?".
@@ -13346,7 +13462,7 @@ static bool SignOutAccountByIdentity(uint64_t identityHash) {
 
 // Claude Code's user agent: the usage response reports free resets (cedar_ember) only to a recent
 // Claude Code CLI. Keep it at a recent Claude Code release.
-static constexpr PCWSTR kClaudeCliUserAgent = L"claude-cli/2.1.318 (external, cli)";  // i18n-en
+static constexpr PCWSTR kClaudeCliUserAgent = L"claude-cli/2.1.323 (external, cli)";  // i18n-en
 
 static bool ParseAnthropicUsage(const std::string& body, AccountData* d, AccountError* error) {
     try {
@@ -13484,8 +13600,11 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
         }
 
         // Free resets, reported with ?cedar_ember=1: {eligible, grants[{id, resets_left, ends_at,
-        // paused, usable_now}], next_grant_id}. As Claude Code counts them: the resets left of the
-        // live grants (unpaused, usable now, not ended), none unless the next grant is live.
+        // paused, usable_now, gives_back_weekly, type, clears[]}], next_grant_id}. As Claude Code
+        // counts them: the resets left of the live grants (unpaused, usable now, not ended), none
+        // unless the next grant is live. And as it names their kinds: a grant that gives back to
+        // the week is a Fable reset; another has its type (session, weekly, full) or, without
+        // one, what it clears (five_hour alone, weekly limits alone, else everything).
         auto cedarEmber = GetObj(usage, L"cedar_ember");
         if (!cedarEmber) cedarEmber = GetObj(root, L"cedar_ember");
         if (cedarEmber && GetBool(cedarEmber, L"eligible")) {
@@ -13494,6 +13613,7 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
             double count = 0;
             bool nextLive = false;
             ULONGLONG nextEndsMs = 0;
+            decltype(d->freeResetKinds) kinds{};
             if (cedarEmber.HasKey(L"grants") &&
                 cedarEmber.GetNamedValue(L"grants").ValueType() == JsonValueType::Array) {
                 for (const auto& value : cedarEmber.GetNamedArray(L"grants")) {
@@ -13516,10 +13636,30 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, Account
                         nextLive = true;
                         nextEndsMs = endsMs;
                     }
+
+                    std::wstring type = GetStr(grant, L"type");
+                    bool fiveHour = type == L"session";
+                    bool week = type == L"weekly";
+                    if (!fiveHour && !week && type != L"full" && grant.HasKey(L"clears") &&
+                        grant.GetNamedValue(L"clears").ValueType() == JsonValueType::Array) {
+                        for (const auto& limit : grant.GetNamedArray(L"clears")) {
+                            if (limit.ValueType() != JsonValueType::String) continue;
+                            auto name = limit.GetString();
+                            fiveHour |= name == L"five_hour";
+                            week |= std::wstring_view(name).starts_with(L"seven_day");
+                        }
+                    }
+                    auto& kind = kinds[GetBool(grant, L"gives_back_weekly") ? kFableReset :
+                                       fiveHour == week                     ? kFullReset :
+                                       fiveHour                             ? kFiveHourReset :
+                                                                              kWeeklyReset];
+                    kind.count = (int)std::min(kind.count + left, 999.0);
+                    if (left > 0 && endsMs && (!kind.expiryMs || endsMs < kind.expiryMs)) kind.expiryMs = endsMs;
                 }
             }
             d->freeResets = nextLive ? (int)std::min(count, 999.0) : 0;
             d->freeResetsExpiryMs = nextLive ? nextEndsMs : 0;
+            if (nextLive) d->freeResetKinds = kinds;
         }
 
         bool parsed = d->win5h.pct >= 0 || d->winWeek.pct >= 0 || d->fableWeek.pct >= 0 ||
@@ -19877,8 +20017,10 @@ static void BuildVisualTestSnapshot(const MeterDisplay& display,
                  {yellow, now + (ULONGLONG)std::lround(kWeeklyWindowMs * 0.45), kWeeklyWindowMs}, kWeeklyWindowMs},
                 {L"Opus", {0, 0, kWeeklyWindowMs, true}, kWeeklyWindowMs},  // i18n-en
             };
-            accountData.freeResets = 2;
+            accountData.freeResets = 3;
             accountData.freeResetsExpiryMs = now + 3 * 24 * 60 * 60000ULL;
+            accountData.freeResetKinds[kFableReset] = {2, now + 40 * 24 * 60 * 60000ULL};
+            accountData.freeResetKinds[kWeeklyReset] = {1, accountData.freeResetsExpiryMs};
         } else if (openAi) {
             accountData.extraQuotas = {
                 {L"Spark",  // i18n-en
@@ -23573,14 +23715,36 @@ static void UpdateAccountFlyout(
             }
         }
 
+        // Free resets: Anthropic's a line per kind, with that kind's soonest expiry; another
+        // provider's in one line.
+        static constexpr I18nKey kResetKinds[kFreeResetKindCount] = {
+            TrCtx(L"free-resets",
+                  L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}"),
+            TrCtx(L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}"),
+            TrCtx(L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}"),
+            TrCtx(L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}"),
+        };
         std::wstring freeResets;
-        if (d.freeResets > 0) {
+        for (size_t kind = 0; kind < kFreeResetKindCount; kind++) {
+            const auto& resets = d.freeResetKinds[kind];
+            if (resets.count <= 0) continue;
+            std::wstring line = I18nText(locale, kResetKinds[kind], {{L"count", resets.count}});
+            if (resets.expiryMs > display.now) {
+                line = I18nText(locale,
+                                resets.count == 1 ? TrCtx(L"free-resets", L"{resets} \u00B7 expires {when}") :
+                                                    TrCtx(L"free-resets", L"{resets} \u00B7 next expires {when}"),
+                                {{L"resets", line}, {L"when", FormatReset(locale, resets.expiryMs, true)}});
+            }
+            if (!freeResets.empty()) freeResets += L'\n';
+            freeResets += line;
+        }
+        if (freeResets.empty() && d.freeResets > 0) {
             freeResets =
                 d.freeResetsExpiryMs > display.now ?
                     I18nText(locale,
                              TrCtx(L"free-resets", L"{count, plural, one{# free reset available} other{# free resets "
                                                    L"available}} \u00B7 next expires {when}"),
-                             {{L"count", d.freeResets}, {L"when", FormatReset(locale, d.freeResetsExpiryMs)}}) :
+                             {{L"count", d.freeResets}, {L"when", FormatReset(locale, d.freeResetsExpiryMs, true)}}) :
                     I18nText(locale,
                              TrCtx(L"free-resets",
                                    L"{count, plural, one{# free reset available} other{# free resets available}}"),

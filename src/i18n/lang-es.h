@@ -866,6 +866,12 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Debes iniciar sesión. Haz clic en las barras para hacerlo."},
     {L"flyout-note", L"extra usage: unlimited", L"uso adicional: ilimitado"},
     {L"flyout-note", L"rate limits: none reported", L"límites de frecuencia: no se informó ninguno"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, one{# reinicio de Fable disponible} many{# reinicios de Fable disponibles} other{# reinicios "
+     L"de Fable disponibles}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, one{# reinicio de cinco horas disponible} many{# reinicios de cinco horas disponibles} "
+     L"other{# reinicios de cinco horas disponibles}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# reinicio gratuito disponible} many{# reinicios gratuitos disponibles} other{# reinicios "
      L"gratuitos disponibles}}"},
@@ -873,6 +879,14 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
                      L"{when}",
      L"{count, plural, one{# reinicio gratuito disponible} many{# reinicios gratuitos disponibles} other{# reinicios "
      L"gratuitos disponibles}} · el próximo caduca {when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, one{# reinicio completo disponible} many{# reinicios completos disponibles} other{# "
+     L"reinicios completos disponibles}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, one{# reinicio semanal disponible} many{# reinicios semanales disponibles} other{# reinicios "
+     L"semanales disponibles}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · caduca {when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · el próximo caduca {when}"},
     {L"history-about", L"Axes and units", L"Ejes y unidades"},
     {L"history-about", L"Cards", L"Tarjetas"},
     {L"history-about", L"Legend and readout", L"Leyenda y lectura de valores"},

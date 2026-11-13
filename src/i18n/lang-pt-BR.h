@@ -852,6 +852,12 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"É necessário entrar. Clique nas barras para entrar."},
     {L"flyout-note", L"extra usage: unlimited", L"uso adicional: ilimitado"},
     {L"flyout-note", L"rate limits: none reported", L"limites de taxa: nenhum informado"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, one{# reinício do Fable disponível} many{# de reinícios do Fable disponíveis} other{# "
+     L"reinícios do Fable disponíveis}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, one{# reinício de cinco horas disponível} many{# de reinícios de cinco horas disponíveis} "
+     L"other{# reinícios de cinco horas disponíveis}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{# reinício gratuito disponível} many{# de reinícios gratuitos disponíveis} other{# "
      L"reinícios gratuitos disponíveis}}"},
@@ -859,6 +865,14 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
                      L"{when}",
      L"{count, plural, one{# reinício gratuito disponível} many{# de reinícios gratuitos disponíveis} other{# "
      L"reinícios gratuitos disponíveis}} · o próximo expira {when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, one{# reinício completo disponível} many{# de reinícios completos disponíveis} other{# "
+     L"reinícios completos disponíveis}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, one{# reinício semanal disponível} many{# de reinícios semanais disponíveis} other{# "
+     L"reinícios semanais disponíveis}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · expira {when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · o próximo expira {when}"},
     {L"history-about", L"Axes and units", L"Eixos e unidades"},
     {L"history-about", L"Cards", L"Cartões"},
     {L"history-about", L"Legend and readout", L"Legenda e leitura"},

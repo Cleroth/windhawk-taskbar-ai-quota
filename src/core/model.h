@@ -413,6 +413,16 @@ enum class AccountNote : uint8_t {
     NoAiCreditAllowance,
 };
 
+// What an Anthropic free reset refills, in the details flyout's order: the 5-hour window, Fable's
+// weekly allowance (giving back what Fable used of the week), the week, or every window.
+enum FreeResetKind {
+    kFiveHourReset,
+    kFableReset,
+    kWeeklyReset,
+    kFullReset,
+    kFreeResetKindCount,
+};
+
 struct AccountData {
     WindowUsage win5h;
     WindowUsage winWeek;
@@ -427,6 +437,13 @@ struct AccountData {
     // when unknown or none.
     int freeResets = -1;
     ULONGLONG freeResetsExpiryMs = 0;
+    // Anthropic's free resets by FreeResetKind, adding up to freeResets: each kind's count and
+    // soonest expiry, 0 when unknown or none.
+    struct FreeResetGroup {
+        int count = 0;
+        ULONGLONG expiryMs = 0;
+    };
+    std::array<FreeResetGroup, kFreeResetKindCount> freeResetKinds{};
     // Amounts behind the extra-usage slot, in dollars (Anthropic) or credits (OpenAI, GitHub
     // Copilot); -1 when unknown. Left = limit - used. Used may go negative if a credits balance
     // exceeds the configured max.

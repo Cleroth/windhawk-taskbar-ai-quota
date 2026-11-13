@@ -844,6 +844,12 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"Требуется вход. Щёлкните полосы, чтобы войти."},
     {L"flyout-note", L"extra usage: unlimited", L"доп. использование: без ограничений"},
     {L"flyout-note", L"rate limits: none reported", L"лимиты запросов: нет данных"},
+    {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
+     L"{count, plural, one{Доступен # сброс Fable} few{Доступно # сброса Fable} many{Доступно # сбросов Fable} "
+     L"other{Доступно # сброса Fable}}"},
+    {L"free-resets", L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}",
+     L"{count, plural, one{Доступен # пятичасовой сброс} few{Доступно # пятичасовых сброса} many{Доступно # "
+     L"пятичасовых сбросов} other{Доступно # пятичасового сброса}}"},
     {L"free-resets", L"{count, plural, one{# free reset available} other{# free resets available}}",
      L"{count, plural, one{Доступен # бесплатный сброс} few{Доступно # бесплатных сброса} many{Доступно # бесплатных "
      L"сбросов} other{Доступно # бесплатного сброса}}"},
@@ -851,6 +857,14 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
                      L"{when}",
      L"{count, plural, one{Доступен # бесплатный сброс} few{Доступно # бесплатных сброса} many{Доступно # бесплатных "
      L"сбросов} other{Доступно # бесплатного сброса}} · ближайший истекает {when}"},
+    {L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}",
+     L"{count, plural, one{Доступен # полный сброс} few{Доступно # полных сброса} many{Доступно # полных сбросов} "
+     L"other{Доступно # полного сброса}}"},
+    {L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}",
+     L"{count, plural, one{Доступен # недельный сброс} few{Доступно # недельных сброса} many{Доступно # недельных "
+     L"сбросов} other{Доступно # недельного сброса}}"},
+    {L"free-resets", L"{resets} · expires {when}", L"{resets} · истекает {when}"},
+    {L"free-resets", L"{resets} · next expires {when}", L"{resets} · ближайший истекает {when}"},
     {L"history-about", L"Axes and units", L"Оси и единицы измерения"},
     {L"history-about", L"Cards", L"Карточки"},
     {L"history-about", L"Legend and readout", L"Легенда и подсказка"},

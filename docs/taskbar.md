@@ -66,9 +66,10 @@ with buttons for usage history, the provider dashboard, refresh, and settings. I
 limits that have no taskbar bar, each with its percentage, pace and reset: Anthropic's per-model
 and per-surface limits (such as Sonnet and Opus weeklies), Antigravity's other reported quotas
 (named by the app) and, with their Display setting, OpenAI's additional rate limits. It shows
-Anthropic's and OpenAI's free rate-limit resets with the next one's expiry, the Claude plan (Pro,
-Max, Ultra, Team, ...), and "Not yet started" for a Claude window that hasn't begun; past
-the screen's height its quota list scrolls.
+OpenAI's free rate-limit resets with the next one's expiry and Anthropic's by kind (five-hour,
+Fable, weekly, full), each kind with its own next expiry, the Claude plan (Pro, Max, Ultra, Team,
+...), and "Not yet started" for a Claude window that hasn't begun; past the screen's height its
+quota list scrolls.
 
 ## Provider outages
 

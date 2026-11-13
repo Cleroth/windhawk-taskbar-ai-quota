@@ -1111,14 +1111,36 @@ static void UpdateAccountFlyout(
             }
         }
 
+        // Free resets: Anthropic's a line per kind, with that kind's soonest expiry; another
+        // provider's in one line.
+        static constexpr I18nKey kResetKinds[kFreeResetKindCount] = {
+            TrCtx(L"free-resets",
+                  L"{count, plural, one{# five-hour reset available} other{# five-hour resets available}}"),
+            TrCtx(L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}"),
+            TrCtx(L"free-resets", L"{count, plural, one{# weekly reset available} other{# weekly resets available}}"),
+            TrCtx(L"free-resets", L"{count, plural, one{# full reset available} other{# full resets available}}"),
+        };
         std::wstring freeResets;
-        if (d.freeResets > 0) {
+        for (size_t kind = 0; kind < kFreeResetKindCount; kind++) {
+            const auto& resets = d.freeResetKinds[kind];
+            if (resets.count <= 0) continue;
+            std::wstring line = I18nText(locale, kResetKinds[kind], {{L"count", resets.count}});
+            if (resets.expiryMs > display.now) {
+                line = I18nText(locale,
+                                resets.count == 1 ? TrCtx(L"free-resets", L"{resets} \u00B7 expires {when}") :
+                                                    TrCtx(L"free-resets", L"{resets} \u00B7 next expires {when}"),
+                                {{L"resets", line}, {L"when", FormatReset(locale, resets.expiryMs, true)}});
+            }
+            if (!freeResets.empty()) freeResets += L'\n';
+            freeResets += line;
+        }
+        if (freeResets.empty() && d.freeResets > 0) {
             freeResets =
                 d.freeResetsExpiryMs > display.now ?
                     I18nText(locale,
                              TrCtx(L"free-resets", L"{count, plural, one{# free reset available} other{# free resets "
                                                    L"available}} \u00B7 next expires {when}"),
-                             {{L"count", d.freeResets}, {L"when", FormatReset(locale, d.freeResetsExpiryMs)}}) :
+                             {{L"count", d.freeResets}, {L"when", FormatReset(locale, d.freeResetsExpiryMs, true)}}) :
                     I18nText(locale,
                              TrCtx(L"free-resets",
                                    L"{count, plural, one{# free reset available} other{# free resets available}}"),
