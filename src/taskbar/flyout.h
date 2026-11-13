@@ -6,7 +6,7 @@ static constexpr int kFlyoutPollMs = 100;
 // Refreshes countdowns while a flyout is open.
 static constexpr int kFlyoutCountdownSeconds = 30;
 static constexpr float kFlyoutTaskbarGap = 12.f;
-static constexpr double kFlyoutScreenMargin = 12;  // At the screen's far edge.
+static constexpr double kFlyoutScreenMargin = 12;  // At the screen's far edge and the taskbar's ends.
 
 static void ShowAccountFlyout(QuotaUiInstance& state, int index);
 static void OnTilePointerExited(QuotaUiInstance& state, int index);
@@ -318,35 +318,50 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         UpdateQuotaUi(state);
         if (!popup.flyout) return;
 
-        // Centered on the column, just past the taskbar's inner edge: above it at the bottom of the
-        // screen (and wherever Windows doesn't say, as on a taskbar another mod rotates), below it
-        // at the top, beside it on a side. The point is the column's own; a side taskbar's column
-        // may be shrunk to its width, so it is found in the taskbar's space, then mapped back.
+        // Just past the taskbar's inner edge: above it at the bottom of the screen (and wherever
+        // Windows doesn't say, as on a taskbar another mod rotates), below it at the top, beside it
+        // on a side. Along the taskbar it is centered on the column, or where that would pass an
+        // end of the taskbar, a margin from that end. XAML wouldn't keep it there: it takes the
+        // screen holding the flyout's corner, and only moves the flyout its whole size back from
+        // that screen's far edge. The point is the column's own; a side taskbar's column may be
+        // shrunk to its width, so it is found in the taskbar's space, then mapped back.
+        using Mode = wuxcp::FlyoutPlacementMode;
         wuxcp::FlyoutShowOptions options;
         options.ShowMode(wuxcp::FlyoutShowMode::Transient);
-        if (state.edge == TaskbarEdge::Top || state.edge == TaskbarEdge::Left || state.edge == TaskbarEdge::Right) {
-            float width = (float)column.ActualWidth(), height = (float)column.ActualHeight();
-            auto bounds = column.TransformToVisual(rootContent).TransformBounds({0.f, 0.f, width, height});
-            float scaleX = width > 0 && bounds.Width > 0 ? bounds.Width / width : 1.f;
-            float scaleY = height > 0 && bounds.Height > 0 ? bounds.Height / height : 1.f;
-            winrt::Windows::Foundation::Point at{bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2};
-            if (state.edge == TaskbarEdge::Top) {
-                options.Placement(wuxcp::FlyoutPlacementMode::Bottom);
-                at.Y = (float)rootContent.ActualHeight() + kFlyoutTaskbarGap;
-            } else if (state.edge == TaskbarEdge::Left) {
-                options.Placement(wuxcp::FlyoutPlacementMode::Right);
-                at.X = (float)rootContent.ActualWidth() + kFlyoutTaskbarGap;
-            } else {
-                options.Placement(wuxcp::FlyoutPlacementMode::Left);
-                at.X = -kFlyoutTaskbarGap;
-            }
-            options.Position(winrt::Windows::Foundation::Point{(at.X - bounds.X) / scaleX, (at.Y - bounds.Y) / scaleY});
-        } else {
-            auto origin = column.TransformToVisual(rootContent).TransformPoint({0.f, 0.f});
-            options.Placement(wuxcp::FlyoutPlacementMode::Top);
-            options.Position(winrt::Windows::Foundation::Point{
-                (float)column.ActualWidth() / 2.f, -origin.Y - kFlyoutTaskbarGap});
+        const bool side = state.edge == TaskbarEdge::Left || state.edge == TaskbarEdge::Right;
+        float width = (float)column.ActualWidth(), height = (float)column.ActualHeight();
+        auto bounds = column.TransformToVisual(rootContent).TransformBounds({0.f, 0.f, width, height});
+        float scaleX = width > 0 && bounds.Width > 0 ? bounds.Width / width : 1.f;
+        float scaleY = height > 0 && bounds.Height > 0 ? bounds.Height / height : 1.f;
+        winrt::Windows::Foundation::Point at{bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2};
+        // The card's size as it will show: its content is set, and its caps are the screen's room.
+        card.Measure({INFINITY, INFINITY});
+        float size = side ? card.DesiredSize().Height : card.DesiredSize().Width;
+        float start = (float)kFlyoutScreenMargin;
+        float end = (float)(side ? rootContent.ActualHeight() : rootContent.ActualWidth()) - start;
+        float& along = side ? at.Y : at.X;
+        int align = 0;  // The flyout's start (-1) or end (1) at the point, else its middle
+        if (along - size / 2 < start) {
+            align = -1;
+            along = start;
+        } else if (along + size / 2 > end) {
+            align = 1;
+            along = end;
         }
+        if (state.edge == TaskbarEdge::Top) {
+            options.Placement(align < 0 ? Mode::BottomEdgeAlignedLeft : align > 0 ? Mode::BottomEdgeAlignedRight : Mode::Bottom);
+            at.Y = (float)rootContent.ActualHeight() + kFlyoutTaskbarGap;
+        } else if (state.edge == TaskbarEdge::Left) {
+            options.Placement(align < 0 ? Mode::RightEdgeAlignedTop : align > 0 ? Mode::RightEdgeAlignedBottom : Mode::Right);
+            at.X = (float)rootContent.ActualWidth() + kFlyoutTaskbarGap;
+        } else if (state.edge == TaskbarEdge::Right) {
+            options.Placement(align < 0 ? Mode::LeftEdgeAlignedTop : align > 0 ? Mode::LeftEdgeAlignedBottom : Mode::Left);
+            at.X = -kFlyoutTaskbarGap;
+        } else {
+            options.Placement(align < 0 ? Mode::TopEdgeAlignedLeft : align > 0 ? Mode::TopEdgeAlignedRight : Mode::Top);
+            at.Y = -kFlyoutTaskbarGap;
+        }
+        options.Position(winrt::Windows::Foundation::Point{(at.X - bounds.X) / scaleX, (at.Y - bounds.Y) / scaleY});
         EnumThreadWindows(GetCurrentThreadId(),
             [](HWND candidate, LPARAM param) CALLBACK -> BOOL {
                 if (IsWindowVisible(candidate)) {
