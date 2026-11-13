@@ -1129,7 +1129,7 @@ static void UpdateAccountFlyout(
                 line = I18nText(locale,
                                 resets.count == 1 ? TrCtx(L"free-resets", L"{resets} \u00B7 expires {when}") :
                                                     TrCtx(L"free-resets", L"{resets} \u00B7 next expires {when}"),
-                                {{L"resets", line}, {L"when", FormatReset(locale, resets.expiryMs, true)}});
+                                {{L"resets", line}, {L"when", FormatReset(locale, resets.expiryMs)}});
             }
             if (!freeResets.empty()) freeResets += L'\n';
             freeResets += line;
@@ -1140,7 +1140,7 @@ static void UpdateAccountFlyout(
                     I18nText(locale,
                              TrCtx(L"free-resets", L"{count, plural, one{# free reset available} other{# free resets "
                                                    L"available}} \u00B7 next expires {when}"),
-                             {{L"count", d.freeResets}, {L"when", FormatReset(locale, d.freeResetsExpiryMs, true)}}) :
+                             {{L"count", d.freeResets}, {L"when", FormatReset(locale, d.freeResetsExpiryMs)}}) :
                     I18nText(locale,
                              TrCtx(L"free-resets",
                                    L"{count, plural, one{# free reset available} other{# free resets available}}"),

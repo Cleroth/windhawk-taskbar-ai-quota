@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.20.0
+// @version         2.20.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -11372,10 +11372,10 @@ static std::wstring FormatShortDuration(const I18nLocale& locale, ULONGLONG seco
 
 // When a reset comes, as running text continues it: "in 3d 4h (Fri 04:59)" (rounded up to the
 // minute; the local time, with its weekday from a day ahead), "now" once due, "?" without one.
-// With `farDate`, one a week or more ahead has its date instead, which a weekday no longer tells:
-// "in 116d 2h (March 9)", or the region's short date, with its year, from 300 days ahead.
-// GetDateFormatEx refuses DATE_MONTHDAY, so the month and day take the region's picture.
-static std::wstring FormatReset(const I18nLocale& locale, ULONGLONG unixMs, bool farDate = false) {
+// One a week or more ahead has its date instead, which a weekday no longer tells: "in 18d 3h
+// (December 1)", or the region's short date, with its year, from 300 days ahead. GetDateFormatEx
+// refuses DATE_MONTHDAY, so the month and day take the region's picture.
+static std::wstring FormatReset(const I18nLocale& locale, ULONGLONG unixMs) {
     if (!unixMs) return L"?";
     LONGLONG delta = (LONGLONG)(unixMs - NowUnixMs());
     if (delta <= 0) return I18nText(locale, TrCtx(L"reset-when", L"now"));
@@ -11387,7 +11387,7 @@ static std::wstring FormatReset(const I18nLocale& locale, ULONGLONG unixMs, bool
     }
     constexpr LONGLONG kDayMs = 24LL * 3600 * 1000;
     std::wstring time = delta < kDayMs ? FormatLocalTime(local) : FormatLocalDayTime(local);
-    if (farDate && delta >= 7 * kDayMs) {
+    if (delta >= 7 * kDayMs) {
         wchar_t picture[80], date[80];
         bool monthDay = delta < 300 * kDayMs &&
                         GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SMONTHDAY, picture, ARRAYSIZE(picture)) > 0;
@@ -23733,7 +23733,7 @@ static void UpdateAccountFlyout(
                 line = I18nText(locale,
                                 resets.count == 1 ? TrCtx(L"free-resets", L"{resets} \u00B7 expires {when}") :
                                                     TrCtx(L"free-resets", L"{resets} \u00B7 next expires {when}"),
-                                {{L"resets", line}, {L"when", FormatReset(locale, resets.expiryMs, true)}});
+                                {{L"resets", line}, {L"when", FormatReset(locale, resets.expiryMs)}});
             }
             if (!freeResets.empty()) freeResets += L'\n';
             freeResets += line;
@@ -23744,7 +23744,7 @@ static void UpdateAccountFlyout(
                     I18nText(locale,
                              TrCtx(L"free-resets", L"{count, plural, one{# free reset available} other{# free resets "
                                                    L"available}} \u00B7 next expires {when}"),
-                             {{L"count", d.freeResets}, {L"when", FormatReset(locale, d.freeResetsExpiryMs, true)}}) :
+                             {{L"count", d.freeResets}, {L"when", FormatReset(locale, d.freeResetsExpiryMs)}}) :
                     I18nText(locale,
                              TrCtx(L"free-resets",
                                    L"{count, plural, one{# free reset available} other{# free resets available}}"),

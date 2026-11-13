@@ -159,10 +159,10 @@ static std::wstring FormatShortDuration(const I18nLocale& locale, ULONGLONG seco
 
 // When a reset comes, as running text continues it: "in 3d 4h (Fri 04:59)" (rounded up to the
 // minute; the local time, with its weekday from a day ahead), "now" once due, "?" without one.
-// With `farDate`, one a week or more ahead has its date instead, which a weekday no longer tells:
-// "in 116d 2h (March 9)", or the region's short date, with its year, from 300 days ahead.
-// GetDateFormatEx refuses DATE_MONTHDAY, so the month and day take the region's picture.
-static std::wstring FormatReset(const I18nLocale& locale, ULONGLONG unixMs, bool farDate = false) {
+// One a week or more ahead has its date instead, which a weekday no longer tells: "in 18d 3h
+// (December 1)", or the region's short date, with its year, from 300 days ahead. GetDateFormatEx
+// refuses DATE_MONTHDAY, so the month and day take the region's picture.
+static std::wstring FormatReset(const I18nLocale& locale, ULONGLONG unixMs) {
     if (!unixMs) return L"?";
     LONGLONG delta = (LONGLONG)(unixMs - NowUnixMs());
     if (delta <= 0) return I18nText(locale, TrCtx(L"reset-when", L"now"));
@@ -174,7 +174,7 @@ static std::wstring FormatReset(const I18nLocale& locale, ULONGLONG unixMs, bool
     }
     constexpr LONGLONG kDayMs = 24LL * 3600 * 1000;
     std::wstring time = delta < kDayMs ? FormatLocalTime(local) : FormatLocalDayTime(local);
-    if (farDate && delta >= 7 * kDayMs) {
+    if (delta >= 7 * kDayMs) {
         wchar_t picture[80], date[80];
         bool monthDay = delta < 300 * kDayMs &&
                         GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SMONTHDAY, picture, ARRAYSIZE(picture)) > 0;
