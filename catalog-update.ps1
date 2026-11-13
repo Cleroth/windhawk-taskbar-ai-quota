@@ -169,7 +169,8 @@ if ($targetIsStaged) {
     }
 }
 
-$changedFiles = @(git -C $Worktree diff --name-only upstream/main --)
+# Against the branch's base, as the PR's diff is: upstream main can move on while a PR is open.
+$changedFiles = @(git -C $Worktree diff --name-only --merge-base upstream/main --)
 if ($LASTEXITCODE -ne 0) {
     throw "Could not inspect catalog diff (exit $LASTEXITCODE)"
 }
@@ -178,7 +179,8 @@ if ($changedFiles.Count -ne 1 -or $changedFiles[0] -ne $catalogPath) {
 }
 
 # Upstream's PR validation of the mod file, as its CI runs it for the PR author (gh's user); the
-# worktree's .github equals upstream main's here. The PR description's checks aren't covered.
+# worktree's .github is the branch's base's, upstream main's for a new branch. The PR
+# description's checks aren't covered.
 $ghUser = gh api user | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) {
     throw "Could not read the gh user (exit $LASTEXITCODE)"
