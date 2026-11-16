@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.21.2
+// @version         2.21.3
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -24179,7 +24179,7 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
 }
 
 // Opens the account's flyout off its column, past the taskbar's inner edge, replacing any open one.
-// It is transient: it never takes focus.
+// It is transient: it never takes focus, on opening or from a press inside it.
 static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
     // Not while the taskbar moved and the bars wait for their rebuild.
     if (g_unloading || !state.quotaGrid || state.edgeChanged || index < 0 ||
@@ -24257,6 +24257,10 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         flyout.ShouldConstrainToRootBounds(false);
         // Taskbar input stays live under the overlay so tiles keep hover, click and menu.
         flyout.OverlayInputPassThroughElement(rootContent);
+        // A press inside takes no focus (the presenter's content inherits this): a button taking
+        // it activates an inactive taskbar, which takes the focus back, and the flyout closes
+        // before the press becomes a click.
+        flyout.AllowFocusOnInteraction(false);
 
         HWND hWnd = state.hWnd;
         uint64_t generation = popup.generation;

@@ -193,7 +193,7 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
 }
 
 // Opens the account's flyout off its column, past the taskbar's inner edge, replacing any open one.
-// It is transient: it never takes focus.
+// It is transient: it never takes focus, on opening or from a press inside it.
 static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
     // Not while the taskbar moved and the bars wait for their rebuild.
     if (g_unloading || !state.quotaGrid || state.edgeChanged || index < 0 ||
@@ -271,6 +271,10 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         flyout.ShouldConstrainToRootBounds(false);
         // Taskbar input stays live under the overlay so tiles keep hover, click and menu.
         flyout.OverlayInputPassThroughElement(rootContent);
+        // A press inside takes no focus (the presenter's content inherits this): a button taking
+        // it activates an inactive taskbar, which takes the focus back, and the flyout closes
+        // before the press becomes a click.
+        flyout.AllowFocusOnInteraction(false);
 
         HWND hWnd = state.hWnd;
         uint64_t generation = popup.generation;
