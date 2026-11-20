@@ -515,6 +515,7 @@ struct AccountUsageSummary {
     int bar = kWeeklyBar;  // The quota's QuotaBarIndex
     double pct = -1;       // Used %; < 0: no reading
     bool stale = false;    // The last poll failed, or the reading is older than AccountStaleAfterMs
+    ULONGLONG resetUnixMs = 0;  // Upcoming reset of this reading's window, when known
 };
 
 // A reading counts until its window resets: after that it says nothing about the new one.
@@ -528,7 +529,10 @@ static AccountUsageSummary AccountUsageSummaryFor(const Settings& s, const Accou
     summary.stale = data.stale || !data.lastSuccessMs ||
                     now - data.lastSuccessMs > AccountStaleAfterMs(account, s.pollMinutes, s.hiddenPollMinutes);
     bool reset = usage.resetUnixMs > data.lastSuccessMs && now >= usage.resetUnixMs;
-    if (std::isfinite(usage.pct) && !reset) summary.pct = usage.pct;
+    if (std::isfinite(usage.pct) && usage.pct >= 0 && !reset) {
+        summary.pct = usage.pct;
+        if (usage.resetUnixMs > now && usage.resetUnixMs > data.lastSuccessMs) summary.resetUnixMs = usage.resetUnixMs;
+    }
     return summary;
 }
 

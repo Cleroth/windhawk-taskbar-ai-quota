@@ -24,6 +24,7 @@ MODEL = [
     ("fragment", "history/types.h"),
     ("fragment", "history/journal-error.h"),
     ("definition", "ApplyCreditsMax"),
+    ("definition", "FormatShortDuration"),
     # Threshold notifications' text and toast XML (fetch/notifications.h).
     ("definition", "ProviderDisplayName"),
     ("definition", "ThresholdNotificationText"),

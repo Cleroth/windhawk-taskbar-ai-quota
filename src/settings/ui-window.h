@@ -16,6 +16,8 @@ static constexpr UINT_PTR kSettingsStepTimer = 0x5E00;
 static constexpr UINT_PTR kSettingsRefreshTimer = 0x5D00;
 // Copy version info's button shows whether it copied until this timer ends it.
 static constexpr UINT_PTR kSettingsCopiedTimer = 0x5C00;
+// The next change to an account card's countdown, without a poll or store reload.
+static constexpr UINT_PTR kSettingsCountdownTimer = 0x5B00;
 // The product name, English in every language: the general message boxes' caption, and in the
 // window's title.
 static constexpr PCWSTR kSettingsProductName = L"Taskbar AI Quota";  // i18n-en
@@ -245,7 +247,12 @@ struct SettingsUiClient final : UiHostClient {
                 drag = {};
             }
         }
-        SettingsUiBuildFrame(*host.graphics, view, client, frame);
+        UINT tickInMs = SettingsUiBuildFrame(*host.graphics, view, client, frame);
+        if (tickInMs && !IsIconic(host.main)) {
+            SetTimer(host.main, kSettingsCountdownTimer, tickInMs, nullptr);
+        } else {
+            KillTimer(host.main, kSettingsCountdownTimer);
+        }
         for (const std::vector<UiItem>* items : {&frame.main, &frame.content}) {
             for (const UiItem& item : *items) {
                 if (item.kind != UiItemKind::Preview) continue;
@@ -757,6 +764,18 @@ struct SettingsUiClient final : UiHostClient {
                 }
                 return false;
             case WM_TIMER: {
+                if (wParam == kSettingsCountdownTimer) {
+                    KillTimer(host.main, kSettingsCountdownTimer);
+                    if (page == SettingsUiPage::Accounts && !host.closing && !Unloading() && !IsIconic(host.main)) {
+                        // Rebuilding closes popups. Don't interrupt a menu, modal or pointer gesture.
+                        if (modalDepth || closePreparation || host.popup.open || GetCapture()) {
+                            SetTimer(host.main, kSettingsCountdownTimer, 1000, nullptr);
+                        } else {
+                            UiHostRequestRebuild(host, false);
+                        }
+                    }
+                    return true;
+                }
                 if (wParam == kSettingsCopiedTimer) {
                     KillTimer(host.main, kSettingsCopiedTimer);
                     versionCopied.reset();

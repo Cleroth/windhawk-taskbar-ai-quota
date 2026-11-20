@@ -9,7 +9,8 @@ static constexpr float kSettingsNavWidth = 260;
 static constexpr float kSettingsHeaderHeight = 56;
 static constexpr float kSettingsContentMaxWidth = 1000;
 
-static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_SIZE_F client,
+// Milliseconds from view.now until a countdown changes; zero when the frame needs no timer.
+static UINT SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_SIZE_F client,
                                  UiFrame& frame) {
     static constexpr std::pair<I18nKey, PCWSTR> kPages[] = {
         {TrCtx(L"settings-page", L"Accounts"), L"\uE716"}, {TrCtx(L"settings-page", L"Layout"), L"\uE8A9"},
@@ -121,9 +122,10 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
 
     // Content, in viewport coordinates.
     float bottom = 0;
+    UINT tickInMs = 0;
     switch (SettingsUiPage(page)) {
         case SettingsUiPage::Accounts:
-            bottom = SettingsUiBuildAccounts(g, view, frame.content, id, left, 0, width);
+            bottom = SettingsUiBuildAccounts(g, view, frame.content, id, left, 0, width, tickInMs);
             break;
         case SettingsUiPage::About:
             bottom = SettingsUiBuildAbout(g, view, frame.content, id, left, 2, width);
@@ -144,4 +146,5 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             break;
     }
     frame.contentHeight = bottom + 28;
+    return tickInMs;
 }

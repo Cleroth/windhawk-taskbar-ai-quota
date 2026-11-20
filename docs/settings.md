@@ -20,6 +20,8 @@ taskbar (the last visible account can't be hidden). Adding, signing in and remov
 Each card shows its account's usage at a glance, hidden accounts included: a small meter (on a
 window wide enough) and a percentage, used or left as the bar mode says, in the usage colors.
 
+- Below the percentage, **Resets in 2d 4h** shows the time left in that quota window. The countdown
+  updates while Accounts is open without polling again. It is omitted when the reset time is unknown.
 - The quota is the weekly one; the Fable (Antigravity: Argon) weekly instead while that one is
   selected for the taskbar and the weekly isn't; GitHub Copilot's monthly AI credits.
 - A reading older than two of the account's polls, or whose last poll failed, is grey, and

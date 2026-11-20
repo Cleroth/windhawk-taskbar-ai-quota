@@ -39,10 +39,10 @@ static bool SettingsMoveAccountCards(std::vector<UiItem>& items, const std::vect
     return moved;
 }
 
-// Lays out the page from content y; returns the bottom of the last card. A dragged card is
-// built in its new place, then lifted to view.dragTop and drawn over the others.
+// Lays out the page from content y; returns the bottom of the last card and the delay until a
+// visible countdown changes. A dragged card is lifted to view.dragTop and drawn over the others.
 static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
-                                     uint32_t& id, float x, float y, float width) {
+                                     uint32_t& id, float x, float y, float width, UINT& tickInMs) {
     const Settings& s = view.settings;
     const I18nLocale& locale = view.locale;
     auto textWidth = [&](std::wstring_view text, UiFont font) {
@@ -143,7 +143,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         // Its usage at a glance, as the taskbar shows it (used or left; three digits at most); none
         // on a card that asks for a sign-in, whose button takes the room.
         const AccountUsageSummary& usage = status.usage;
-        const bool usageRead = !signInNeeded && usage.pct >= 0;
+        const bool usageRead = !signInNeeded && usage.pct >= 0 && (!usage.resetUnixMs || view.now < usage.resetUnixMs);
+        const bool showReset = usageRead && usage.resetUnixMs;
         const double usageShown =
             std::min(s.barMode == BarMode::Remaining ? std::clamp(100 - usage.pct, 0.0, 100.0) : usage.pct, 999.0);
         const std::wstring usageText = usageRead ? I18nFixed(locale, usageShown, 0) + L"%" : L"\u2014";
@@ -154,6 +155,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         // Panel, lifted while dragged; the header (mockup .ahead, 68 DIP) expands it.
         constexpr float kHeader = 68;
         const float cy = top + kHeader / 2;
+        const float usageY = showReset ? cy - 9 : cy;
         UiItem panel;
         panel.id = control(SettingsField::AccountExpand, 1);
         panel.kind = UiItemKind::Card;
@@ -205,19 +207,43 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                     !account.hidden, account.hidden || visible > 1,
                     command(SettingsField::AccountHidden, !account.hidden), UiToggleText{});
         right -= 40 + 14;
+        float resetLeft = right;
         // Usage, at the same spot on every card that shows it: the percentage, right-aligned,
         // after its meter; both in the reading's usage color, grey once it is out of date. A dash
         // without a reading.
         if (!signInNeeded) {
             const uint32_t color = UsageColor(usage.pct, usage.stale, s.yellowThreshold, s.orangeThreshold,
                                               s.redThreshold, usageColors);
+            // The caption can extend under the quota chips on a narrow card. Keep them and the
+            // meter on the percentage's line, and leave room for the caption beside the status.
+            if (showReset) {
+                ULONGLONG leftMs = usage.resetUnixMs - view.now;
+                ULONGLONG minutes = 1 + (leftMs - 1) / 60000;
+                // Round up to minutes. Once the text shows days, it changes on an hour step.
+                UINT tick = UINT((leftMs - 1) % 60000 + 1);
+                if (minutes >= 24 * 60) tick += UINT(minutes % 60) * 60000;
+                if (!tickInMs || tick < tickInMs) tickInMs = tick;
+                std::wstring when = I18nText(locale, TrCtx(L"reset-when", L"in {duration}"),
+                                             {{L"duration", FormatShortDuration(locale, minutes * 60)}});
+                std::wstring text = I18nText(locale, TrCtx(L"quota-reset", L"Resets {when}"), {{L"when", when}});
+                resetLeft = right - textWidth(text, UiFont::Caption);
+                UiItem caption;
+                caption.id = id++;
+                caption.kind = UiItemKind::Text;
+                caption.font = UiFont::Caption;
+                caption.ink = UiInk::Muted;
+                caption.align = DWRITE_TEXT_ALIGNMENT_TRAILING;
+                caption.rect = {resetLeft, cy + 2, right, cy + 18};
+                caption.runs.push_back({std::move(text)});
+                trailing.push_back(std::move(caption));
+            }
             UiItem percent;
             percent.id = id++;
             percent.kind = UiItemKind::Text;
             percent.font = UiFont::Note;
             percent.ink = UiInk::Muted;
             percent.align = DWRITE_TEXT_ALIGNMENT_TRAILING;
-            percent.rect = {right - percentWidth, cy - 10, right, cy + 10};
+            percent.rect = {right - percentWidth, usageY - 10, right, usageY + 10};
             percent.runs.push_back({usageText});
             if (usageRead && !usage.stale) {
                 percent.ink = UiInk::Primary;
@@ -229,7 +255,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 UiItem meter;
                 meter.id = id++;
                 meter.kind = UiItemKind::Meter;
-                meter.rect = {right - 8 - meterWidth, cy - 8, right - 8, cy + 8};
+                meter.rect = {right - 8 - meterWidth, usageY - 8, right - 8, usageY + 8};
                 meter.maximum = 100;
                 meter.action.value = int(std::lround(std::min(usageShown, 100.0)));
                 meter.color = UiRgb(color & 0xFFFFFF);
@@ -247,7 +273,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             chip.font = UiFont::Caption;
             chip.text = text;
             chip.selected = true;
-            chip.rect = {right - chipWidth, cy - 10, right, cy + 10};
+            chip.rect = {right - chipWidth, usageY - 10, right, usageY + 10};
             trailing.push_back(std::move(chip));
             right -= chipWidth + 4;
         }
@@ -325,7 +351,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                                             {{L"provider", provider}, {L"plan", status.plan},
                                              {L"state", SettingsStatusArg(stateText)}}),
                                    stateInk);
-        const float textLeft = x + 77, textRight = std::max(right, textLeft + 40);
+        const float textLeft = x + 77, textRight = std::max(std::min(right, resetLeft - 14), textLeft + 40);
         auto fits = [&](const std::vector<UiRun>& runs, UiFont font) {
             return textWidth(UiRunsText(runs), font) <= textRight - textLeft;
         };

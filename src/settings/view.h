@@ -31,7 +31,7 @@ struct SettingsView {
     float scale = 1;                    // Window DPI / 96: the preview's device pixels
     float previewScroll = 0;            // The preview strip's scroll right of its home, DIPs
                                         // (settings/preview.h)
-    ULONGLONG now = 0;                  // The preview's sample time
+    ULONGLONG now = 0;                  // Frame time for account countdowns and the preview
     std::optional<bool> versionCopied;  // Copy version info's feedback for a moment: whether it copied
 };
 

@@ -25,11 +25,12 @@ static SettingsAccountStatus I18nAccountStatus(PCWSTR plan, AccountError error, 
 
 // Accounts in every card state: signed in, needing a sign-in, signing in, a long coded error with
 // provider text, the local app waiting and not running, hidden (Zen: polled every hour by default);
-// every provider. Their usage: fresh (OAI 42%, Zen 8%), past 100% (CC 2), out of date with the
-// tooltip that says so (Work's month, Laptop read days ago, Team), none (Go), and a reading that
-// must not show beside Sign in (CC 1).
+// every provider. Their usage: fresh (OAI 42% with a reset in 2d 4h, Zen 8%), past 100% (CC 2),
+// out of date with the tooltip that says so (Work's month, Laptop read days ago, Team), none (Go),
+// and a reading that must not show beside Sign in (CC 1).
 static SettingsView I18nAccountsView(std::initializer_list<int> expanded = {}) {
     SettingsView view = TestView(SettingsUiPage::Accounts);
+    view.now = kNow;
     view.settings.accounts = {TestAccount(L"openai", L"OAI", 11, {true, true, false, true}),
                               TestAccount(L"anthropic", L"CC 1", 12),
                               TestAccount(L"anthropic", L"CC 2", 13, {true, true, true, true}),
@@ -44,7 +45,7 @@ static SettingsView I18nAccountsView(std::initializer_list<int> expanded = {}) {
     refresh.cause = AccountErrorCode::Message;
     refresh.detail = L"invalid_grant: The refresh token was already used or revoked by the user.";  // i18n-en
     const SettingsAccountStatus statuses[] = {
-        I18nAccountStatus(L"Plus", {}, true, true, {kWeeklyBar, 42, false}, L"14:32"),
+        I18nAccountStatus(L"Plus", {}, true, true, {kWeeklyBar, 42, false, kNow + (2 * 24 + 4) * 60 * kMinute}, L"14:32"),
         I18nAccountStatus(L"Pro", {AccountErrorCode::NotSignedIn}, true, false, {kWeeklyBar, 40, true}, L"14:32", true),
         I18nAccountStatus(L"Ultra", {}, true, true, {kWeeklyBar, 112, false}, L"14:32"),
         I18nAccountStatus(L"", {}, false, false),
@@ -194,6 +195,10 @@ static std::vector<std::string> I18nLayoutFindings(UiGraphics& g, const I18nLayo
     UiFrame frame;
     SettingsUiBuildFrame(g, view, client, frame);
     std::vector<std::string> findings = I18nLayoutAudit(g, frame, client, kSettingsNavWidth);
+    if (entry.name == "accounts") {
+        const UiItem* countdown = CardUsage(frame, 1).countdown;
+        if (!countdown || UiRunsText(countdown->runs).empty()) findings.push_back("missing OAI reset countdown");
+    }
     g.locale = L"en-US";
     std::string where = entry.name + " " + std::string(tag) + " " + std::to_string(int(client.width)) + "x" +
                         std::to_string(int(client.height)) + ": ";

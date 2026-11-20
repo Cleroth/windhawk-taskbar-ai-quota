@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.22.0
+// @version         2.23.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -10245,6 +10245,7 @@ struct AccountUsageSummary {
     int bar = kWeeklyBar;  // The quota's QuotaBarIndex
     double pct = -1;       // Used %; < 0: no reading
     bool stale = false;    // The last poll failed, or the reading is older than AccountStaleAfterMs
+    ULONGLONG resetUnixMs = 0;  // Upcoming reset of this reading's window, when known
 };
 
 // A reading counts until its window resets: after that it says nothing about the new one.
@@ -10258,7 +10259,10 @@ static AccountUsageSummary AccountUsageSummaryFor(const Settings& s, const Accou
     summary.stale = data.stale || !data.lastSuccessMs ||
                     now - data.lastSuccessMs > AccountStaleAfterMs(account, s.pollMinutes, s.hiddenPollMinutes);
     bool reset = usage.resetUnixMs > data.lastSuccessMs && now >= usage.resetUnixMs;
-    if (std::isfinite(usage.pct) && !reset) summary.pct = usage.pct;
+    if (std::isfinite(usage.pct) && usage.pct >= 0 && !reset) {
+        summary.pct = usage.pct;
+        if (usage.resetUnixMs > now && usage.resetUnixMs > data.lastSuccessMs) summary.resetUnixMs = usage.resetUnixMs;
+    }
     return summary;
 }
 
@@ -35761,7 +35765,7 @@ struct SettingsView {
     float scale = 1;                    // Window DPI / 96: the preview's device pixels
     float previewScroll = 0;            // The preview strip's scroll right of its home, DIPs
                                         // (settings/preview.h)
-    ULONGLONG now = 0;                  // The preview's sample time
+    ULONGLONG now = 0;                  // Frame time for account countdowns and the preview
     std::optional<bool> versionCopied;  // Copy version info's feedback for a moment: whether it copied
 };
 
@@ -38455,10 +38459,10 @@ static bool SettingsMoveAccountCards(std::vector<UiItem>& items, const std::vect
     return moved;
 }
 
-// Lays out the page from content y; returns the bottom of the last card. A dragged card is
-// built in its new place, then lifted to view.dragTop and drawn over the others.
+// Lays out the page from content y; returns the bottom of the last card and the delay until a
+// visible countdown changes. A dragged card is lifted to view.dragTop and drawn over the others.
 static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
-                                     uint32_t& id, float x, float y, float width) {
+                                     uint32_t& id, float x, float y, float width, UINT& tickInMs) {
     const Settings& s = view.settings;
     const I18nLocale& locale = view.locale;
     auto textWidth = [&](std::wstring_view text, UiFont font) {
@@ -38559,7 +38563,8 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         // Its usage at a glance, as the taskbar shows it (used or left; three digits at most); none
         // on a card that asks for a sign-in, whose button takes the room.
         const AccountUsageSummary& usage = status.usage;
-        const bool usageRead = !signInNeeded && usage.pct >= 0;
+        const bool usageRead = !signInNeeded && usage.pct >= 0 && (!usage.resetUnixMs || view.now < usage.resetUnixMs);
+        const bool showReset = usageRead && usage.resetUnixMs;
         const double usageShown =
             std::min(s.barMode == BarMode::Remaining ? std::clamp(100 - usage.pct, 0.0, 100.0) : usage.pct, 999.0);
         const std::wstring usageText = usageRead ? I18nFixed(locale, usageShown, 0) + L"%" : L"\u2014";
@@ -38570,6 +38575,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         // Panel, lifted while dragged; the header (mockup .ahead, 68 DIP) expands it.
         constexpr float kHeader = 68;
         const float cy = top + kHeader / 2;
+        const float usageY = showReset ? cy - 9 : cy;
         UiItem panel;
         panel.id = control(SettingsField::AccountExpand, 1);
         panel.kind = UiItemKind::Card;
@@ -38621,19 +38627,43 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                     !account.hidden, account.hidden || visible > 1,
                     command(SettingsField::AccountHidden, !account.hidden), UiToggleText{});
         right -= 40 + 14;
+        float resetLeft = right;
         // Usage, at the same spot on every card that shows it: the percentage, right-aligned,
         // after its meter; both in the reading's usage color, grey once it is out of date. A dash
         // without a reading.
         if (!signInNeeded) {
             const uint32_t color = UsageColor(usage.pct, usage.stale, s.yellowThreshold, s.orangeThreshold,
                                               s.redThreshold, usageColors);
+            // The caption can extend under the quota chips on a narrow card. Keep them and the
+            // meter on the percentage's line, and leave room for the caption beside the status.
+            if (showReset) {
+                ULONGLONG leftMs = usage.resetUnixMs - view.now;
+                ULONGLONG minutes = 1 + (leftMs - 1) / 60000;
+                // Round up to minutes. Once the text shows days, it changes on an hour step.
+                UINT tick = UINT((leftMs - 1) % 60000 + 1);
+                if (minutes >= 24 * 60) tick += UINT(minutes % 60) * 60000;
+                if (!tickInMs || tick < tickInMs) tickInMs = tick;
+                std::wstring when = I18nText(locale, TrCtx(L"reset-when", L"in {duration}"),
+                                             {{L"duration", FormatShortDuration(locale, minutes * 60)}});
+                std::wstring text = I18nText(locale, TrCtx(L"quota-reset", L"Resets {when}"), {{L"when", when}});
+                resetLeft = right - textWidth(text, UiFont::Caption);
+                UiItem caption;
+                caption.id = id++;
+                caption.kind = UiItemKind::Text;
+                caption.font = UiFont::Caption;
+                caption.ink = UiInk::Muted;
+                caption.align = DWRITE_TEXT_ALIGNMENT_TRAILING;
+                caption.rect = {resetLeft, cy + 2, right, cy + 18};
+                caption.runs.push_back({std::move(text)});
+                trailing.push_back(std::move(caption));
+            }
             UiItem percent;
             percent.id = id++;
             percent.kind = UiItemKind::Text;
             percent.font = UiFont::Note;
             percent.ink = UiInk::Muted;
             percent.align = DWRITE_TEXT_ALIGNMENT_TRAILING;
-            percent.rect = {right - percentWidth, cy - 10, right, cy + 10};
+            percent.rect = {right - percentWidth, usageY - 10, right, usageY + 10};
             percent.runs.push_back({usageText});
             if (usageRead && !usage.stale) {
                 percent.ink = UiInk::Primary;
@@ -38645,7 +38675,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                 UiItem meter;
                 meter.id = id++;
                 meter.kind = UiItemKind::Meter;
-                meter.rect = {right - 8 - meterWidth, cy - 8, right - 8, cy + 8};
+                meter.rect = {right - 8 - meterWidth, usageY - 8, right - 8, usageY + 8};
                 meter.maximum = 100;
                 meter.action.value = int(std::lround(std::min(usageShown, 100.0)));
                 meter.color = UiRgb(color & 0xFFFFFF);
@@ -38663,7 +38693,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             chip.font = UiFont::Caption;
             chip.text = text;
             chip.selected = true;
-            chip.rect = {right - chipWidth, cy - 10, right, cy + 10};
+            chip.rect = {right - chipWidth, usageY - 10, right, usageY + 10};
             trailing.push_back(std::move(chip));
             right -= chipWidth + 4;
         }
@@ -38741,7 +38771,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                                             {{L"provider", provider}, {L"plan", status.plan},
                                              {L"state", SettingsStatusArg(stateText)}}),
                                    stateInk);
-        const float textLeft = x + 77, textRight = std::max(right, textLeft + 40);
+        const float textLeft = x + 77, textRight = std::max(std::min(right, resetLeft - 14), textLeft + 40);
         auto fits = [&](const std::vector<UiRun>& runs, UiFont font) {
             return textWidth(UiRunsText(runs), font) <= textRight - textLeft;
         };
@@ -39069,7 +39099,8 @@ static constexpr float kSettingsNavWidth = 260;
 static constexpr float kSettingsHeaderHeight = 56;
 static constexpr float kSettingsContentMaxWidth = 1000;
 
-static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_SIZE_F client,
+// Milliseconds from view.now until a countdown changes; zero when the frame needs no timer.
+static UINT SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_SIZE_F client,
                                  UiFrame& frame) {
     static constexpr std::pair<I18nKey, PCWSTR> kPages[] = {
         {TrCtx(L"settings-page", L"Accounts"), L"\uE716"}, {TrCtx(L"settings-page", L"Layout"), L"\uE8A9"},
@@ -39181,9 +39212,10 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
 
     // Content, in viewport coordinates.
     float bottom = 0;
+    UINT tickInMs = 0;
     switch (SettingsUiPage(page)) {
         case SettingsUiPage::Accounts:
-            bottom = SettingsUiBuildAccounts(g, view, frame.content, id, left, 0, width);
+            bottom = SettingsUiBuildAccounts(g, view, frame.content, id, left, 0, width, tickInMs);
             break;
         case SettingsUiPage::About:
             bottom = SettingsUiBuildAbout(g, view, frame.content, id, left, 2, width);
@@ -39204,6 +39236,7 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             break;
     }
     frame.contentHeight = bottom + 28;
+    return tickInMs;
 }
 
 // src/settings/ui-window.h
@@ -39225,6 +39258,8 @@ static constexpr UINT_PTR kSettingsStepTimer = 0x5E00;
 static constexpr UINT_PTR kSettingsRefreshTimer = 0x5D00;
 // Copy version info's button shows whether it copied until this timer ends it.
 static constexpr UINT_PTR kSettingsCopiedTimer = 0x5C00;
+// The next change to an account card's countdown, without a poll or store reload.
+static constexpr UINT_PTR kSettingsCountdownTimer = 0x5B00;
 // The product name, English in every language: the general message boxes' caption, and in the
 // window's title.
 static constexpr PCWSTR kSettingsProductName = L"Taskbar AI Quota";  // i18n-en
@@ -39454,7 +39489,12 @@ struct SettingsUiClient final : UiHostClient {
                 drag = {};
             }
         }
-        SettingsUiBuildFrame(*host.graphics, view, client, frame);
+        UINT tickInMs = SettingsUiBuildFrame(*host.graphics, view, client, frame);
+        if (tickInMs && !IsIconic(host.main)) {
+            SetTimer(host.main, kSettingsCountdownTimer, tickInMs, nullptr);
+        } else {
+            KillTimer(host.main, kSettingsCountdownTimer);
+        }
         for (const std::vector<UiItem>* items : {&frame.main, &frame.content}) {
             for (const UiItem& item : *items) {
                 if (item.kind != UiItemKind::Preview) continue;
@@ -39966,6 +40006,18 @@ struct SettingsUiClient final : UiHostClient {
                 }
                 return false;
             case WM_TIMER: {
+                if (wParam == kSettingsCountdownTimer) {
+                    KillTimer(host.main, kSettingsCountdownTimer);
+                    if (page == SettingsUiPage::Accounts && !host.closing && !Unloading() && !IsIconic(host.main)) {
+                        // Rebuilding closes popups. Don't interrupt a menu, modal or pointer gesture.
+                        if (modalDepth || closePreparation || host.popup.open || GetCapture()) {
+                            SetTimer(host.main, kSettingsCountdownTimer, 1000, nullptr);
+                        } else {
+                            UiHostRequestRebuild(host, false);
+                        }
+                    }
+                    return true;
+                }
                 if (wParam == kSettingsCopiedTimer) {
                     KillTimer(host.main, kSettingsCopiedTimer);
                     versionCopied.reset();

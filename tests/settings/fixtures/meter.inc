@@ -1819,26 +1819,34 @@ static void RunAccountTests() {
         "GitHub Copilot's extra usage slot", [] {
         Settings s;
         AccountData data = Fresh({11, 22, 33, 44});
+        // Give each slot its own deadline: the reset must follow the quota, not the nearest reset.
+        data.win5h.resetUnixMs = kNow + kMinute;
+        data.winWeek.resetUnixMs = kNow + 2 * kMinute;
+        data.fableWeek.resetUnixMs = kNow + 3 * kMinute;
+        data.extraUsage.resetUnixMs = kNow + 4 * kMinute;
         auto summary = [&](std::wstring provider, std::array<bool, kQuotaBarCount> bars) {
             return AccountUsageSummaryFor(s, Account(provider, L"A", bars), data, kNow);
         };
         AccountUsageSummary weekly = summary(L"anthropic", {true, true, true, true});
-        CHECK(weekly.bar == kWeeklyBar && weekly.pct == 22 && !weekly.stale);
+        CHECK(weekly.bar == kWeeklyBar && weekly.pct == 22 && !weekly.stale &&
+              weekly.resetUnixMs == data.winWeek.resetUnixMs);
         CHECK(summary(L"anthropic", {true, true, false, false}).pct == 22);
         // Neither on the taskbar: still the weekly.
         AccountUsageSummary neither = summary(L"anthropic", {true, false, false, true});
-        CHECK(neither.bar == kWeeklyBar && neither.pct == 22);
+        CHECK(neither.bar == kWeeklyBar && neither.pct == 22 && neither.resetUnixMs == data.winWeek.resetUnixMs);
         AccountUsageSummary fable = summary(L"anthropic", {true, false, true, false});
-        CHECK(fable.bar == kFableWeeklyBar && fable.pct == 33 && !fable.stale);
+        CHECK(fable.bar == kFableWeeklyBar && fable.pct == 33 && !fable.stale &&
+              fable.resetUnixMs == data.fableWeek.resetUnixMs);
         AccountUsageSummary argon = summary(L"antigravity", {false, false, true, false});
-        CHECK(argon.bar == kFableWeeklyBar && argon.pct == 33);
+        CHECK(argon.bar == kFableWeeklyBar && argon.pct == 33 && argon.resetUnixMs == data.fableWeek.resetUnixMs);
         // OpenAI's credits and OpenCode Go's month never stand for the account.
         CHECK(summary(L"openai", {false, false, false, true}).pct == 22);
         CHECK(summary(L"opencode", {true, false, false, true}).bar == kWeeklyBar);
         // GitHub Copilot's only quota, whatever is selected.
         for (std::array<bool, kQuotaBarCount> bars : {std::array{false, false, false, true}, std::array{true, true, true, false}}) {
             AccountUsageSummary copilot = summary(L"copilot", bars);
-            CHECK(copilot.bar == kExtraUsageBar && copilot.pct == 44 && !copilot.stale);
+            CHECK(copilot.bar == kExtraUsageBar && copilot.pct == 44 && !copilot.stale &&
+                  copilot.resetUnixMs == data.extraUsage.resetUnixMs);
         }
         // Past 100% as read; no reading, or one that isn't a number: none.
         data.winWeek.pct = 112.5;
@@ -1846,7 +1854,7 @@ static void RunAccountTests() {
         for (double none : {-1.0, std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()}) {
             data.winWeek.pct = none;
             AccountUsageSummary unread = summary(L"anthropic", {true, true, false, false});
-            CHECK(unread.pct < 0 && !unread.stale && unread.bar == kWeeklyBar);
+            CHECK(unread.pct < 0 && !unread.stale && unread.bar == kWeeklyBar && unread.resetUnixMs == 0);
         }
         // Fable's reading doesn't stand in for a weekly one that is missing.
         CHECK(summary(L"anthropic", {true, true, true, false}).pct < 0);
@@ -1892,9 +1900,10 @@ static void RunAccountTests() {
         data.winWeek.resetUnixMs = kNow + 60 * kMinute;
         for (bool failed : {false, true}) {
             data.stale = failed;
-            CHECK(summary(shown).pct == 22 && summary(shown, kNow + 60 * kMinute - 1).pct == 22);
+            AccountUsageSummary before = summary(shown, kNow + 60 * kMinute - 1);
+            CHECK(summary(shown).pct == 22 && before.stale && before.pct == 22 && before.resetUnixMs == data.winWeek.resetUnixMs);
             AccountUsageSummary reset = summary(shown, kNow + 60 * kMinute);
-            CHECK(reset.pct < 0 && reset.stale && reset.bar == kWeeklyBar);
+            CHECK(reset.pct < 0 && reset.stale && reset.bar == kWeeklyBar && reset.resetUnixMs == 0);
             CHECK(summary(shown, kNow + 61 * kMinute).pct < 0);
         }
         // Fresh too: read two minutes ago, with a reset a minute ago.
@@ -1902,19 +1911,18 @@ static void RunAccountTests() {
         data.lastSuccessMs = kNow - 2 * kMinute;
         data.winWeek.resetUnixMs = kNow - kMinute;
         AccountUsageSummary fresh = summary(shown);
-        CHECK(fresh.pct < 0 && !fresh.stale);
+        CHECK(fresh.pct < 0 && !fresh.stale && fresh.resetUnixMs == 0);
         data.winWeek.resetUnixMs = kNow + 60 * kMinute;
         // Each quota by its own window: Fable's reset passed, the weekly's not.
         AccountConfig fable = Account(L"anthropic", L"A", {true, false, true, false});
         data.fableWeek.resetUnixMs = kNow - kMinute;
         CHECK(summary(fable).pct < 0 && summary(shown).pct == 22);
-        data.fableWeek.resetUnixMs = 0;  // No known reset: it counts
-        CHECK(summary(fable).pct == 33);
-        // A reset the reading was taken at or after says nothing against it.
-        data.fableWeek.resetUnixMs = kNow - 3 * kMinute;
-        CHECK(summary(fable).pct == 33);
-        data.fableWeek.resetUnixMs = kNow - 2 * kMinute;
-        CHECK(summary(fable).pct == 33);
+        // An unknown reset, or one at or before the reading, leaves a percent but no countdown.
+        for (ULONGLONG noDeadline : {0ULL, kNow - 3 * kMinute, kNow - 2 * kMinute}) {
+            data.fableWeek.resetUnixMs = noDeadline;
+            AccountUsageSummary valid = summary(fable);
+            CHECK(valid.pct == 33 && valid.resetUnixMs == 0);
+        }
         // GitHub Copilot's month likewise.
         AccountConfig copilot = Account(L"copilot", L"C", {false, false, false, true});
         data.extraUsage = {44, kNow + 60 * kMinute, 0};

@@ -73,10 +73,10 @@ static uint32_t AccountId(uint32_t slot, SettingsField field, uint32_t part = 0)
     return SettingsAccountControlId(slot, field, part);
 }
 
-// The usage a card's 68 DIP header shows: its percentage (or dash), the header's only
-// right-aligned text, and its meter; null where it shows none.
+// The header's trailing Note (percentage or dash), Caption (reset countdown), and meter.
 struct TestCardUsage {
     const UiItem* percent = nullptr;
+    const UiItem* countdown = nullptr;
     const UiItem* meter = nullptr;
 };
 
@@ -87,7 +87,10 @@ static TestCardUsage CardUsage(const UiFrame& frame, uint32_t slot) {
     for (const UiItem& item : frame.content) {
         if (item.rect.top < header->rect.top || item.rect.bottom > header->rect.bottom) continue;
         if (item.kind == UiItemKind::Meter) usage.meter = &item;
-        if (item.kind == UiItemKind::Text && item.align == DWRITE_TEXT_ALIGNMENT_TRAILING) usage.percent = &item;
+        if (item.kind == UiItemKind::Text && item.align == DWRITE_TEXT_ALIGNMENT_TRAILING) {
+            if (item.font == UiFont::Note) usage.percent = &item;
+            if (item.font == UiFont::Caption) usage.countdown = &item;
+        }
     }
     return usage;
 }
@@ -676,6 +679,67 @@ static void RunAccountEditTests() {
             }
             CHECK(!CardUsage(frame, 2).percent && !CardUsage(frame, 2).meter);
         }
+    });
+
+    Run("accounts page: the reset caption sits below the percent in either mode; no countdown or wake-up "
+        "for an unknown reset, missing reading or sign-in prompt", [] {
+        SettingsView view = AccountsView();
+        view.now = kNow;
+        // OAI's weekly resets in exactly 2d 4h 5m. CC 1 needs sign-in, CC 2 has no known reset,
+        // and Go has a reset but no reading. Their deadlines must not wake the frame.
+        view.accounts[0].status.usage.resetUnixMs = kNow + ((2 * 24 + 4) * 60 + 5) * kMinute;
+        view.accounts[1].status.usage.resetUnixMs = kNow + 1;
+        view.accounts[3].status.usage = {kWeeklyBar, -1, false, kNow + 1};
+        for (BarMode mode : {BarMode::Used, BarMode::Remaining}) {
+            view.settings.barMode = mode;
+            UiFrame frame;
+            // The rounded duration first drops to 2d 3h at 2d 3h 59m remaining.
+            CHECK(SettingsUiBuildFrame(TestGraphics(), view, {1000, 820}, frame) == 6 * kMinute);
+            TestCardUsage oai = CardUsage(frame, 1);
+            CHECK(oai.percent && UiRunsText(oai.percent->runs) == (mode == BarMode::Used ? L"62%" : L"38%"));
+            CHECK(oai.countdown && UiRunsText(oai.countdown->runs) == L"Resets in 2d 4h");
+            CHECK(oai.countdown->ink == UiInk::Muted && oai.countdown->rect.top >= oai.percent->rect.bottom);
+            CHECK_NEAR(oai.countdown->rect.right, oai.percent->rect.right);
+            for (const UiRun& run : oai.countdown->runs) {
+                CHECK(!run.color && (run.ink == UiInk::Inherit || run.ink == UiInk::Muted));
+            }
+            TestCardUsage prompt = CardUsage(frame, 2), unknown = CardUsage(frame, 3), unread = CardUsage(frame, 4);
+            CHECK(!prompt.percent && !prompt.countdown && !prompt.meter);
+            CHECK(!unknown.countdown && unknown.percent && unknown.meter &&
+                  UiRunsText(unknown.percent->runs) == (mode == BarMode::Used ? L"93%" : L"7%"));
+            CHECK(!unread.countdown && !unread.meter && unread.percent && UiRunsText(unread.percent->runs) == L"\u2014");
+        }
+        view.accounts[0].status.usage.resetUnixMs = 0;
+        UiFrame frame;
+        CHECK(SettingsUiBuildFrame(TestGraphics(), view, {1000, 820}, frame) == 0);
+    });
+
+    Run("accounts page: the earliest visible countdown schedules the frame, including a stale reading; "
+        "at reset its percent becomes a dash without another poll", [] {
+        SettingsView view = AccountsView();
+        view.accounts[0].status.usage.resetUnixMs = kNow + 10 * kMinute;
+        view.accounts[2].status.usage = {kWeeklyBar, 93, true, kNow + kMinute + 1};
+        UiFrame frame;
+        auto build = [&](ULONGLONG now) {
+            view.now = now;
+            frame = {};
+            return SettingsUiBuildFrame(TestGraphics(), view, {1000, 820}, frame);
+        };
+        // 60,001 ms rounds up to 2m for one millisecond, then stays at 1m until expiry.
+        CHECK(build(kNow) == 1);
+        TestCardUsage stale = CardUsage(frame, 3);
+        CHECK(stale.percent && UiRunsText(stale.percent->runs) == L"93%" && stale.countdown &&
+              UiRunsText(stale.countdown->runs) == L"Resets in 2m");
+        CHECK(build(kNow + 1) == kMinute - 1);  // OAI changes from 10m to 9m first
+        stale = CardUsage(frame, 3);
+        CHECK(stale.countdown && UiRunsText(stale.countdown->runs) == L"Resets in 1m");
+        CHECK(build(kNow + kMinute) == 1);
+        CHECK(build(kNow + kMinute + 1) == kMinute - 1);
+        stale = CardUsage(frame, 3);
+        CHECK(!stale.countdown && !stale.meter && stale.percent && UiRunsText(stale.percent->runs) == L"\u2014");
+        CHECK(build(kNow + 10 * kMinute + 1) == 0);
+        TestCardUsage expired = CardUsage(frame, 1);
+        CHECK(!expired.countdown && !expired.meter && expired.percent && UiRunsText(expired.percent->runs) == L"\u2014");
     });
 
     Run("accounts page: a fresh reading in its usage color, as text in the theme's variant; a stale one muted "
