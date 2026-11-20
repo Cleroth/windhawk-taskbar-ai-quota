@@ -229,6 +229,15 @@ access token without refresh or expiry and sent only to its usage endpoint.
   token, which it reads only for a configured identity. If that changed, the fetch thread polls
   once more; publication (under `g_authEpochMutex`) drops a polled result whose generation changed,
   with its history sample and notifications; deadlines set under an earlier generation don't apply.
+- The published data (`g_data`) of an account is always its current sign-in's. The section that
+  bumps a sign-in generation also clears that identity's entry (`ClearPublishedReadingLocked`), or,
+  for a rename, moves it with the sign-in (`PublishSettings`, inside the rename's
+  `g_authEpochMutex` section, and only when the sign-in was copied). The fetch thread reads the
+  data and the generations together under `g_authEpochMutex`, `FetchAccount` clears the reading
+  it is given when it reads its token under another generation, and publication drops every
+  reading whose generation changed, polled or not, leaving what is published for that identity.
+  A new path that changes a login must keep this, and new fetch-thread code must never publish a
+  reading without that check.
 - Auth epochs make saves of an earlier sign-in's token stale: the same section must also
   `BumpAuthEpochLocked` the identity whose sign-in it replaces or deletes (a rename: the source,
   plus a redirect). Save tokens only through `SaveStoredTokenIfCurrent`: a refresh with the epoch

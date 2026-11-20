@@ -25,7 +25,8 @@ window wide enough) and a percentage, used or left as the bar mode says, in the 
 - A reading older than two of the account's polls, or whose last poll failed, is grey, and
   resting the pointer on the card then names the quota and when it was read. A reading shows
   until its window resets; without one the card shows a dash. A hidden account that isn't polled
-  keeps the reading it had when it was hidden, until then, a new sign-in or an Explorer restart.
+  keeps the reading it had when it was hidden, until then, a sign-out or new sign-in, or an
+  Explorer restart.
 - An account that needs a sign-in shows its **Sign in** button there instead.
 
 Expand a card for:

@@ -12156,7 +12156,8 @@ static std::vector<AuthRenameRedirect> g_authRenameRedirects;
 // Per identity, bumped under g_authEpochMutex, after the token store changes, whenever its sign-in
 // is replaced, deleted or moved by a rename; never by a token refresh. The fetch thread keeps
 // details read through a login (the Anthropic plan, the Codex free resets' expiry) under it, so
-// another login never shows them.
+// another login never shows them; nor its reading (ClearPublishedReadingLocked; a rename moves it
+// with the sign-in, in the same section).
 static std::vector<std::pair<uint64_t, uint64_t>> g_signInGenerations;
 
 static uint64_t SignInGenerationLocked(uint64_t idHash) {
@@ -12278,6 +12279,18 @@ static void BumpAuthEpochLocked(uint64_t idHash) {
     g_authEpochs.push_back({idHash, 1});
 }
 
+// An identity's published reading goes with the sign-in it was read through: cleared in the
+// g_authEpochMutex section that bumps its sign-in generation (callers hold it). The fetch thread
+// reads the published data and the generations under that lock, so a reading it holds is its
+// account's sign-in's as of then.
+static void ClearPublishedReadingLocked(uint64_t idHash) {
+    std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
+    std::lock_guard<std::mutex> dataLock(g_dataMutex);
+    for (size_t i = 0; i < g_settings.accounts.size() && i < g_data.size(); i++) {
+        if (AccountIdentityHash(g_settings.accounts[i]) == idHash) g_data[i] = {};
+    }
+}
+
 // `newSignIn`: a sign-in's first token, rather than a refreshed one. It starts a new epoch, so a
 // token read before it (a refresh in flight) can't replace it.
 static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authEpoch,
@@ -12305,16 +12318,22 @@ static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authE
     if (newSignIn) {
         BumpAuthEpochLocked(destinationIdentity);
         BumpSignInGenerationLocked(destinationIdentity);
+        ClearPublishedReadingLocked(destinationIdentity);
     }
     if (savedIdentity) *savedIdentity = destinationIdentity;
     return TokenSaveResult::Saved;
 }
 
+// A sign-in that couldn't be deleted is still the account's: its epoch ends all the same (saves
+// in flight go stale), its details and reading stay.
 static bool ClearStoredTokenAndBumpAuthEpoch(uint64_t idHash) {
     std::lock_guard<std::mutex> lk(g_authEpochMutex);
     bool cleared = ClearStoredToken(idHash);
     BumpAuthEpochLocked(idHash);
-    BumpSignInGenerationLocked(idHash);
+    if (cleared) {
+        BumpSignInGenerationLocked(idHash);
+        ClearPublishedReadingLocked(idHash);
+    }
     return cleared;
 }
 
@@ -17790,9 +17809,10 @@ static constexpr ULONGLONG kDetailsRetryMs = 2ULL * 60 * 60 * 1000;  // Unless a
 // Returns the sign-in generation the result was read through. Once that sign-in is replaced,
 // removed or moved, the result is that login's, whatever it says (a rejected refresh included):
 // the fetch thread polls again rather than publish it. A refreshed token's stale save means just
-// that.
-static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec,
-                             AccountDetailsCache* details) {
+// that. `d` comes in with the account's reading through the sign-in of `readingGeneration`: a
+// poll through another one starts from no reading, so a failure keeps nothing of that login's.
+static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, uint64_t readingGeneration,
+                             int* retryAfterSec, AccountDetailsCache* details) {
     d->error = {};
     d->retryDeadlineMs = 0;
     d->needsLogin = false;
@@ -17827,6 +17847,7 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
         }
         signedIn = configured && LoadStoredToken(idHash, &tok) && !tok.accessToken.empty();
     }
+    if (signInGeneration != readingGeneration) *d = {};
     if (!signedIn) {
         d->stale = true;
         d->needsLogin = true;
@@ -18144,6 +18165,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
         std::vector<AccountConfig> accounts;
         std::vector<AccountData> results;
+        // The sign-in generation each account's reading in `results` was read through: its
+        // current one as the round starts (the published data is always its account's sign-in's,
+        // see ClearPublishedReadingLocked), then that of its poll.
+        std::vector<uint64_t> readingGeneration;
         // Each account's poll interval in minutes (AccountPollMinutes); 0: not polled.
         std::vector<int> pollMinutes;
         int intervalMin, notificationThreshold;
@@ -18155,6 +18180,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         // this round's curves stale.
         bool rebuildAllCurves = g_burnUpRebuildRequested.exchange(false);
         {
+            // The auth lock keeps a sign-in change from falling between the generations and the
+            // published data read here.
+            std::lock_guard<std::mutex> authLock(g_authEpochMutex);
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             accounts = g_settings.accounts;
             intervalMin = g_settings.pollMinutes;
@@ -18164,6 +18192,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             historyRetentionDays = g_settings.historyRetentionDays;
             for (const AccountConfig& account : accounts) {
                 pollMinutes.push_back(AccountPollMinutes(account, intervalMin, g_settings.hiddenPollMinutes));
+                readingGeneration.push_back(SignInGenerationLocked(AccountIdentityHash(account)));
             }
             settingsGeneration = g_settingsGeneration;
             historyContinuityGeneration = g_historyContinuityGeneration;
@@ -18200,6 +18229,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             accountDetails.assign(accounts.size(), {});
             for (size_t i = 0; i < accounts.size(); ++i) {
                 retryIdentityHashes[i] = AccountIdentityHash(accounts[i]);
+                // An identity new here (added, or renamed) starts from its current sign-in.
+                pollSignInGeneration[i] = readingGeneration[i];
                 for (size_t j = 0; j < oldIdentityHashes.size() &&
                                     j < oldRetryDeadlineMs.size(); ++j) {
                     if (!oldDeadlineUsed[j] &&
@@ -18264,9 +18295,6 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         bool refreshSelected = !refreshAll && std::find(refreshRequested.begin(),
                                                         refreshRequested.end(), true) !=
                                                   refreshRequested.end();
-        // What the round started with, for polls whose sign-in changed (see FetchAccount).
-        const std::vector<AccountData> startResults = results;
-        std::vector<bool> polled(accounts.size(), false);
         std::vector<bool> fetchedOk(accounts.size(), false);
         std::vector<HistorySample> historyBatch;
         ULONGLONG nextRetryMs = 0;
@@ -18274,21 +18302,16 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         bool anyError = false;
         for (size_t i = 0; i < accounts.size() && !g_unloading; i++) {
             ULONGLONG nowMs = NowUnixMs();
-            // A poll through an earlier sign-in (replaced, removed or moved since) set that
-            // login's deadlines: the current one polls now.
+            // The account's sign-in was replaced or removed since its last poll: that login's
+            // deadlines go with it, so the current one polls now.
             uint64_t signInGeneration = CurrentSignInGeneration(retryIdentityHashes[i]);
-            bool signInChanged = pollSignInGeneration[i] != signInGeneration;
-            if (signInChanged) {
+            if (pollSignInGeneration[i] != signInGeneration) {
                 retryDeadlineMs[i] = 0;
                 nextPollDeadlineMs[i] = 0;
             }
-            // A hidden account that isn't polled, Refresh all included. Its reading through the
-            // earlier sign-in goes too: no poll will replace it.
+            // A hidden account that isn't polled, Refresh all included.
             if (!pollMinutes[i]) {
-                if (signInChanged) {
-                    results[i] = {};
-                    pollSignInGeneration[i] = signInGeneration;
-                }
+                pollSignInGeneration[i] = signInGeneration;
                 continue;
             }
             if (refreshSelected && !refreshRequested[i]) {
@@ -18324,18 +18347,21 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 break;
             }
             const ULONGLONG pollIntervalMs = (ULONGLONG)pollMinutes[i] * 60000;
+            const uint64_t lastPollGeneration = pollSignInGeneration[i];
             int retryAfter = 0;
-            polled[i] = true;
-            pollSignInGeneration[i] =
-                FetchAccount(accounts[i], &results[i], &retryAfter, &accountDetails[i]);
+            pollSignInGeneration[i] = readingGeneration[i] =
+                FetchAccount(accounts[i], &results[i], readingGeneration[i], &retryAfter, &accountDetails[i]);
             // Its sign-in changed meanwhile: poll once more with the current one (none after a
-            // sign-out). Should it change again, publication drops the result.
+            // sign-out), which starts from no reading. Should it change again, publication drops
+            // the result.
             if (pollSignInGeneration[i] != CurrentSignInGeneration(retryIdentityHashes[i])) {
-                results[i] = startResults[i];
                 retryAfter = 0;
-                pollSignInGeneration[i] =
-                    FetchAccount(accounts[i], &results[i], &retryAfter, &accountDetails[i]);
+                pollSignInGeneration[i] = readingGeneration[i] =
+                    FetchAccount(accounts[i], &results[i], readingGeneration[i], &retryAfter, &accountDetails[i]);
             }
+            // Another sign-in than its last poll's: its notifications start over, as a new
+            // account's.
+            if (pollSignInGeneration[i] != lastPollGeneration) armState[i].fill(-1);
             // The journal rejects samples without a known provider code.
             uint32_t providerCode = HistoryProviderCode(accounts[i].provider);
             if (historyEnabled && accounts[i].recordHistory && accounts[i].historyId && providerCode) {
@@ -18432,16 +18458,19 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         int publishedThreshold = notificationThreshold;
         bool notificationsEnabled = notificationsOn;
         {
-            // What this round read through a sign-in replaced, removed or moved since isn't
-            // published, recorded or notified: the account polls again at once. Nor are account
-            // details read so (this round or an earlier one, the usage request failing since). The
-            // lock keeps a sign-in change from falling between these checks and the publication.
+            // A reading held through a sign-in replaced, removed or moved since, polled this
+            // round or not, isn't published, recorded or notified: the account shows none and
+            // polls again at once. Nor are account details read so (this round or an earlier one,
+            // the usage request failing since). The lock keeps a sign-in change from falling
+            // between these checks and the publication.
             std::lock_guard<std::mutex> authLock(g_authEpochMutex);
+            std::vector<bool> dropped(accounts.size(), false);
             for (size_t i = 0; i < accounts.size() && i < results.size() &&
                                i < accountDetails.size(); i++) {
                 uint64_t signInGeneration = SignInGenerationLocked(AccountIdentityHash(accounts[i]));
-                if (polled[i] && pollSignInGeneration[i] != signInGeneration) {
-                    results[i] = startResults[i];
+                if (readingGeneration[i] != signInGeneration) {
+                    dropped[i] = true;
+                    results[i] = {};
                     fetchedOk[i] = false;
                     std::erase_if(historyBatch, [&](const HistorySample& sample) {
                         return sample.accountId == accounts[i].historyId;
@@ -18473,10 +18502,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 remappedResults = previousCurrentResults;
                 remappedFetchedOk.assign(currentAccounts.size(), false);
                 std::vector<bool> oldResultUsed(results.size(), false);
+                // A dropped reading replaces nothing: what is published for its identity now (none
+                // after a sign-in change, a renamed account's own after renames back) stays.
                 for (size_t i = 0; i < currentAccounts.size(); i++) {
                     bool matched = false;
                     for (size_t j = 0; j < accounts.size() && j < results.size(); j++) {
-                        if (!oldResultUsed[j] &&
+                        if (!oldResultUsed[j] && !dropped[j] &&
                             AccountIdentityHash(accounts[j]) ==
                                 AccountIdentityHash(currentAccounts[i])) {
                             remappedResults[i] = results[j];
@@ -35339,9 +35370,12 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
     // Renames retain history; switching providers starts a new series during normalization.
     newAccount.historyId = oldAccount.provider == newAccount.provider ? oldAccount.historyId : 0;
     settings.accounts[index] = newAccount;
-    result.apply = ApplyOwnedSettings(
-        std::move(settings), sameProviderIdentityChange ? oldIdentity : 0,
-        sameProviderIdentityChange ? newIdentity : 0);
+    // Its polled data moves with its sign-in: Antigravity's (it has none) always, another
+    // provider's only when the sign-in was copied. A new label that takes over a retained sign-in
+    // starts without data.
+    bool carryData = sameProviderIdentityChange &&
+                     (!sameProviderRename || tokenCopyResult == TokenCopyResult::Copied);
+    result.apply = ApplyOwnedSettings(std::move(settings), carryData ? oldIdentity : 0, carryData ? newIdentity : 0);
     if (result.apply == SettingsApplyResult::Failed) {
         bool copiedTokenCleared = tokenCopyResult != TokenCopyResult::Copied ||
                                   ClearStoredToken(newIdentity);

@@ -28,7 +28,8 @@ static std::vector<AuthRenameRedirect> g_authRenameRedirects;
 // Per identity, bumped under g_authEpochMutex, after the token store changes, whenever its sign-in
 // is replaced, deleted or moved by a rename; never by a token refresh. The fetch thread keeps
 // details read through a login (the Anthropic plan, the Codex free resets' expiry) under it, so
-// another login never shows them.
+// another login never shows them; nor its reading (ClearPublishedReadingLocked; a rename moves it
+// with the sign-in, in the same section).
 static std::vector<std::pair<uint64_t, uint64_t>> g_signInGenerations;
 
 static uint64_t SignInGenerationLocked(uint64_t idHash) {
@@ -150,6 +151,18 @@ static void BumpAuthEpochLocked(uint64_t idHash) {
     g_authEpochs.push_back({idHash, 1});
 }
 
+// An identity's published reading goes with the sign-in it was read through: cleared in the
+// g_authEpochMutex section that bumps its sign-in generation (callers hold it). The fetch thread
+// reads the published data and the generations under that lock, so a reading it holds is its
+// account's sign-in's as of then.
+static void ClearPublishedReadingLocked(uint64_t idHash) {
+    std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
+    std::lock_guard<std::mutex> dataLock(g_dataMutex);
+    for (size_t i = 0; i < g_settings.accounts.size() && i < g_data.size(); i++) {
+        if (AccountIdentityHash(g_settings.accounts[i]) == idHash) g_data[i] = {};
+    }
+}
+
 // `newSignIn`: a sign-in's first token, rather than a refreshed one. It starts a new epoch, so a
 // token read before it (a refresh in flight) can't replace it.
 static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authEpoch,
@@ -177,16 +190,22 @@ static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authE
     if (newSignIn) {
         BumpAuthEpochLocked(destinationIdentity);
         BumpSignInGenerationLocked(destinationIdentity);
+        ClearPublishedReadingLocked(destinationIdentity);
     }
     if (savedIdentity) *savedIdentity = destinationIdentity;
     return TokenSaveResult::Saved;
 }
 
+// A sign-in that couldn't be deleted is still the account's: its epoch ends all the same (saves
+// in flight go stale), its details and reading stay.
 static bool ClearStoredTokenAndBumpAuthEpoch(uint64_t idHash) {
     std::lock_guard<std::mutex> lk(g_authEpochMutex);
     bool cleared = ClearStoredToken(idHash);
     BumpAuthEpochLocked(idHash);
-    BumpSignInGenerationLocked(idHash);
+    if (cleared) {
+        BumpSignInGenerationLocked(idHash);
+        ClearPublishedReadingLocked(idHash);
+    }
     return cleared;
 }
 

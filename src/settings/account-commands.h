@@ -159,9 +159,12 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
     // Renames retain history; switching providers starts a new series during normalization.
     newAccount.historyId = oldAccount.provider == newAccount.provider ? oldAccount.historyId : 0;
     settings.accounts[index] = newAccount;
-    result.apply = ApplyOwnedSettings(
-        std::move(settings), sameProviderIdentityChange ? oldIdentity : 0,
-        sameProviderIdentityChange ? newIdentity : 0);
+    // Its polled data moves with its sign-in: Antigravity's (it has none) always, another
+    // provider's only when the sign-in was copied. A new label that takes over a retained sign-in
+    // starts without data.
+    bool carryData = sameProviderIdentityChange &&
+                     (!sameProviderRename || tokenCopyResult == TokenCopyResult::Copied);
+    result.apply = ApplyOwnedSettings(std::move(settings), carryData ? oldIdentity : 0, carryData ? newIdentity : 0);
     if (result.apply == SettingsApplyResult::Failed) {
         bool copiedTokenCleared = tokenCopyResult != TokenCopyResult::Copied ||
                                   ClearStoredToken(newIdentity);
