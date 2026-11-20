@@ -18611,16 +18611,13 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         // Status pages after the round's polls and notifications, so they never hold them up.
         ULONGLONG statusDueTick = PollProviderStatuses(providerStatus);
 
+        // Until the earliest retry or poll: one that came due during the round, while later
+        // accounts or the status pages were read, runs at once.
         DWORD waitMs = (DWORD)intervalMin * 60000;
         if (anyError) waitMs = std::min(waitMs, (DWORD)120000);
         ULONGLONG nowMs = NowUnixMs();
-        if (nextRetryMs > nowMs) {
-            waitMs = (DWORD)std::min<ULONGLONG>(waitMs, nextRetryMs - nowMs);
-        }
-        if (nextPollMs <= nowMs && nextPollMs != 0) {
-            waitMs = 0;
-        } else if (nextPollMs > nowMs) {
-            waitMs = (DWORD)std::min<ULONGLONG>(waitMs, nextPollMs - nowMs);
+        for (ULONGLONG dueMs : {nextRetryMs, nextPollMs}) {
+            if (dueMs) waitMs = (DWORD)std::min<ULONGLONG>(waitMs, dueMs > nowMs ? dueMs - nowMs : 0);
         }
         // Local retention must wake independently of slow provider polling. Existing
         // per-account deadlines still prevent this wake from issuing early requests.
