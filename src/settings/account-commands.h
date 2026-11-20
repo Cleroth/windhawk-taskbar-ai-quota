@@ -135,14 +135,10 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
                               oldAccount.provider != L"antigravity";
     TokenCopyResult tokenCopyResult = TokenCopyResult::SourceMissing;
     bool oldTokenCleared = true;
-    ULONGLONG oldAuthEpoch = 0;
-    ULONGLONG newAuthEpoch = 0;
     std::unique_lock<std::mutex> authEpochLock(g_authEpochMutex, std::defer_lock);
     if (sameProviderRename) {
         // Block epoch-gated saves only across the local copy/settings/delete transaction.
         authEpochLock.lock();
-        oldAuthEpoch = AuthEpochLocked(oldIdentity);
-        newAuthEpoch = AuthEpochLocked(newIdentity);
         tokenCopyResult = CopyStoredTokenForRename(oldIdentity, newIdentity);
         if (tokenCopyResult == TokenCopyResult::DestinationOccupied ||
             tokenCopyResult == TokenCopyResult::Failed) {
@@ -162,12 +158,11 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
     // Its polled data moves with its sign-in: Antigravity's (it has none) always, another
     // provider's only when the sign-in was copied. A new label that takes over a retained sign-in
     // starts without data.
-    bool carryData = sameProviderIdentityChange &&
-                     (!sameProviderRename || tokenCopyResult == TokenCopyResult::Copied);
+    const bool copied = tokenCopyResult == TokenCopyResult::Copied;
+    bool carryData = sameProviderIdentityChange && (!sameProviderRename || copied);
     result.apply = ApplyOwnedSettings(std::move(settings), carryData ? oldIdentity : 0, carryData ? newIdentity : 0);
     if (result.apply == SettingsApplyResult::Failed) {
-        bool copiedTokenCleared = tokenCopyResult != TokenCopyResult::Copied ||
-                                  ClearStoredToken(newIdentity);
+        bool copiedTokenCleared = !copied || ClearStoredToken(newIdentity);
         if (authEpochLock.owns_lock()) authEpochLock.unlock();
         configLock.unlock();
         result.message =
@@ -175,12 +170,17 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
         return result;
     }
     if (sameProviderRename) {
-        oldTokenCleared = ClearStoredToken(oldIdentity);
+        // An empty source read can also mean a read error. Without a copy, leave the source
+        // alone and let its in-flight saves expire: the target may have its own sign-in.
+        if (copied) oldTokenCleared = ClearStoredToken(oldIdentity);
+        const ULONGLONG oldAuthEpoch = AuthEpochLocked(oldIdentity);
         BumpAuthEpochLocked(oldIdentity);
         BumpSignInGenerationLocked(oldIdentity);
         BumpSignInGenerationLocked(newIdentity);
-        g_authRenameRedirects.push_back(
-            {oldIdentity, oldAuthEpoch, newIdentity, newAuthEpoch});
+        if (copied) {
+            g_authRenameRedirects.push_back(
+                {oldIdentity, oldAuthEpoch, newIdentity, AuthEpochLocked(newIdentity)});
+        }
         authEpochLock.unlock();
     }
     result.account = PublishedAccountTarget(newIdentity);

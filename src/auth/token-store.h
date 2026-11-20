@@ -12,7 +12,7 @@ struct StoredToken {
 static std::mutex g_authMutex;
 static std::mutex g_authEpochMutex;
 // Per identity, bumped under g_authEpochMutex whenever its stored sign-in ends: replaced by a new
-// sign-in, deleted, or moved away by a rename (whose redirect leads saves on to the new identity).
+// sign-in, deleted, or renamed away (only a copied sign-in redirects saves to its new identity).
 // A save with an earlier epoch is stale; a refresh never bumps it.
 static std::vector<std::pair<uint64_t, ULONGLONG>> g_authEpochs;
 

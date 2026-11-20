@@ -240,9 +240,9 @@ access token without refresh or expiry and sent only to its usage endpoint.
   reading without that check.
 - Auth epochs make saves of an earlier sign-in's token stale: the same section must also
   `BumpAuthEpochLocked` the identity whose sign-in it replaces or deletes (a rename: the source,
-  plus a redirect). Save tokens only through `SaveStoredTokenIfCurrent`: a refresh with the epoch
-  read in one `g_authEpochMutex` section with the token it refreshes, a sign-in with the epoch read
-  when it started.
+  with a redirect only if the sign-in was copied). Save tokens only through `SaveStoredTokenIfCurrent`:
+  a refresh with the epoch read in one `g_authEpochMutex` section with the token it refreshes,
+  a sign-in with the epoch read when it started.
 - Per-user data lives in the mod's Windhawk storage, keyed by the user's SID
   (`core/user-storage.h`), so Windhawk removes it with the mod: the journal, its lock and the
   notifications' icon in `UserStorageFolder()` (`<Wh_GetModStoragePath>\<SID>`); recording consent
