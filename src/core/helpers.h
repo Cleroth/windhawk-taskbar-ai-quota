@@ -133,6 +133,21 @@ static std::wstring FormatLocalDayTime(SYSTEMTIME const& local) {
     return std::wstring(day) + L" " + FormatLocalTime(local);
 }
 
+// When a reading that is out of date was taken: its local time, with its weekday from a day back,
+// or the region's short date from six days back; empty when unreadable.
+static std::wstring FormatReadingTime(ULONGLONG unixMs, ULONGLONG now) {
+    constexpr ULONGLONG kDayMs = 24ULL * 3600 * 1000;
+    SYSTEMTIME local;
+    if (!UnixMsToLocalSystemTime(unixMs, &local)) return {};
+    if (now - unixMs < kDayMs) return FormatLocalTime(local);
+    wchar_t date[80];
+    if (now - unixMs < 6 * kDayMs ||
+        GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_SHORTDATE, &local, nullptr, date, ARRAYSIZE(date), nullptr) <= 0) {
+        return FormatLocalDayTime(local);
+    }
+    return date;
+}
+
 // A duration in its two largest units, dropping a zero second one: "1d 3h", "2h 15m", "4m 12s" or
 // "45s".
 static std::wstring FormatShortDuration(const I18nLocale& locale, ULONGLONG seconds) {

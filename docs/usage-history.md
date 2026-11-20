@@ -97,8 +97,10 @@ state and storage errors stay visible in the main window.
 
 Recording reuses normal polls; opening the viewer does not increase polling. Missing/failed
 polls, sleep, restarts, and recording/settings changes break graph continuity. No past usage is
-backfilled. With **Do not poll hidden accounts** on, hidden accounts have no new samples. Turn
-it off to poll hidden accounts only when both global and per-account recording are enabled.
+backfilled. A hidden account records with each of its polls, as often as **Settings > Behavior >
+Hidden accounts** says (every hour by default): its lines stay connected, with fewer readings.
+With **Not polled** it has no new samples. Changing that setting, or hiding or showing an
+account, breaks every line once, like other polling changes.
 
 Anthropic reports no reset for extra usage, so its readings are recorded without one, in the
 journal and the CSV. The viewer and the charts place each in the calendar month (UTC) it was
@@ -201,6 +203,11 @@ time near the limit) are estimates from the readings kept and can differ from be
   there drops the custom colors.
 - A version without **Forever** keeps 3650 days but applies its size cap, permanently discarding
   samples beyond the newest 250,000.
+- Versions before 2.22.0 have only **Do not poll hidden accounts**: with an interval or **Not
+  polled** chosen they don't poll hidden accounts, with **Same as visible accounts** they poll
+  those that record history. Saving settings there drops the choice, so after updating back it
+  is **1 hour** (also where it was **Not polled** or another interval) or **Same as visible
+  accounts**.
 - Versions before 2.21.0 have no window for Anthropic extra usage: they show its bar instead of a
   chart and draw its line through a month's start, and saving settings there drops the extra
   usage chart choice, so it is Month after updating back.

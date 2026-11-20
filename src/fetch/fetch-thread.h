@@ -297,6 +297,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     std::vector<uint64_t> retryIdentityHashes;
     std::vector<ULONGLONG> retryDeadlineMs;
     std::vector<ULONGLONG> nextPollDeadlineMs;
+    // Each account's poll interval (AccountPollMinutes) as of the settings last seen.
+    std::vector<int> lastPollMinutes;
     // The sign-in generation each account's last poll read its token with.
     std::vector<uint64_t> pollSignInGeneration;
     std::vector<AccountDetailsCache> accountDetails;
@@ -373,8 +375,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
         std::vector<AccountConfig> accounts;
         std::vector<AccountData> results;
+        // Each account's poll interval in minutes (AccountPollMinutes); 0: not polled.
+        std::vector<int> pollMinutes;
         int intervalMin, notificationThreshold;
-        bool notificationsOn, historyEnabled, skipHiddenPolling;
+        bool notificationsOn, historyEnabled;
         int historyRetentionDays;
         ULONGLONG settingsGeneration, historyContinuityGeneration, curvePolicyGeneration;
         const uint64_t historyEpoch = g_historyEpoch.load();
@@ -389,7 +393,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             notificationsOn = g_settings.notificationLevel != NotificationLevel::Off;
             historyEnabled = g_settings.historyEnabled && !g_historyIdsPendingSave;
             historyRetentionDays = g_settings.historyRetentionDays;
-            skipHiddenPolling = g_settings.skipHiddenPolling;
+            for (const AccountConfig& account : accounts) {
+                pollMinutes.push_back(AccountPollMinutes(account, intervalMin, g_settings.hiddenPollMinutes));
+            }
             settingsGeneration = g_settingsGeneration;
             historyContinuityGeneration = g_historyContinuityGeneration;
             curvePolicyGeneration = g_burnUpPolicyGeneration.load();
@@ -414,6 +420,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             auto oldIdentityHashes = std::move(retryIdentityHashes);
             auto oldRetryDeadlineMs = std::move(retryDeadlineMs);
             auto oldNextPollDeadlineMs = std::move(nextPollDeadlineMs);
+            auto oldPollMinutes = std::exchange(lastPollMinutes, pollMinutes);
             auto oldPollSignInGeneration = std::move(pollSignInGeneration);
             auto oldAccountDetails = std::move(accountDetails);
             std::vector<bool> oldDeadlineUsed(oldIdentityHashes.size(), false);
@@ -436,12 +443,21 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                             accountDetails[i] = std::move(oldAccountDetails[j]);
                         }
                         if (j < oldNextPollDeadlineMs.size()) {
+                            // Its poll interval changed (the setting, or it was hidden or shown):
+                            // its next poll comes that interval after its reading, sooner or
+                            // later than it was due. Without a reading to count from, at most
+                            // that interval from now, and a hidden account whose last poll
+                            // failed waits all of it, not its early retry. Not polled, its
+                            // deadline waits as it is.
                             nextPollDeadlineMs[i] = oldNextPollDeadlineMs[j];
-                            ULONGLONG latestDeadline = NowUnixMs() +
-                                (accounts[i].provider == L"antigravity" ? 1ULL :
-                                 (ULONGLONG)intervalMin) * 60000;
-                            if (nextPollDeadlineMs[i] > latestDeadline) {
-                                nextPollDeadlineMs[i] = latestDeadline;
+                            ULONGLONG pollIntervalMs = (ULONGLONG)pollMinutes[i] * 60000;
+                            bool changed = j < oldPollMinutes.size() && oldPollMinutes[j] != pollMinutes[i];
+                            bool failed = bool(results[i].error);
+                            if (pollIntervalMs && changed && !failed && results[i].lastSuccessMs) {
+                                nextPollDeadlineMs[i] = results[i].lastSuccessMs + pollIntervalMs;
+                            } else if (pollIntervalMs && ((changed && failed && accounts[i].hidden) ||
+                                                          nextPollDeadlineMs[i] > NowUnixMs() + pollIntervalMs)) {
+                                nextPollDeadlineMs[i] = NowUnixMs() + pollIntervalMs;
                             }
                         }
                         oldDeadlineUsed[j] = true;
@@ -489,15 +505,22 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         bool anyError = false;
         for (size_t i = 0; i < accounts.size() && !g_unloading; i++) {
             ULONGLONG nowMs = NowUnixMs();
-            // Hiding still stops polling by default. The explicit history exception never
-            // polls an unrecorded hidden account, including during Refresh all.
-            if (accounts[i].hidden && (skipHiddenPolling || !historyEnabled ||
-                                        !accounts[i].recordHistory)) continue;
             // A poll through an earlier sign-in (replaced, removed or moved since) set that
             // login's deadlines: the current one polls now.
-            if (pollSignInGeneration[i] != CurrentSignInGeneration(retryIdentityHashes[i])) {
+            uint64_t signInGeneration = CurrentSignInGeneration(retryIdentityHashes[i]);
+            bool signInChanged = pollSignInGeneration[i] != signInGeneration;
+            if (signInChanged) {
                 retryDeadlineMs[i] = 0;
                 nextPollDeadlineMs[i] = 0;
+            }
+            // A hidden account that isn't polled, Refresh all included. Its reading through the
+            // earlier sign-in goes too: no poll will replace it.
+            if (!pollMinutes[i]) {
+                if (signInChanged) {
+                    results[i] = {};
+                    pollSignInGeneration[i] = signInGeneration;
+                }
+                continue;
             }
             if (refreshSelected && !refreshRequested[i]) {
                 if (retryDeadlineMs[i] > nowMs &&
@@ -531,6 +554,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 nextPollMs = nowMs;
                 break;
             }
+            const ULONGLONG pollIntervalMs = (ULONGLONG)pollMinutes[i] * 60000;
             int retryAfter = 0;
             polled[i] = true;
             pollSignInGeneration[i] =
@@ -549,8 +573,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 HistorySample sample;
                 sample.accountId = accounts[i].historyId;
                 sample.timeMs = NowUnixMs();
-                sample.intervalMs = (accounts[i].provider == L"antigravity" ? 1ULL :
-                                     (ULONGLONG)intervalMin) * 60000;
+                sample.intervalMs = pollIntervalMs;
                 // A settings pause/resume or poll-rate change must not bridge an interval
                 // where recording was disabled, even if it was shorter than two polls.
                 sample.session = historySession ^ (historyContinuityGeneration * 0x9e3779b97f4a7c15ULL);
@@ -589,8 +612,11 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 }
                 historyBatch.push_back(sample);
             }
+            // A failed poll retries sooner than the interval (when the provider says, or in two
+            // minutes), except a hidden account's, which never polls more often than its
+            // interval.
             if (retryAfter > 0) {
-                nextPollDeadlineMs[i] = 0;
+                nextPollDeadlineMs[i] = accounts[i].hidden ? NowUnixMs() + pollIntervalMs : 0;
                 retryDeadlineMs[i] = NowUnixMs() + (ULONGLONG)retryAfter * 1000;
                 results[i].retryDeadlineMs = retryDeadlineMs[i];
                 if (nextRetryMs == 0 || retryDeadlineMs[i] < nextRetryMs) {
@@ -599,10 +625,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             } else {
                 retryDeadlineMs[i] = 0;
                 results[i].retryDeadlineMs = 0;
-                ULONGLONG pollDelayMs = accounts[i].provider == L"antigravity"
-                                            ? 60000
-                                            : (ULONGLONG)intervalMin * 60000;
-                if (results[i].error && !results[i].needsLogin &&
+                ULONGLONG pollDelayMs = pollIntervalMs;
+                if (results[i].error && !results[i].needsLogin && !accounts[i].hidden &&
                     accounts[i].provider != L"antigravity") {
                     pollDelayMs = std::min<ULONGLONG>(pollDelayMs, 120000);
                 }
@@ -613,7 +637,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             }
 
             if (results[i].error) {
-                if (retryAfter <= 0 && !results[i].needsLogin &&
+                if (retryAfter <= 0 && !results[i].needsLogin && !accounts[i].hidden &&
                     accounts[i].provider != L"antigravity") {
                     anyError = true;
                 }

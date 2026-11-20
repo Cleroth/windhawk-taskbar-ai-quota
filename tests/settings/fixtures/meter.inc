@@ -1,6 +1,7 @@
-// Meter model: display entry clamps, bars (time tracks included), tiles (gauges, pies, rounded
-// squares, sparklines and the quota matrix included), account state, the headline countdown,
-// identity and visual test data.
+// Meter model: display entry clamps, usage colors (as text too), bars (time tracks included),
+// tiles (gauges, pies, rounded squares, sparklines and the quota matrix included), account state
+// (with the model's poll intervals, staleness and usage summary), the headline countdown, identity
+// and visual test data.
 // Expected values are derived by hand from the documented behavior.
 
 static void RunDisplayTests() {
@@ -8,7 +9,7 @@ static void RunDisplayTests() {
         Settings settings = With([](Settings& s) {
             s.barMode = BarMode::Remaining; s.barLength = 120; s.barThickness = 6;
             s.ringSize = 28; s.ringThickness = 4; s.yellowThreshold = 40;
-            s.orangeThreshold = 60; s.redThreshold = 80; s.pollMinutes = 15;
+            s.orangeThreshold = 60; s.redThreshold = 80; s.pollMinutes = 15; s.hiddenPollMinutes = 240;
             s.usagePalette = UsagePalette::Colorblind; s.showPaceTicks = false; s.paceTickStyle = PaceTickStyle::Dot;
             s.paceTickColor = RGB(1, 2, 3); s.percentTextAlignment = PercentTextAlignment::Center;
             s.showExtraBarAmounts = true; s.showStaleWarning = false; s.barGap = 7; s.barStyle = BarStyle::Rail;
@@ -22,6 +23,12 @@ static void RunDisplayTests() {
         CHECK(d.headlineFontSize == 18); CHECK(d.headlineBarLength == 24); CHECK(d.headlineBarThickness == 6);
         CHECK(d.yellowThreshold == 40); CHECK(d.orangeThreshold == 60); CHECK(d.redThreshold == 80);
         CHECK(d.pollMinutes == 15); CHECK(!d.showPaceTicks);
+        // The hidden accounts' interval as set: every hour by default, or one of its two choices
+        // that aren't an interval.
+        CHECK(d.hiddenPollMinutes == 240); CHECK(Display().hiddenPollMinutes == 60);
+        for (int choice : {kHiddenPollNever, kHiddenPollAsShown}) {
+            CHECK(Display(With([&](Settings& s) { s.hiddenPollMinutes = choice; })).hiddenPollMinutes == choice);
+        }
         CHECK((d.usageColors == std::array<uint32_t, 4>{0xFF0072B2, 0xFF56B4E9, 0xFFE69F00, 0xFFD55E00}));
         CHECK(d.paceTickStyle == PaceTickStyle::Dot); CHECK(d.paceTickColor == RGB(1, 2, 3));
         CHECK(d.percentTextAlignment == PercentTextAlignment::Center);
@@ -160,6 +167,28 @@ static void RunColorTests() {
         MeterDisplay remaining = Display(With([](Settings& s) { s.barMode = BarMode::Remaining; }));
         CHECK(Bar(95, remaining).color == 0xFFE53935);
         CHECK(Bar(30, remaining).color == 0xFF43A047);
+    });
+
+    Run("usage colors as text: themselves on a dark surface; on a light one, variants that read at 4.5:1 on "
+        "white, a color that already does unchanged", [] {
+        auto contrast = [](uint32_t rgb) { return 1.05 / (RelativeLuminance(rgb) + 0.05); };
+        // Dark: the color without its alpha.
+        CHECK(UsageTextColor(0xFFFDD835, false) == 0xFDD835 && UsageTextColor(0x80E53935, false) == 0xE53935);
+        // Light: green and red as the usage history window's sidebar shows them.
+        CHECK(UsageTextColor(0xFF43A047, true) == 0x1D7A35 && UsageTextColor(0xFFE53935, true) == 0xC42B1C);
+        // Every default and colorblind usage color reads on white; only the colorblind blue does as it is.
+        for (UsagePalette palette : {UsagePalette::Default, UsagePalette::Colorblind}) {
+            for (uint32_t color : UsagePaletteColors(palette, {})) {
+                uint32_t text = UsageTextColor(color, true);
+                CHECK(contrast(text) >= 4.5);
+                CHECK((text == (color & 0xFFFFFF)) == (color == 0xFF0072B2));
+            }
+        }
+        // Another color darkens until it reads, keeping its hue: a pale pink stays reddish.
+        uint32_t pink = UsageTextColor(0xFFFFD0E0, true);
+        CHECK(pink != 0xFFD0E0 && contrast(pink) >= 4.5);
+        CHECK((pink >> 16 & 0xFF) > (pink & 0xFF) && (pink >> 16 & 0xFF) > (pink >> 8 & 0xFF));
+        CHECK(UsageTextColor(0xFF203060, true) == 0x203060);  // Navy: already dark enough
     });
 
     Run("tile palette per taskbar theme", [] {
@@ -1721,6 +1750,175 @@ static void RunAccountTests() {
         AccountData never = Fresh({10, -1, -1, -1});
         never.lastSuccessMs = 0;
         CHECK(AccountMeterState(Display(), BarLayout::Stacked, Account(), never, 0, 0).stale);
+    });
+
+    Run("poll intervals: Antigravity every minute, the others at the cloud interval; a hidden account at the "
+        "hidden interval, never more often than shown, or not at all", [] {
+        // The stored choices that aren't an interval, and the default: every hour.
+        CHECK(kHiddenPollNever == 0 && kHiddenPollAsShown == -1 && Settings().hiddenPollMinutes == 60);
+        AccountConfig cloud = Account(L"anthropic"), local = Account(L"antigravity");
+        // Shown: the hidden interval changes nothing.
+        for (int hidden : {60, 5, 1440, kHiddenPollNever, kHiddenPollAsShown}) {
+            CHECK(AccountPollMinutes(cloud, 10, hidden) == 10 && AccountPollMinutes(local, 10, hidden) == 1);
+        }
+        CHECK(AccountPollMinutes(Account(L"openai"), 30, 60) == 30 && AccountPollMinutes(Account(L"copilot"), 2, 60) == 2);
+        cloud.hidden = local.hidden = true;
+        CHECK(AccountPollMinutes(cloud, 10, 60) == 60 && AccountPollMinutes(local, 10, 60) == 60);
+        CHECK(AccountPollMinutes(cloud, 10, 1440) == 1440 && AccountPollMinutes(cloud, 60, 60) == 60);
+        // An interval shorter than the poll interval: the poll interval. Antigravity's minute is
+        // shorter than any.
+        CHECK(AccountPollMinutes(cloud, 10, 5) == 10 && AccountPollMinutes(cloud, 90, 60) == 90);
+        CHECK(AccountPollMinutes(local, 10, 5) == 5 && AccountPollMinutes(local, 90, 2) == 2);
+        CHECK(AccountPollMinutes(cloud, 10, kHiddenPollAsShown) == 10 && AccountPollMinutes(local, 10, kHiddenPollAsShown) == 1);
+        CHECK(AccountPollMinutes(cloud, 10, kHiddenPollNever) == 0 && AccountPollMinutes(local, 10, kHiddenPollNever) == 0);
+    });
+
+    Run("stale after two of an account's polls; a hidden account that isn't polled, after two of a shown one's", [] {
+        AccountConfig cloud = Account(L"anthropic"), local = Account(L"antigravity");
+        CHECK(AccountStaleAfterMs(cloud, 10, 60) == 20 * kMinute && AccountStaleAfterMs(local, 10, 60) == 2 * kMinute);
+        CHECK(AccountStaleAfterMs(cloud, 10, kHiddenPollNever) == 20 * kMinute);
+        cloud.hidden = local.hidden = true;
+        CHECK(AccountStaleAfterMs(cloud, 10, 60) == 120 * kMinute && AccountStaleAfterMs(local, 10, 60) == 120 * kMinute);
+        CHECK(AccountStaleAfterMs(cloud, 10, 5) == 20 * kMinute && AccountStaleAfterMs(local, 10, 5) == 10 * kMinute);
+        CHECK(AccountStaleAfterMs(cloud, 10, 1440) == 2880 * kMinute);
+        for (int choice : {kHiddenPollNever, kHiddenPollAsShown}) {
+            CHECK(AccountStaleAfterMs(cloud, 10, choice) == 20 * kMinute && AccountStaleAfterMs(local, 10, choice) == 2 * kMinute);
+        }
+    });
+
+    Run("stale rules: a hidden account by its own interval", [] {
+        auto stale = [](std::wstring provider, ULONGLONG age, int hiddenMinutes, int pollMinutes = 10) {
+            AccountData data = Fresh({10, -1, -1, -1});
+            data.lastSuccessMs = kNow - age;
+            AccountConfig account = Account(provider);
+            account.hidden = true;
+            MeterDisplay d = Display(With([&](Settings& s) {
+                s.pollMinutes = pollMinutes;
+                s.hiddenPollMinutes = hiddenMinutes;
+            }));
+            return AccountMeterState(d, BarLayout::Stacked, account, data, 0, 0).stale;
+        };
+        // Every hour, the default: after two hours, Antigravity too.
+        CHECK(!stale(L"anthropic", 120 * kMinute, 60) && stale(L"anthropic", 120 * kMinute + 1, 60));
+        CHECK(!stale(L"antigravity", 120 * kMinute, 60) && stale(L"antigravity", 120 * kMinute + 1, 60));
+        CHECK(!stale(L"openai", 8 * 60 * kMinute, 240) && stale(L"openai", 8 * 60 * kMinute + 1, 240));
+        // Shorter than the poll interval: polled as a shown one, stale as one.
+        CHECK(!stale(L"anthropic", 20 * kMinute, 5) && stale(L"anthropic", 20 * kMinute + 1, 5));
+        CHECK(!stale(L"anthropic", 60 * kMinute, 5, 30) && stale(L"anthropic", 60 * kMinute + 1, 5, 30));
+        CHECK(!stale(L"antigravity", 10 * kMinute, 5) && stale(L"antigravity", 10 * kMinute + 1, 5));
+        // As shown ones, or not polled: a shown one's two polls.
+        for (int choice : {kHiddenPollNever, kHiddenPollAsShown}) {
+            CHECK(!stale(L"anthropic", 20 * kMinute, choice) && stale(L"anthropic", 20 * kMinute + 1, choice));
+            CHECK(!stale(L"antigravity", 2 * kMinute, choice) && stale(L"antigravity", 2 * kMinute + 1, choice));
+        }
+        // The cloud interval reaches the model clamped, the hidden one as set.
+        CHECK(!stale(L"anthropic", 4 * kMinute, kHiddenPollNever, 0) && stale(L"anthropic", 4 * kMinute + 1, kHiddenPollNever, 0));
+    });
+
+    Run("usage summary: the weekly quota; Fable or Argon weekly while it is on the taskbar and the weekly isn't; "
+        "GitHub Copilot's extra usage slot", [] {
+        Settings s;
+        AccountData data = Fresh({11, 22, 33, 44});
+        auto summary = [&](std::wstring provider, std::array<bool, kQuotaBarCount> bars) {
+            return AccountUsageSummaryFor(s, Account(provider, L"A", bars), data, kNow);
+        };
+        AccountUsageSummary weekly = summary(L"anthropic", {true, true, true, true});
+        CHECK(weekly.bar == kWeeklyBar && weekly.pct == 22 && !weekly.stale);
+        CHECK(summary(L"anthropic", {true, true, false, false}).pct == 22);
+        // Neither on the taskbar: still the weekly.
+        AccountUsageSummary neither = summary(L"anthropic", {true, false, false, true});
+        CHECK(neither.bar == kWeeklyBar && neither.pct == 22);
+        AccountUsageSummary fable = summary(L"anthropic", {true, false, true, false});
+        CHECK(fable.bar == kFableWeeklyBar && fable.pct == 33 && !fable.stale);
+        AccountUsageSummary argon = summary(L"antigravity", {false, false, true, false});
+        CHECK(argon.bar == kFableWeeklyBar && argon.pct == 33);
+        // OpenAI's credits and OpenCode Go's month never stand for the account.
+        CHECK(summary(L"openai", {false, false, false, true}).pct == 22);
+        CHECK(summary(L"opencode", {true, false, false, true}).bar == kWeeklyBar);
+        // GitHub Copilot's only quota, whatever is selected.
+        for (std::array<bool, kQuotaBarCount> bars : {std::array{false, false, false, true}, std::array{true, true, true, false}}) {
+            AccountUsageSummary copilot = summary(L"copilot", bars);
+            CHECK(copilot.bar == kExtraUsageBar && copilot.pct == 44 && !copilot.stale);
+        }
+        // Past 100% as read; no reading, or one that isn't a number: none.
+        data.winWeek.pct = 112.5;
+        CHECK(summary(L"anthropic", {true, true, false, false}).pct == 112.5);
+        for (double none : {-1.0, std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()}) {
+            data.winWeek.pct = none;
+            AccountUsageSummary unread = summary(L"anthropic", {true, true, false, false});
+            CHECK(unread.pct < 0 && !unread.stale && unread.bar == kWeeklyBar);
+        }
+        // Fable's reading doesn't stand in for a weekly one that is missing.
+        CHECK(summary(L"anthropic", {true, true, true, false}).pct < 0);
+    });
+
+    Run("usage summary: stale after a failed poll or two of the account's polls; a reading counts until its "
+        "window resets", [] {
+        Settings s;
+        AccountConfig shown = Account(), hidden = Account();
+        hidden.hidden = true;
+        AccountData data = Fresh({-1, 22, 33, -1});
+        auto summary = [&](const AccountConfig& account, ULONGLONG now = kNow) {
+            return AccountUsageSummaryFor(s, account, data, now);
+        };
+        // By age: 20 minutes shown, two hours hidden (every hour); Antigravity two minutes.
+        data.lastSuccessMs = kNow - 20 * kMinute;
+        CHECK(!summary(shown).stale && summary(shown).pct == 22);
+        data.lastSuccessMs = kNow - 20 * kMinute - 1;
+        AccountUsageSummary old = summary(shown);
+        CHECK(old.stale && old.pct == 22 && !summary(hidden).stale);
+        data.lastSuccessMs = kNow - 120 * kMinute;
+        CHECK(!summary(hidden).stale);
+        data.lastSuccessMs = kNow - 120 * kMinute - 1;
+        CHECK(summary(hidden).stale && summary(hidden).pct == 22);
+        s.hiddenPollMinutes = kHiddenPollNever;
+        data.lastSuccessMs = kNow - 20 * kMinute;
+        CHECK(!summary(hidden).stale);
+        data.lastSuccessMs = kNow - 20 * kMinute - 1;
+        CHECK(summary(hidden).stale);
+        data.lastSuccessMs = kNow - 2 * kMinute - 1;
+        CHECK(summary(Account(L"antigravity")).stale && !summary(shown).stale);
+        // A failed poll, or no successful one yet.
+        data.lastSuccessMs = kNow;
+        data.stale = true;
+        CHECK(summary(shown).stale && summary(shown).pct == 22);
+        data.stale = false;
+        data.lastSuccessMs = 0;
+        CHECK(summary(shown).stale);
+
+        // The weekly window resets an hour from now: its reading counts up to then, whether its
+        // poll failed or not.
+        data.lastSuccessMs = kNow;
+        data.winWeek.resetUnixMs = kNow + 60 * kMinute;
+        for (bool failed : {false, true}) {
+            data.stale = failed;
+            CHECK(summary(shown).pct == 22 && summary(shown, kNow + 60 * kMinute - 1).pct == 22);
+            AccountUsageSummary reset = summary(shown, kNow + 60 * kMinute);
+            CHECK(reset.pct < 0 && reset.stale && reset.bar == kWeeklyBar);
+            CHECK(summary(shown, kNow + 61 * kMinute).pct < 0);
+        }
+        // Fresh too: read two minutes ago, with a reset a minute ago.
+        data.stale = false;
+        data.lastSuccessMs = kNow - 2 * kMinute;
+        data.winWeek.resetUnixMs = kNow - kMinute;
+        AccountUsageSummary fresh = summary(shown);
+        CHECK(fresh.pct < 0 && !fresh.stale);
+        data.winWeek.resetUnixMs = kNow + 60 * kMinute;
+        // Each quota by its own window: Fable's reset passed, the weekly's not.
+        AccountConfig fable = Account(L"anthropic", L"A", {true, false, true, false});
+        data.fableWeek.resetUnixMs = kNow - kMinute;
+        CHECK(summary(fable).pct < 0 && summary(shown).pct == 22);
+        data.fableWeek.resetUnixMs = 0;  // No known reset: it counts
+        CHECK(summary(fable).pct == 33);
+        // A reset the reading was taken at or after says nothing against it.
+        data.fableWeek.resetUnixMs = kNow - 3 * kMinute;
+        CHECK(summary(fable).pct == 33);
+        data.fableWeek.resetUnixMs = kNow - 2 * kMinute;
+        CHECK(summary(fable).pct == 33);
+        // GitHub Copilot's month likewise.
+        AccountConfig copilot = Account(L"copilot", L"C", {false, false, false, true});
+        data.extraUsage = {44, kNow + 60 * kMinute, 0};
+        CHECK(summary(copilot).pct == 44 && summary(copilot, kNow + 60 * kMinute).pct < 0);
     });
 
     Run("warning mark, label and identity dimming", [] {

@@ -18,7 +18,8 @@ enum class SettingsField : uint8_t {
     ShowOn,  // Monitor mode and number: 0 primary, -1 all, N display N
     ShowDetailsOnHover,
     PollMinutes,
-    SkipHiddenPolling,
+    HiddenPolling,      // Hidden accounts' polls: an interval in minutes, kHiddenPollNever or kHiddenPollAsShown
+    HiddenPollMinutes,  // Their interval's custom minutes
     Notifications,  // A NotificationLevel
     Language,       // This Windows user's language: 0 Automatic, else a language (kSettingsPseudoLanguage)
     // History
@@ -137,7 +138,8 @@ struct SettingsNumberRange {
 
 static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field) {
     switch (field) {
-        case SettingsField::PollMinutes: return SettingsNumberRange{2, 24 * 60};
+        case SettingsField::PollMinutes:
+        case SettingsField::HiddenPollMinutes: return SettingsNumberRange{2, 24 * 60};
         case SettingsField::RetentionDays: return SettingsNumberRange{1, 3650};
         case SettingsField::BarLength: return SettingsNumberRange{10, 500};
         case SettingsField::VerticalBarLength: return SettingsNumberRange{kVerticalBarLengthMin, kVerticalBarLengthMax};
@@ -176,8 +178,9 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
 static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
     switch (group) {
         case SettingsField::ResetBehavior:
-            return {SettingsField::ShowOn, SettingsField::ShowDetailsOnHover, SettingsField::PollMinutes,
-                    SettingsField::SkipHiddenPolling, SettingsField::Notifications, SettingsField::Language};
+            return {SettingsField::ShowOn,        SettingsField::ShowDetailsOnHover, SettingsField::PollMinutes,
+                    SettingsField::HiddenPolling, SettingsField::HiddenPollMinutes,  SettingsField::Notifications,
+                    SettingsField::Language};
         case SettingsField::ResetHistory:
             return {SettingsField::RecordHistory, SettingsField::KeepHistory, SettingsField::RetentionDays,
                     SettingsField::HistoryRange};
@@ -228,7 +231,9 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
                                                                          s.taskbarMonitorNumber;
         case SettingsField::ShowDetailsOnHover: return s.showDetailsOnHover;
         case SettingsField::PollMinutes: return s.pollMinutes;
-        case SettingsField::SkipHiddenPolling: return s.skipHiddenPolling;
+        case SettingsField::HiddenPolling: return s.hiddenPollMinutes;
+        case SettingsField::HiddenPollMinutes:
+            return s.hiddenPollMinutes > 0 ? s.hiddenPollMinutes : Settings().hiddenPollMinutes;
         case SettingsField::Notifications: return int(s.notificationLevel);
         case SettingsField::Language:
             for (size_t i = 0; i < std::size(kI18nLanguages); i++) {
@@ -320,7 +325,11 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             break;
         case SettingsField::ShowDetailsOnHover: s.showDetailsOnHover = value != 0; break;
         case SettingsField::PollMinutes: s.pollMinutes = value; break;
-        case SettingsField::SkipHiddenPolling: s.skipHiddenPolling = value != 0; break;
+        case SettingsField::HiddenPolling:
+            s.hiddenPollMinutes = value < 0 ? kHiddenPollAsShown :
+                                  value > 0 ? std::clamp(value, 2, 24 * 60) : kHiddenPollNever;
+            break;
+        case SettingsField::HiddenPollMinutes: s.hiddenPollMinutes = value; break;
         case SettingsField::Notifications:
             s.notificationLevel = NotificationLevel(std::clamp(value, int(NotificationLevel::Off),
                                                                int(NotificationLevel::Red)));
@@ -503,7 +512,7 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.taskbarMonitorNumber = defaults.taskbarMonitorNumber;
             s.showDetailsOnHover = defaults.showDetailsOnHover;
             s.pollMinutes = defaults.pollMinutes;
-            s.skipHiddenPolling = defaults.skipHiddenPolling;
+            s.hiddenPollMinutes = defaults.hiddenPollMinutes;
             s.notificationLevel = defaults.notificationLevel;
             s.language = defaults.language;
             break;
@@ -644,6 +653,8 @@ struct SettingsAccountStatus {
     bool signedIn = false;     // A sign-in is stored (all but Antigravity)
     bool needsSignIn = false;  // The last poll asked for one
     bool signingIn = false;    // Its sign-in window is open
+    AccountUsageSummary usage; // Its usage at a glance, as of the load
+    std::wstring usageTime;    // When that was read, in local time; empty without a reading
 };
 
 struct SettingsStatus {
@@ -1288,11 +1299,15 @@ struct SettingsEdits {
 
 private:
     // The draft of a user action, created from the projection; a new revision clears any error.
-    // Keep history and its custom days set the same retention: either one's edit drops the
-    // other's draft and requests.
+    // Keep history and its custom days set the same retention, the hidden accounts' choice and
+    // its custom minutes the same interval: either one's edit drops the other's draft and
+    // requests.
     SettingsDraft& Touch(uint64_t key, SettingsField field) {
-        if (!key && (field == SettingsField::KeepHistory || field == SettingsField::RetentionDays)) {
-            Revert(0, field == SettingsField::KeepHistory ? SettingsField::RetentionDays : SettingsField::KeepHistory);
+        static constexpr std::pair<SettingsField, SettingsField> kPairs[] = {
+            {SettingsField::KeepHistory, SettingsField::RetentionDays},
+            {SettingsField::HiddenPolling, SettingsField::HiddenPollMinutes}};
+        for (auto [choice, custom] : kPairs) {
+            if (!key && (field == choice || field == custom)) Revert(0, field == choice ? custom : choice);
         }
         SettingsDraft* draft = Find(key, field);
         if (!draft) {

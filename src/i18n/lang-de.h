@@ -102,6 +102,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Diagramme, Statistiken und CSV-Export aus lokalen Messwerten, auch wenn die Aufzeichnung aus ist."},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"Wählen Sie „Benutzerdefiniert“ unter „Cloud-Abfrageintervall“, um dies zu bearbeiten."},
+    {L"", L"Choose Custom in Hidden accounts to edit.",
+     L"Wählen Sie „Benutzerdefiniert“ unter „Ausgeblendete Konten“, um dies zu bearbeiten."},
     {L"", L"Choose Custom in Keep history to edit.",
      L"Wählen Sie „Benutzerdefiniert“ unter „Verlauf aufbewahren“, um dies zu bearbeiten."},
     {L"", L"Choose an identity position to change this.", L"Wählen Sie eine Identitätsposition, um dies zu ändern."},
@@ -132,6 +134,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"hinzu und entfernen Sie es dann."},
     {L"", L"Could not update account visibility.", L"Die Sichtbarkeit des Kontos konnte nicht aktualisiert werden."},
     {L"", L"Credits max", L"Credits-Maximum"},
+    {L"", L"Custom hidden interval", L"Benutzerdefiniertes Intervall (ausgeblendete Konten)"},
     {L"", L"Custom interval", L"Benutzerdefiniertes Intervall"},
     {L"", L"Custom retention", L"Benutzerdefinierte Aufbewahrung"},
     {L"", L"Default time span", L"Standardzeitraum"},
@@ -168,17 +171,19 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"Update Windows to show them.",
      L"Die Taskleiste von Bildschirm {number} befindet sich an einem seitlichen Bildschirmrand: Ihr Infobereich "
      L"nimmt in diesem Windows-Build keine Balken auf. Aktualisieren Sie Windows, um sie anzuzeigen."},
-    {L"", L"Do not poll hidden accounts", L"Ausgeblendete Konten nicht abfragen"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
      L"Zum Neuordnen ziehen. Der Schalter blendet ein Konto in der Taskleiste aus."},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
      L"Zum Neuordnen ziehen. Der Schalter blendet ein Konto in der Taskleiste aus; ausgeblendete Konten werden nicht "
      L"abgefragt."},
-    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
-          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are polled less often.",
+     L"Zum Neuordnen ziehen. Der Schalter blendet ein Konto in der Taskleiste aus; ausgeblendete Konten werden "
+     L"seltener abgefragt."},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. A hidden "
+          L"account records when it is polled: <link id=\"hidden\">Behavior</link> > Hidden accounts.",
      L"Jedes Konto legt selbst fest, ob es aufzeichnet: <link id=\"accounts\">Konten</link> > Verlauf aufzeichnen. "
-     L"Ausgeblendete Konten werden nicht aufgezeichnet, solange <link id=\"hidden\">Ausgeblendete Konten nicht "
-     L"abfragen</link> unter Verhalten aktiviert ist."},
+     L"Ein ausgeblendetes Konto zeichnet auf, wenn es abgefragt wird: <link id=\"hidden\">Verhalten</link> > "
+     L"Ausgeblendete Konten."},
     {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
           L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
           L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
@@ -226,10 +231,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Gauge thickness", L"Stärke der Bogenanzeige"},
     {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
      L"Höhe in Pixeln; ein Kreisdiagramm pro Kontingent, ab dem dritten kleiner."},
-    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
-          L"them. Shared across Windows users.",
-     L"Ausgeblendete Konten werden weder abgefragt noch aufgezeichnet, auch wenn „Verlauf aufzeichnen“ aktiviert ist. "
-     L"Schalten Sie dies aus, um sie weiter aufzuzeichnen. Gilt für alle Windows-Benutzer."},
+    {L"", L"Hidden accounts", L"Ausgeblendete Konten"},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
      L"Der Verlauf folgt diesem Eintrag, auch nach einer erneuten Anmeldung. Verwenden Sie für ein anderes "
      L"Anbieterkonto einen neuen Eintrag."},
@@ -242,6 +244,10 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"session every minute.",
      L"Wie oft Anthropic, OpenAI, GitHub Copilot und OpenCode Go abgefragt werden. Antigravity fragt seine lokale "
      L"Sitzung jede Minute ab."},
+    {L"", L"How often accounts hidden from the taskbar are polled, for Accounts and usage history: never more often "
+          L"than visible ones. Shared across Windows users.",
+     L"Wie oft in der Taskleiste ausgeblendete Konten abgefragt werden, für „Konten“ und den Nutzungsverlauf: nie "
+     L"öfter als sichtbare. Gilt für alle Windows-Benutzer."},
     {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
           L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
      L"Wie die Detailansicht die Zusatznutzung von Anthropic darstellt: über ihren Monat, über das Zeitfenster des "
@@ -412,9 +418,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Report an issue", L"Problem melden"},
     {L"", L"Reset Behavior to defaults", L"Verhalten auf Standard zurücksetzen"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
-          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
-     L"Verhalten auf die Standardwerte zurücksetzen?\n\nAutomatische Sprache, nur auf dem Hauptbildschirm anzeigen, "
-     L"Details beim Daraufzeigen anzeigen, alle 10 Minuten abfragen, ausgeblendete Konten nicht abfragen, "
+          L"hover, poll every 10 minutes, hidden accounts every hour, threshold notifications at red.",
+     L"Verhalten auf die Standardwerte zurücksetzen?\n\nAutomatische Sprache, nur auf dem Hauptbildschirm "
+     L"anzeigen, Details beim Daraufzeigen anzeigen, alle 10 Minuten abfragen, ausgeblendete Konten stündlich, "
      L"Schwellenwert-Benachrichtigungen bei Rot."},
     {L"", L"Reset Display to defaults", L"Darstellung auf Standard zurücksetzen"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
@@ -775,6 +781,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"account-state", L"Signed in", L"Angemeldet"},
     {L"account-state", L"Signing in…", L"Anmeldung läuft…"},
     {L"account-state", L"Waiting for the local app", L"Warten auf die lokale App"},
+    {L"account-state", L"{hours, plural, one{Hidden, polled every hour} other{Hidden, polled every # hours}}",
+     L"{hours, plural, one{Ausgeblendet, stündlich abgefragt} other{Ausgeblendet, alle # Stunden abgefragt}}"},
+    {L"account-state", L"{minutes, plural, one{Hidden, polled every minute} other{Hidden, polled every # minutes}}",
+     L"{minutes, plural, one{Ausgeblendet, jede Minute abgefragt} other{Ausgeblendet, alle # Minuten abgefragt}}"},
+    {L"account-usage", L"{quota}: {percent} left, read {time}", L"{quota}: {percent} übrig, Stand {time}"},
+    {L"account-usage", L"{quota}: {percent} used, read {time}", L"{quota}: {percent} verbraucht, Stand {time}"},
     {L"add-account", L"Sign in with a code on github.com", L"Anmeldung mit einem Code auf github.com"},
     {L"add-account", L"Sign in with an API key from the OpenCode console",
      L"Anmeldung mit einem API-Schlüssel aus der OpenCode-Konsole"},
@@ -916,6 +928,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"{count, plural, one{# Wochen-Reset verfügbar} other{# Wochen-Resets verfügbar}}"},
     {L"free-resets", L"{resets} · expires {when}", L"{resets} · läuft {when} ab"},
     {L"free-resets", L"{resets} · next expires {when}", L"{resets} · nächster läuft {when} ab"},
+    {L"hidden-polling", L"Not polled", L"Nicht abgefragt"},
+    {L"hidden-polling", L"Same as visible accounts", L"Wie sichtbare Konten"},
     {L"history-about", L"Axes and units", L"Achsen und Einheiten"},
     {L"history-about", L"Cards", L"Karten"},
     {L"history-about", L"Legend and readout", L"Legende und Werteanzeige"},
@@ -1087,6 +1101,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"placement", L"Right of Start", L"Rechts von Start"},
     {L"plan", L"Visual test", L"Visueller Test"},
     {L"poll-interval", L"Custom", L"Benutzerdefiniert"},
+    {L"poll-interval", L"{hours, plural, one{# hour} other{# hours}}",
+     L"{hours, plural, one{# Stunde} other{# Stunden}}"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# Minute} other{# Minuten}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",

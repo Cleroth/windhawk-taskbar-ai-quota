@@ -24,7 +24,9 @@ struct SettingsView {
     uint64_t dragKey = 0;               // The account card being dragged, drawn lifted at dragTop
     float dragTop = 0;                  // Content DIPs
     bool pollCustom = false;            // Custom chosen in Cloud poll interval
+    bool hiddenPollCustom = false;      // Custom chosen in Hidden accounts
     bool retentionCustom = false;       // Custom chosen in Keep history
+    UiThemeKind theme = UiThemeKind::Dark;  // The window's: usage colors as text follow it
     bool transparencyEffects = true;    // Windows' transparency effects setting; the window fills it
     float scale = 1;                    // Window DPI / 96: the preview's device pixels
     float previewScroll = 0;            // The preview strip's scroll right of its home, DIPs

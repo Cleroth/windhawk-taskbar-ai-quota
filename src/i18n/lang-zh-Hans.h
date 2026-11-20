@@ -75,6 +75,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"基于本地样本的图表、统计和 CSV 导出，记录关闭时也可使用。"},
     {L"", L"Choose Custom in Cloud poll interval to edit.", L"在“云端轮询间隔”中选择“自定义”后即可编辑。"},
+    {L"", L"Choose Custom in Hidden accounts to edit.", L"在“隐藏的账户”中选择“自定义”后即可编辑。"},
     {L"", L"Choose Custom in Keep history to edit.", L"在“保留历史”中选择“自定义”后即可编辑。"},
     {L"", L"Choose an identity position to change this.", L"选择一个标识位置后即可更改。"},
     {L"", L"Claude logo", L"Claude 徽标"},
@@ -98,6 +99,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"无法保存账户。复制的登录信息仍保留在尝试使用的新标识下。要删除它，请添加一个使用所尝试的提供商和标签的账户，然后将其移除。"},
     {L"", L"Could not update account visibility.", L"无法更新账户的可见性。"},
     {L"", L"Credits max", L"积分上限"},
+    {L"", L"Custom hidden interval", L"隐藏账户的自定义间隔"},
     {L"", L"Custom interval", L"自定义间隔"},
     {L"", L"Custom retention", L"自定义保留期"},
     {L"", L"Default time span", L"默认时间范围"},
@@ -124,14 +126,14 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Display {number}’s taskbar is on a side of the screen: its tray takes no bars on this Windows build. "
           L"Update Windows to show them.",
      L"显示器 {number} 的任务栏位于屏幕侧边：在此 Windows 内部版本上，其系统托盘无法放置条形。请更新 Windows 以显示条形。"},
-    {L"", L"Do not poll hidden accounts", L"不轮询隐藏的账户"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.", L"拖动可重新排序。开关可在任务栏上隐藏账户。"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
      L"拖动可重新排序。开关可在任务栏上隐藏账户；隐藏的账户不会被轮询。"},
-    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
-          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
-     L"每个账户可单独选择是否记录：<link id=\"accounts\">账户</link> > 记录历史。在“行为”中开启<link "
-     L"id=\"hidden\">不轮询隐藏的账户</link>时，隐藏的账户不会被记录。"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are polled less often.",
+     L"拖动可重新排序。开关可在任务栏上隐藏账户；隐藏的账户轮询频率较低。"},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. A hidden "
+          L"account records when it is polled: <link id=\"hidden\">Behavior</link> > Hidden accounts.",
+     L"每个账户可单独选择是否记录：<link id=\"accounts\">账户</link> > 记录历史。隐藏的账户在被轮询时才会记录：<link id=\"hidden\">行为</link> > 隐藏的账户。"},
     {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
           L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
           L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
@@ -168,9 +170,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Gauge size", L"仪表大小"},
     {L"", L"Gauge thickness", L"仪表粗细"},
     {L"", L"Height in pixels; one pie per quota, smaller from the third on.", L"高度（像素）；每个配额一个饼图，从第三个起变小。"},
-    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
-          L"them. Shared across Windows users.",
-     L"即使开启了“记录历史”，隐藏的账户也不会被轮询或记录。关闭此项可继续记录它们。所有 Windows 用户共享此设置。"},
+    {L"", L"Hidden accounts", L"隐藏的账户"},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
      L"历史会跟随此条目，即使重新登录也是如此。其他登录请使用新条目。"},
     {L"", L"History recording is off. Saved history stays; nothing new is recorded.", L"历史记录功能已关闭。已保存的历史会保留；不会记录新数据。"},
@@ -178,6 +178,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"轮询 Anthropic、OpenAI、GitHub Copilot 和 OpenCode Go 的频率。Antigravity 每分钟轮询其本地会话。"},
+    {L"", L"How often accounts hidden from the taskbar are polled, for Accounts and usage history: never more often "
+          L"than visible ones. Shared across Windows users.",
+     L"为“账户”页和使用历史轮询任务栏上已隐藏账户的频率：不会比可见账户更频繁。所有 Windows 用户共享此设置。"},
     {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
           L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
      L"详情浮窗显示 Anthropic 额外用量的方式：按其所在月份绘制图表、按每周配额的时段以相同刻度绘制图表，或显示为条形。“用量图表”磁贴中额外用量有单独图表时，也遵循此设置。"},
@@ -307,9 +310,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Report an issue", L"报告问题"},
     {L"", L"Reset Behavior to defaults", L"将“行为”重置为默认值"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
-          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
-     L"要将“行为”重置为默认值吗？\n\n自动选择语言、仅在主显示器上显示、悬停时显示详情、每 10 "
-     L"分钟轮询一次、不轮询隐藏的账户、在红色阈值时通知。"},
+          L"hover, poll every 10 minutes, hidden accounts every hour, threshold notifications at red.",
+     L"要将“行为”重置为默认值吗？\n\n自动选择语言、仅在主显示器上显示、悬停时显示详情、每 10 分钟轮询一次、隐藏的账户每小时轮询一次、在红色阈值时通知。"},
     {L"", L"Reset Display to defaults", L"将“显示”重置为默认值"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
           L"reset too) with yellow from 50%, orange from 75% and red from 90%, stale data marked, additional OpenAI "
@@ -573,6 +575,12 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"account-state", L"Signed in", L"已登录"},
     {L"account-state", L"Signing in…", L"正在登录…"},
     {L"account-state", L"Waiting for the local app", L"正在等待本地应用"},
+    {L"account-state", L"{hours, plural, one{Hidden, polled every hour} other{Hidden, polled every # hours}}",
+     L"{hours, plural, other{已隐藏，每 # 小时轮询}}"},
+    {L"account-state", L"{minutes, plural, one{Hidden, polled every minute} other{Hidden, polled every # minutes}}",
+     L"{minutes, plural, other{已隐藏，每 # 分钟轮询}}"},
+    {L"account-usage", L"{quota}: {percent} left, read {time}", L"{quota}：剩余 {percent}，读取于 {time}"},
+    {L"account-usage", L"{quota}: {percent} used, read {time}", L"{quota}：已用 {percent}，读取于 {time}"},
     {L"add-account", L"Sign in with a code on github.com", L"在 github.com 上使用代码登录"},
     {L"add-account", L"Sign in with an API key from the OpenCode console", L"使用 OpenCode 控制台中的 API 密钥登录"},
     {L"add-account", L"Sign in with your browser", L"通过浏览器登录"},
@@ -706,6 +714,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"{count, plural, other{可用每周重置 # 次}}"},
     {L"free-resets", L"{resets} · expires {when}", L"{resets} · 过期：{when}"},
     {L"free-resets", L"{resets} · next expires {when}", L"{resets} · 下一次过期：{when}"},
+    {L"hidden-polling", L"Not polled", L"不轮询"},
+    {L"hidden-polling", L"Same as visible accounts", L"与可见账户相同"},
     {L"history-about", L"Axes and units", L"坐标轴和单位"},
     {L"history-about", L"Cards", L"卡片"},
     {L"history-about", L"Legend and readout", L"图例和读数"},
@@ -868,6 +878,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"placement", L"Right of Start", L"“开始”右侧"},
     {L"plan", L"Visual test", L"视觉测试"},
     {L"poll-interval", L"Custom", L"自定义"},
+    {L"poll-interval", L"{hours, plural, one{# hour} other{# hours}}", L"{hours, plural, other{# 小时}}"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}", L"{minutes, plural, other{# 分钟}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}", L"{minutes, plural, other{分钟}}"},
     {L"preview", L"Preview", L"预览"},

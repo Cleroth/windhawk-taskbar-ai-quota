@@ -57,11 +57,14 @@ static std::vector<HistoryLayoutCase> HistoryLayoutCases() {
     cases.push_back({"all-meters", chart(TestMockupWeek(), [](HistoryController& c) {
                          c.Command(HistoryUiCommand::View, int(HistoryView::AllMeters));
                      })});
-    // One account: OAI's credits with its recording off; CC 1 paused (hidden); CC 2 in All
-    // meters; CC 2 removed with Delete history.
+    // One account: OAI's credits with its recording off; CC 1 paused (hidden, while hidden
+    // accounts aren't polled); CC 2 in All meters; CC 2 removed with Delete history.
     cases.push_back({"account-oai", reloaded([](TestChartWindow& w) { w.ops.settings.settings.accounts[0].recordHistory = false; },
                                              TestMockupWeek(), select(0x0A, HistoryView::ExtraUsage))});
-    cases.push_back({"account-paused", reloaded([](TestChartWindow& w) { w.ops.settings.settings.accounts[1].hidden = true; },
+    cases.push_back({"account-paused", reloaded([](TestChartWindow& w) {
+                                                    w.ops.settings.settings.hiddenPollMinutes = kHiddenPollNever;
+                                                    w.ops.settings.settings.accounts[1].hidden = true;
+                                                },
                                                 TestMockupWeek(), select(0xC1, HistoryView::ExtraUsage))});
     cases.push_back({"account-all-meters", chart(TestMockupWeek(), select(0xC2, HistoryView::AllMeters))});
     {
@@ -139,6 +142,7 @@ static std::vector<HistoryLayoutCase> HistoryLayoutCases() {
         std::erase_if(some, [](const HistorySample& s) { return s.accountId == 0xC1 || s.accountId == 0x60; });
         cases.push_back({"partial", reloaded([](TestChartWindow& w) {
                              w.ops.settings.settings.accounts[1].recordHistory = false;
+                             w.ops.settings.settings.hiddenPollMinutes = kHiddenPollNever;
                              w.ops.settings.settings.accounts[3].hidden = true;
                          }, some)});
     }
@@ -385,6 +389,17 @@ static void RunHistoryLayoutTests() {
         CHECK(research && research->text == L"Research \u2014 shared Max seat" &&
               UiRunsText(research->tooltip) == research->text);
         CHECK(UiFindItem(frame, kHistoryUiNavAccount + 10)->tooltip.empty() && UiFindItem(frame, kHistoryUiNavAll)->tooltip.empty());
+    });
+
+    Run("history layout cases: the hidden account's cases show its recording paused", [] {
+        int paused = 0;
+        for (const HistoryLayoutCase& entry : HistoryLayoutCases()) {
+            if (entry.name != "account-paused" && entry.name != "partial") continue;
+            std::shared_ptr<TestChartWindow> w = HistoryLayoutWindow(entry, "en");
+            const std::vector<HistoryUiViewAccount>& accounts = w->controller.view.accounts;
+            paused += std::any_of(accounts.begin(), accounts.end(), [](const HistoryUiViewAccount& a) { return a.paused; });
+        }
+        CHECK(paused == 2);
     });
 
     Run("localized layout: every history state fits in every language at the default and minimum size, "

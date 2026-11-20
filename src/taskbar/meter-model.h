@@ -283,6 +283,25 @@ static uint32_t UsageHighlight(uint32_t argb, double lift = 0.06) {
     return (argb & 0xFF000000) | encode(rgb[0]) << 16 | encode(rgb[1]) << 8 | encode(rgb[2]);
 }
 
+// A usage color as text on a window's surface (0xRRGGBB): itself on a dark one; on a light one,
+// the darker variants of the default and colorblind usage colors, and another color darkened in
+// OKLCH until it reads at 4.5:1 on white.
+static uint32_t UsageTextColor(uint32_t usage, bool light) {
+    static constexpr uint32_t kLightInks[][2] = {
+        {0xE53935, 0xC42B1C}, {0xFB8C00, 0xB35C00}, {0xFDD835, 0x876A00}, {0x43A047, 0x1D7A35},
+        {0xD55E00, 0xB75100}, {0xE69F00, 0x946700}, {0x56B4E9, 0x387597},
+    };
+    uint32_t rgb = usage & 0xFFFFFF;
+    if (!light) return rgb;
+    for (const auto& ink : kLightInks) {
+        if (ink[0] == rgb) return ink[1];
+    }
+    for (double lift = -0.02; 1.05 / (RelativeLuminance(rgb) + 0.05) < 4.5; lift -= 0.02) {
+        rgb = UsageHighlight(usage, lift) & 0xFFFFFF;
+    }
+    return rgb;
+}
+
 // Bar layouts' unfilled track, or their thin rail.
 static constexpr uint32_t kBarTrackColor = 0x46808080;
 static constexpr uint32_t kBarRailColor = 0x66808080;
@@ -623,6 +642,7 @@ struct MeterDisplay {
     int orangeThreshold;
     int redThreshold;
     int pollMinutes;          // 2-1440.
+    int hiddenPollMinutes;    // Settings::hiddenPollMinutes, as set.
     std::array<uint32_t, 4> usageColors;  // UsagePaletteColors of the chosen palette.
     bool showPaceTicks;
     PaceTickStyle paceTickStyle;
@@ -707,6 +727,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& 
         .orangeThreshold = orange,
         .redThreshold = std::clamp(settings.redThreshold, orange, 100),
         .pollMinutes = std::clamp(settings.pollMinutes, 2, 24 * 60),
+        .hiddenPollMinutes = settings.hiddenPollMinutes,
         .usageColors = UsagePaletteColors(settings.usagePalette, settings.customUsageColors),
         .showPaceTicks = settings.showPaceTicks,
         .paceTickStyle = settings.paceTickStyle,
@@ -1394,11 +1415,10 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     int orange = display.orangeThreshold;
     int red = display.redThreshold;
 
-    // Account state. Stale after two missed polls; Antigravity after two minutes.
-    ULONGLONG staleAfterMs = (account.provider == L"antigravity" ? 1ULL :
-                              (ULONGLONG)display.pollMinutes) * 2 * 60000;
+    // Account state. Stale after two missed polls.
     meters.stale = data.stale || data.lastSuccessMs == 0 ||
-                   display.now - data.lastSuccessMs > staleAfterMs;
+                   display.now - data.lastSuccessMs >
+                       AccountStaleAfterMs(account, display.pollMinutes, display.hiddenPollMinutes);
     meters.warn = display.showStaleWarning && meters.stale && bool(data.error);
     // An outage explains the staleness: its mark takes the stale mark's place.
     if (outage != OutageLevel::None) {

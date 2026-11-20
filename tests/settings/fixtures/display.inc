@@ -145,14 +145,15 @@ static void RunDisplayPageTests() {
             CHECK(SettingsFieldValue(changed, field) != SettingsFieldValue(defaults, field));
         }
 
-        // All 70 scalar settings changed: the four page resets restore every one, and no field
-        // belongs to two groups (Show on holds the monitor mode and number; Keep history and its
-        // custom days both set the retention).
+        // Every scalar setting changed: the four page resets' 71 fields restore every one, and no
+        // field belongs to two groups (Show on holds the monitor mode and number; Keep history and
+        // its custom days both set the retention, Hidden accounts and its custom minutes the hidden
+        // accounts' interval).
         Settings every = changed;
         every.taskbarMonitorMode = TaskbarMonitorMode::Specific;
         every.taskbarMonitorNumber = 2;
         every.showDetailsOnHover = false;
-        every.skipHiddenPolling = false;
+        every.hiddenPollMinutes = 240;
         every.notificationLevel = NotificationLevel::Off;
         every.language = L"de";
         every.historyEnabled = false;
@@ -211,7 +212,7 @@ static void RunDisplayPageTests() {
         fresh.accounts = every.accounts;
         CHECK(restored == fresh);
         std::sort(seen.begin(), seen.end());
-        CHECK(seen.size() == 70 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+        CHECK(seen.size() == 71 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     });
 
     Run("projection: thresholds stay ordered while typing; out-of-range and bad text", [] {

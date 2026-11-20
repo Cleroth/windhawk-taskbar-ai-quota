@@ -20,6 +20,7 @@ struct SettingsProductionStore final : SettingsStore {
         // Each account's last poll (published in account order) and its sign-in: stored (only
         // its presence is read) and whether its sign-in window is open. OpenAI's Spark plan name
         // shows only with its extra limits, as in the details flyout.
+        const ULONGLONG now = NowUnixMs();
         bool signingIn = g_loginInProgress.load();
         uint64_t signingInIdentity = g_loginAccountIdentity.load();
         status.signInRunning = signingIn;
@@ -32,6 +33,10 @@ struct SettingsProductionStore final : SettingsStore {
                 accountStatus.error = data[i].error;
                 accountStatus.polled = data[i].lastSuccessMs != 0;
                 accountStatus.needsSignIn = data[i].needsLogin;
+                accountStatus.usage = AccountUsageSummaryFor(baseline.settings, account, data[i], now);
+                if (accountStatus.usage.pct >= 0) {
+                    accountStatus.usageTime = FormatReadingTime(data[i].lastSuccessMs, now);
+                }
             }
             if (account.provider == L"openai" && !baseline.settings.showOpenAiExtraLimits &&
                 (accountStatus.plan.find(L"Spark") != std::wstring::npos ||  // i18n-en

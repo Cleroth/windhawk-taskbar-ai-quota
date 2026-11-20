@@ -27,11 +27,13 @@ to `<target>.cpp` with a `.manifest.json`.
 - `i18n.inc`: the localization engine on test-only catalogs: grammar, escapes, limits, plural
   categories per language, every fallback case, reordered links, argument kinds, list patterns,
   the registry, Automatic matching, the pseudo-locale, lookup with and without context.
-- `meter.inc`, `logos.inc`: the meter model (bars, tiles, account state, headline countdown,
-  identity, sparklines and their history requests, projections, matrix cells) and logo paths.
+- `meter.inc`, `logos.inc`: the meter model (usage colors, also as text; bars, tiles, account
+  state, headline countdown, identity, sparklines and their history requests, projections, matrix
+  cells), `core/model.h`'s account helpers (poll intervals, staleness, the usage summary) and logo
+  paths.
 - `ui.inc`: toolkit SVG paths, layout cache trims, palette, input, focus, hit testing, scroll,
-  controls, popup rows, placement and keys, the settings shell and pages (the About page's links
-  and focus stops).
+  controls, the meter (decoration only, its paint), popup rows, placement and keys, the settings
+  shell and pages (the About page's links and focus stops).
 - `controls.inc`: the controls the history window builds on (segments, ellipsis, dropdowns, the
   navigation pane, leading switch, pills, info bars).
 - `tooltip-support.inc`, `tooltip.inc`: readout layout search, pointer-excluding placement in
@@ -39,10 +41,13 @@ to `<target>.cpp` with a `.manifest.json`.
   and keys.
 - `edits.inc`: the edit controller against `TestStore` (in-memory, with an operation log,
   deterministic save failures, saves blocked from replacing unreadable stored settings until
-  confirmed, and unload after N transactions), number parsing, the render projection.
+  confirmed, and unload after N transactions), number parsing, the render projection, the paired
+  fields (Keep history and Hidden accounts with their custom numbers), the Behavior and History
+  pages.
 - `accounts.inc`: account edits and actions against `TestStore` (labels, drafts, removal with its
   sign-in and history deletion, Add account, sign-in after naming, visibility, moves) and the
-  Accounts page (cards, expanded rows, empty state, drag and reorder).
+  Accounts page (cards, each card's usage with its meter and tooltip, hidden accounts' states, the
+  header's note, expanded rows, empty state, drag and reorder).
 - `layout.inc`: sliders, Layout fields and reset group, the preview strip model
   (`settings/preview.h`: every tile style, identity form and position, pace marks, sparklines,
   the mock taskbar and every Position), the Layout page per tile style.
@@ -62,8 +67,9 @@ to `<target>.cpp` with a `.manifest.json`.
   control, text cut without a tooltip holding it whole where the pointer hits, wrapped text taller
   than its slot or breaking a word, items over each other or out of their card, popup rows.
 - `i18n-layout.inc`: every settings page and state in every language and the pseudo-locale at the
-  default and minimum size through the audit, then measured layout cases; its cases are also the
-  localization review renders'.
+  default and minimum size through the audit (Accounts with readings and hidden accounts at each
+  polling choice), then measured layout cases; its cases are also the localization review
+  renders'.
 - `signin-layout.inc`: the sign-in layout from widths and lines the sign-in probe measured
   (English's fixed geometry at 96 to 192 DPI, languages widening it, reserves).
 - `render-support.inc`, `render.inc`, `render-controls.inc`: renders (below).
@@ -110,8 +116,10 @@ with the production painters: PNGs for review, no pixel goldens. Names:
 
 - `render-<page|sheet>-<theme>-<dpi>`: the settings client area (1000 x 820 DIP, the mockups'
   window without its caption) per page, tile style and interaction state, in light, dark and high
-  contrast at 96/144/192 DPI; preview strip, placement, popup and controls sheets
-  (`render-controls-history-*`: the history window's controls).
+  contrast at 96/144/192 DPI; Accounts (fresh and out-of-date usage, a hidden polled account)
+  also at the window's minimum width (`render-accounts-min-<theme>-96`); preview strip,
+  placement, popup and controls sheets (`render-controls-history-*`: the history window's
+  controls).
 - `render-i18n-<page|sheet>-<tag>-light-96[-min]` (some also 144): the localization review in the
   pseudo-locale, de, ru, ja and zh-Hans (preview sheets also `en`), at the default and minimum
   width; `-de-DE-` variants render under de-DE's number format.

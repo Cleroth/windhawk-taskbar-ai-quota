@@ -15,7 +15,20 @@ page's defaults without touching accounts or sign-ins.
 **Add account** (Anthropic, OpenAI, Google Antigravity, GitHub Copilot, or OpenCode Go); drag a
 card by its handle (or press Alt+Up/Down) to reorder; its switch shows or hides the account on the
 taskbar (the last visible account can't be hidden). Adding, signing in and removal:
-[accounts and sign-in](accounts.md). Expand a card for:
+[accounts and sign-in](accounts.md).
+
+Each card shows its account's usage at a glance, hidden accounts included: a small meter (on a
+window wide enough) and a percentage, used or left as the bar mode says, in the usage colors.
+
+- The quota is the weekly one; the Fable (Antigravity: Argon) weekly instead while that one is
+  selected for the taskbar and the weekly isn't; GitHub Copilot's monthly AI credits.
+- A reading older than two of the account's polls, or whose last poll failed, is grey, and
+  resting the pointer on the card then names the quota and when it was read. A reading shows
+  until its window resets; without one the card shows a dash. A hidden account that isn't polled
+  keeps the reading it had when it was hidden, until then, a new sign-in or an Explorer restart.
+- An account that needs a sign-in shows its **Sign in** button there instead.
+
+Expand a card for:
 
 - label: unique per provider; renaming keeps the sign-in and history
 - quotas on taskbar: 5-hour (Antigravity: short window), weekly, Anthropic Fable weekly and
@@ -154,7 +167,17 @@ With the same preview:
   OpenCode Go (Antigravity polls its local server every minute); only the Explorer process that
   runs the taskbar polls, refreshes sign-ins and notifies, so another one (such as folder windows
   launched in a separate process) adds no requests or notifications
-- do not poll hidden accounts (on by default; overrides per-account history recording)
+- hidden accounts: how often accounts hidden from the taskbar are polled, for the Accounts page,
+  the **Show on taskbar** menu and usage history: **1 hour** (the default), 30 minutes, 2, 4, 12
+  or 24 hours, a custom 2 to 1440 minutes, **Same as visible accounts**, or **Not polled**
+  - A hidden account never polls more often than a visible one (an interval shorter than the
+    cloud poll interval polls at that one; Antigravity's is a minute), and a failed poll waits
+    for the next one instead of retrying after two minutes. **Refresh all** still polls it at
+    once.
+  - Showing an account again polls it once its reading is older than the visible interval.
+  - Settings saved before 2.22.0 with **Do not poll hidden accounts** on (its default) take
+    **1 hour**; with it off, **Same as visible accounts**, which now also polls hidden accounts
+    that record no history.
 - threshold notifications: off, or the yellow, orange or red threshold (the default), each listed
   with its percentage from Display; a selected taskbar quota notifies when it first reaches it
 

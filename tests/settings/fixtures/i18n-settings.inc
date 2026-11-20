@@ -8,10 +8,10 @@
 
 // A test language whose History page sentence names the hidden accounts' link first.
 static constexpr I18nEntry kTestCatalogLinks[] = {
-    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
-          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
-     L"While <link id=\"hidden\">hidden accounts go unpolled</link> they aren't recorded; each account's own choice "
-     L"is under <link id=\"accounts\">its card</link>."},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. A hidden "
+          L"account records when it is polled: <link id=\"hidden\">Behavior</link> > Hidden accounts.",
+     L"<link id=\"hidden\">How often hidden accounts are polled</link> decides when they record; each account's own "
+     L"choice is under <link id=\"accounts\">its card</link>."},
 };
 static_assert(I18nCatalogSorted(kTestCatalogLinks));
 static constexpr I18nLanguage kTestLinks{L"x-links", L"", L"en-US", I18nPluralRule::English, true, kTestCatalogLinks,
@@ -87,19 +87,19 @@ static void RunI18nSettingsTests() {
         const std::vector<UiRun>& runs = UiFindItem(frame, textId)->runs;
         CHECK(runs.size() == 5 && runs[0].text == L"Each account chooses whether it records: " &&
               runs[1].text == L"Accounts" && runs[1].style == UiRunStyle::Link &&
-              runs[2].text == L" > Record history. Hidden accounts are not recorded while " &&
-              runs[3].text == L"Do not poll hidden accounts" && runs[3].style == UiRunStyle::Link &&
-              runs[4].text == L" is on in Behavior.");
+              runs[2].text == L" > Record history. A hidden account records when it is polled: " &&
+              runs[3].text == L"Behavior" && runs[3].style == UiRunStyle::Link &&
+              runs[4].text == L" > Hidden accounts.");
         CHECK((stops(frame) == std::vector<std::pair<std::wstring, int>>{
-                   {L"Accounts", int(SettingsUiPage::Accounts)},
-                   {L"Do not poll hidden accounts", int(SettingsUiPage::Behavior)}}));
+                   {L"Accounts", int(SettingsUiPage::Accounts)}, {L"Behavior", int(SettingsUiPage::Behavior)}}));
         view.locale = I18nLocale(kTestLinks);
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(UiRunsText(UiFindItem(frame, textId)->runs) ==
-              L"While hidden accounts go unpolled they aren't recorded; each account's own choice is under its card.");
+              L"How often hidden accounts are polled decides when they record; each account's own choice is under its "
+              L"card.");
         CHECK((stops(frame) == std::vector<std::pair<std::wstring, int>>{
-                   {L"hidden accounts go unpolled", int(SettingsUiPage::Behavior)},
+                   {L"How often hidden accounts are polled", int(SettingsUiPage::Behavior)},
                    {L"its card", int(SettingsUiPage::Accounts)}}));
     });
 
@@ -218,6 +218,15 @@ static void RunI18nSettingsTests() {
                std::vector<std::wstring>{L"2 Minuten", L"5 Minuten", L"10 Minuten", L"15 Minuten", L"30 Minuten",
                                          L"60 Minuten", L"Benutzerdefiniert"}));
         CHECK(Control(frame, kPoll, 3).runs[0].text == L"Minuten");
+        // Hidden accounts: its choices, hours from minutes, and its custom box's reason.
+        CHECK((TestOptionTexts(Control(frame, kHidden)) ==
+               std::vector<std::wstring>{L"Nicht abgefragt", L"Wie sichtbare Konten", L"30 Minuten", L"1 Stunde",
+                                         L"2 Stunden", L"4 Stunden", L"12 Stunden", L"24 Stunden", L"Benutzerdefiniert"}));
+        CHECK(Control(frame, kHidden).text == L"1 Stunde" && Control(frame, kHiddenMinutes, 3).runs[0].text == L"Minuten");
+        CHECK(TextCount(frame, L"Ausgeblendete Konten") == 1 &&
+              TextCount(frame, L"Benutzerdefiniertes Intervall (ausgeblendete Konten)") == 1);
+        CHECK(HasText(frame, L"W\u00E4hlen Sie \u201EBenutzerdefiniert\u201C unter \u201EAusgeblendete Konten\u201C, um dies "
+                             L"zu bearbeiten."));
         CHECK(Control(frame, SettingsField::ShowDetailsOnHover).text == L"Ein");
         CHECK((TestOptionTexts(Control(frame, SettingsField::Notifications)) ==
                std::vector<std::wstring>{L"Aus", L"Gelb (50%)", L"Orange (75%)", L"Rot (90%)"}));
@@ -228,15 +237,17 @@ static void RunI18nSettingsTests() {
         UiToggleText states{L"Ein", L"Aus"};
         float state = std::max(UiLayoutSize(UiLayout(g, states.on, UiTextStyleFor(UiFont::Body), 1000, false)).width,
                                UiLayoutSize(UiLayout(g, states.off, UiTextStyleFor(UiFont::Body), 1000, false)).width);
-        const UiItem& toggle = Control(frame, SettingsField::SkipHiddenPolling);
+        const UiItem& toggle = Control(frame, SettingsField::ShowDetailsOnHover);
         CHECK_NEAR(toggle.rect.right - toggle.rect.left, std::ceil(state) + 12 + 40);
         CHECK_NEAR(UiToggleSize(g, states).width, std::ceil(state) + 12 + 40);
     });
 
-    Run("behavior page plurals: the poll intervals and the custom box's unit agree with their numbers (Russian, "
-        "Japanese)", [] {
-        UiFrame ru = TestBehaviorFrame(TestLocale(L"ru"), L"ru",
-                                       [](SettingsView& view) { view.settings.pollMinutes = 21; });
+    Run("behavior page plurals: the poll intervals, the hidden accounts' minutes and hours and the custom boxes' "
+        "units agree with their numbers (Russian, Japanese)", [] {
+        UiFrame ru = TestBehaviorFrame(TestLocale(L"ru"), L"ru", [](SettingsView& view) {
+            view.settings.pollMinutes = 21;
+            view.settings.hiddenPollMinutes = 22;
+        });
         CHECK((TestOptionTexts(Control(ru, kPoll, 8)) ==
                std::vector<std::wstring>{L"2 \u043C\u0438\u043D\u0443\u0442\u044B", L"5 \u043C\u0438\u043D\u0443\u0442",
                                          L"10 \u043C\u0438\u043D\u0443\u0442", L"15 \u043C\u0438\u043D\u0443\u0442",
@@ -244,11 +255,80 @@ static void RunI18nSettingsTests() {
                                          L"\u0414\u0440\u0443\u0433\u043E\u0439"}));
         CHECK(Control(ru, kPoll, 8).text == L"\u0414\u0440\u0443\u0433\u043E\u0439");
         CHECK(Control(ru, kPoll, 3).runs[0].text == L"\u043C\u0438\u043D\u0443\u0442\u0430");  // 21 минута
+        // Не опрашиваются, Как видимые аккаунты, 30 минут, 1 час, 2 часа, 4 часа, 12 часов, 24 часа, Другой
+        CHECK((TestOptionTexts(Control(ru, kHidden)) ==
+               std::vector<std::wstring>{
+                   L"\u041D\u0435 \u043E\u043F\u0440\u0430\u0448\u0438\u0432\u0430\u044E\u0442\u0441\u044F",
+                   L"\u041A\u0430\u043A \u0432\u0438\u0434\u0438\u043C\u044B\u0435 \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u044B",
+                   L"30 \u043C\u0438\u043D\u0443\u0442", L"1 \u0447\u0430\u0441", L"2 \u0447\u0430\u0441\u0430",
+                   L"4 \u0447\u0430\u0441\u0430", L"12 \u0447\u0430\u0441\u043E\u0432", L"24 \u0447\u0430\u0441\u0430",
+                   L"\u0414\u0440\u0443\u0433\u043E\u0439"}));
+        CHECK(Control(ru, kHidden).text == L"\u0414\u0440\u0443\u0433\u043E\u0439");
+        CHECK(Control(ru, kHiddenMinutes, 3).runs[0].text == L"\u043C\u0438\u043D\u0443\u0442\u044B");  // 22 минуты
         ru = TestBehaviorFrame(TestLocale(L"ru"), L"ru", [](SettingsView& view) { view.settings.pollMinutes = 2; });
         CHECK(Control(ru, kPoll, 3).runs[0].text == L"\u043C\u0438\u043D\u0443\u0442\u044B");  // 2 минуты
+        CHECK(Control(ru, kHidden).text == L"1 \u0447\u0430\u0441");
+        CHECK(Control(ru, kHiddenMinutes, 3).runs[0].text == L"\u043C\u0438\u043D\u0443\u0442");  // 60 минут
         UiFrame ja = TestBehaviorFrame(TestLocale(L"ja"), L"ja");
         CHECK(Control(ja, kPoll, 8).options[0].text == L"2 \u5206" && Control(ja, kPoll, 3).runs[0].text == L"\u5206");
+        CHECK(Control(ja, kHidden).options[2].text == L"30 \u5206" && Control(ja, kHidden).text == L"1 \u6642\u9593");
         CHECK(Control(ja, SettingsField::Language).text == L"\u81EA\u52D5 (\u65E5\u672C\u8A9E)");
+    });
+
+    Run("accounts page: a hidden account's interval agrees with its number (Russian, German); the reading's line in "
+        "the header's tooltip in the language's word order (German, Japanese); the header's note", [] {
+        UiGraphics& g = TestGraphics();
+        // OAI (cloud) and Go (Antigravity) hidden, CC 2's 93% out of date; cards wide enough for
+        // every state's whole line.
+        auto frameFor = [&](std::wstring_view tag, int hiddenMinutes, BarMode mode = BarMode::Used) {
+            SettingsView view = AccountsView();
+            view.locale = TestLocale(tag);
+            view.settings.accounts[0].hidden = view.settings.accounts[3].hidden = true;
+            view.settings.hiddenPollMinutes = hiddenMinutes;
+            view.settings.barMode = mode;
+            view.accounts[2].status.usage.stale = true;
+            UiFrame frame;
+            SettingsUiBuildFrame(g, view, {1300, 820}, frame);
+            return frame;
+        };
+        // Скрыт, опрос каждый 1 час, каждые 2 часа, каждые 12 часов, каждый 21 час; каждые 30 минут,
+        // каждую 21 минуту, каждые 22 минуты.
+        const std::wstring hidden = L"\u0421\u043A\u0440\u044B\u0442, \u043E\u043F\u0440\u043E\u0441 ";
+        const std::pair<int, PCWSTR> russian[] = {
+            {60, L"\u043A\u0430\u0436\u0434\u044B\u0439 1 \u0447\u0430\u0441"},
+            {120, L"\u043A\u0430\u0436\u0434\u044B\u0435 2 \u0447\u0430\u0441\u0430"},
+            {720, L"\u043A\u0430\u0436\u0434\u044B\u0435 12 \u0447\u0430\u0441\u043E\u0432"},
+            {1260, L"\u043A\u0430\u0436\u0434\u044B\u0439 21 \u0447\u0430\u0441"},
+            {30, L"\u043A\u0430\u0436\u0434\u044B\u0435 30 \u043C\u0438\u043D\u0443\u0442"},
+            {21, L"\u043A\u0430\u0436\u0434\u0443\u044E 21 \u043C\u0438\u043D\u0443\u0442\u0443"},
+            {22, L"\u043A\u0430\u0436\u0434\u044B\u0435 22 \u043C\u0438\u043D\u0443\u0442\u044B"}};
+        for (auto [minutes, every] : russian) CHECK(HasText(frameFor(L"ru", minutes), L"OpenAI \u00B7 Plus \u00B7 " + hidden + every));
+        // German: hourly, every 2 hours, every 30 minutes; as visible ones, every 10 minutes and
+        // Antigravity every minute.
+        UiFrame german = frameFor(L"de", 60);
+        CHECK(HasText(german, L"OpenAI \u00B7 Plus \u00B7 Ausgeblendet, st\u00FCndlich abgefragt"));
+        CHECK(HasText(frameFor(L"de", 120), L"Ausgeblendet, alle 2 Stunden abgefragt") &&
+              HasText(frameFor(L"de", 30), L"Ausgeblendet, alle 30 Minuten abgefragt"));
+        UiFrame shown = frameFor(L"de", kHiddenPollAsShown);
+        CHECK(HasText(shown, L"OpenAI \u00B7 Plus \u00B7 Ausgeblendet, alle 10 Minuten abgefragt") &&
+              HasText(shown, L"Antigravity \u00B7 AI Pro \u00B7 Ausgeblendet, jede Minute abgefragt"));
+        CHECK(HasText(frameFor(L"de", kHiddenPollNever), L"OpenAI \u00B7 Plus \u00B7 Ausgeblendet, nicht abgefragt"));
+        // The note: ... ausgeblendete Konten werden seltener abgefragt; nicht abgefragt; neither.
+        auto note = [](const UiFrame& frame) { return UiRunsText(UiFindItem(frame, 101)->runs); };
+        const std::wstring drag = L"Zum Neuordnen ziehen. Der Schalter blendet ein Konto in der Taskleiste aus";
+        CHECK(note(german) == drag + L"; ausgeblendete Konten werden seltener abgefragt.");
+        CHECK(note(frameFor(L"de", kHiddenPollNever)) == drag + L"; ausgeblendete Konten werden nicht abgefragt.");
+        CHECK(note(shown) == drag + L".");
+        // CC 2's reading: 7T: 93% verbraucht, Stand 14:32; left: 7T: 7% übrig, Stand 14:32.
+        auto reading = [](const UiFrame& frame) {
+            return UiRunsText(UiFindItem(frame, AccountId(3, SettingsField::AccountExpand))->tooltip);
+        };
+        CHECK(reading(german) == L"CC 2\nAnthropic \u00B7 Ultra \u00B7 Angemeldet\n7T: 93% verbraucht, Stand 14:32");
+        CHECK(reading(frameFor(L"de", 60, BarMode::Remaining)).ends_with(L"\n7T: 7% \u00FCbrig, Stand 14:32"));
+        // Japanese: 7日: 93% 使用、14:32 時点; left, the percentage after its word: 7日: 残り 7%、14:32 時点.
+        CHECK(reading(frameFor(L"ja", 60)).ends_with(L"\n7\u65E5: 93% \u4F7F\u7528\u300114:32 \u6642\u70B9"));
+        CHECK(reading(frameFor(L"ja", 60, BarMode::Remaining))
+                  .ends_with(L"\n7\u65E5: \u6B8B\u308A 7%\u300114:32 \u6642\u70B9"));
     });
 
     Run("behavior page in the pseudo-locale: every text of the page transformed, none left English", [] {

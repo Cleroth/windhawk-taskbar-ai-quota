@@ -883,7 +883,7 @@ struct HistoryController {
             account.label = a.label;
             account.removed = !a.configured;
             account.recordingOff = a.configured && !a.recording;
-            account.paused = a.hidden && s.skipHiddenPolling;
+            account.paused = a.hidden && s.hiddenPollMinutes == kHiddenPollNever;
             // The flyout's weekly row (GitHub Copilot's: its AI credits row): the latest poll's
             // used % and its staleness.
             auto index = a.configured ? configured.find(a.id) : configured.end();

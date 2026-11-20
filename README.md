@@ -38,10 +38,10 @@ The mod refreshes its sign-ins itself, so the bars keep working without re-runni
 
 Right-click any quota column and choose **Settings**. The window follows the Windows theme, and changes save as you make them.
 
-- **Accounts:** add, reorder, show or hide, rename, choose taskbar quotas and identity, record history, sign in or out, remove
+- **Accounts:** add, reorder, show or hide, rename, choose taskbar quotas and identity, record history, sign in or out, remove; each account's weekly usage at a glance, hidden ones included
 - **Layout**, with a live taskbar preview: tile style, position on the taskbar, sizes, logo and number badge, identity position, bar text, pace markers, spacing
 - **Display:** material, used or remaining, usage colors and thresholds, stale marker, provider outages, additional OpenAI rate limits, the extra usage chart
-- **Behavior:** language, displays, hover details, polling, hidden accounts, threshold notifications
+- **Behavior:** language, displays, hover details, polling, how often hidden accounts are polled, threshold notifications
 - **History:** recording, retention, the usage history window's default time span, storage folder
 - **About:** version info for bug reports, links, contributors, credits, license
 

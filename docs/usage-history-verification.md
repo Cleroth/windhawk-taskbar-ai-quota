@@ -17,8 +17,9 @@ history** or **Delete history...** removes that account's.
 - Enable history for one signed-in account, then refresh it or wait for its poll. Open Usage
   history and refresh: a recorded point appears. Two successful polls in the same uninterrupted
   window give a line and nonzero observed coverage.
-- Hidden accounts pause under the default global restriction and resume only when it is off and
-  recording is enabled.
+- A hidden recorded account gets a sample with each of its polls: at the **Hidden accounts**
+  interval (Behavior), with that interval as its CSV `poll_interval_ms`, its line connected
+  across them. With **Not polled** it pauses, and the viewer says so.
 - Test CSV export, persistence across a restart, and Clear; none changes sign-ins.
 - Export a large range: the progress count rises while the window scrolls, repaints and resizes;
   other controls stay disabled until the notice. Close the window mid-export: it closes at once,

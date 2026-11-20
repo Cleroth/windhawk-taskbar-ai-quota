@@ -597,4 +597,121 @@ static void RunUiTests() {
         frame.content[2].enabled = false;
         CHECK(UiHitTest(g, frame.content, {310, 30}).id == 0);  // A disabled one blocks
     });
+
+    Run("meter: decoration only: no tab stop, and the pointer over it reaches the item under it, with an action "
+        "or disabled too", [] {
+        UiGraphics& g = TestGraphics();
+        UiFrame frame;
+        frame.content.push_back(TestItem(10, UiItemKind::Card, {0, 0, 400, 68}, kTestOpen));
+        frame.content.back().button = UiButtonStyle::Subtle;
+        UiItem meter = TestItem(11, UiItemKind::Meter, {300, 26, 348, 42});
+        meter.maximum = 100;
+        meter.action.value = 40;
+        meter.color = UiRgb(0xE53935);
+        frame.content.push_back(meter);
+        CHECK(!UiInteractiveKind(UiItemKind::Meter) && !UiActive(frame.content[1]) && !UiFocusable(frame.content[1]));
+        std::vector<UiFocusStop> stops = UiFocusStops(frame);
+        CHECK(stops.size() == 1 && stops[0].ref == UiFocusRef{10});
+        CHECK(UiHitTest(g, frame.content, {310, 34}) == UiFocusRef{10});  // On its fill
+        CHECK(UiHitTest(g, frame.content, {340, 34}) == UiFocusRef{10});  // On its track
+        frame.content[1].action = {UiActionKind::Command, 40, {}, 5};
+        CHECK(UiHitTest(g, frame.content, {310, 34}) == UiFocusRef{10} && !UiActionOf(frame, {11}) &&
+              UiFocusStops(frame).size() == 1);
+        frame.content[1].enabled = false;
+        CHECK(UiHitTest(g, frame.content, {310, 34}) == UiFocusRef{10});
+        // Over nothing that takes the pointer: no target.
+        frame.content[0].action = {};
+        CHECK(UiHitTest(g, frame.content, {310, 34}).id == 0);
+    });
+
+    Run("meter paint: a 4 DIP track along the middle, filled from its start up to its value in the client's color, "
+        "at least a 4 DIP dot above the minimum; without a color in its ink; in high contrast in the selection's "
+        "color", [] {
+        UiGraphics& g = TestGraphics();
+        const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        CHECK(SUCCEEDED(com) || com == RPC_E_CHANGED_MODE);
+        {
+            winrt::com_ptr<IWICImagingFactory> wic;
+            winrt::check_hresult(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                                  __uuidof(IWICImagingFactory), wic.put_void()));
+            // The meter from (10, 4) to (58, 20), its track in rows 10 to 13, painted at 96 DPI over
+            // black; the result reads a pixel as 0xRRGGBB.
+            constexpr UINT kWidth = 68, kHeight = 24;
+            auto paint = [&](UiItem meter, const UiThemeInput& theme) {
+                meter.kind = UiItemKind::Meter;
+                meter.rect = {10, 4, 58, 20};
+                winrt::com_ptr<IWICBitmap> bitmap;
+                winrt::check_hresult(wic->CreateBitmap(kWidth, kHeight, GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad,
+                                                       bitmap.put()));
+                D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
+                    D2D1_RENDER_TARGET_TYPE_DEFAULT, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                    96, 96);
+                winrt::com_ptr<ID2D1RenderTarget> target;
+                winrt::check_hresult(g.d2d->CreateWicBitmapRenderTarget(bitmap.get(), &properties, target.put()));
+                UiTargetCache cache;
+                target->BeginDraw();
+                target->Clear(D2D1::ColorF(0, 0, 0, 1));
+                UiPaintItems(target.get(), g, cache, UiPaletteFor(theme), {meter}, {}, {0, 0}, 1, -1e9f, 1e9f);
+                winrt::check_hresult(target->EndDraw());
+                cache.Clear();
+                target = nullptr;
+                std::vector<BYTE> pixels(size_t(kWidth) * kHeight * 4);
+                WICRect all{0, 0, INT(kWidth), INT(kHeight)};
+                winrt::check_hresult(bitmap->CopyPixels(&all, kWidth * 4, UINT(pixels.size()), pixels.data()));
+                return [pixels](UINT x, UINT y) {
+                    const BYTE* p = &pixels[(size_t(y) * kWidth + x) * 4];
+                    return uint32_t(p[2]) << 16 | uint32_t(p[1]) << 8 | p[0];
+                };
+            };
+            const uint32_t red = 0xE53935;
+            UiThemeInput dark;
+            UiItem meter;
+            meter.maximum = 100;
+            meter.action.value = 50;
+            meter.color = UiRgb(red);
+            // Half: the color up to x 34, then the track, which is neither it nor the background.
+            std::function<uint32_t(UINT, UINT)> at = paint(meter, dark);
+            CHECK(at(12, 12) == red && at(22, 10) == red && at(22, 13) == red && at(31, 12) == red);
+            CHECK(at(36, 12) != red && at(36, 12) != 0 && at(55, 12) == at(36, 12));
+            CHECK(at(22, 9) == 0 && at(22, 14) == 0 && at(46, 9) == 0 && at(46, 14) == 0 && at(8, 12) == 0 && at(59, 12) == 0);
+            // Nothing at the minimum; a 4 DIP dot just above it; full from the maximum on.
+            meter.action.value = 0;
+            at = paint(meter, dark);
+            CHECK(at(12, 12) != red && at(12, 12) != 0);
+            meter.action.value = 1;
+            at = paint(meter, dark);
+            CHECK(at(11, 12) == red && at(12, 11) == red && at(16, 12) != red);
+            meter.action.value = 250;
+            at = paint(meter, dark);
+            CHECK(at(12, 12) == red && at(55, 12) == red && at(59, 12) == 0);
+            // Within its own range: 40 of 20 to 60 is half, 10 is below it. No range: empty.
+            meter.minimum = 20;
+            meter.maximum = 60;
+            meter.action.value = 40;
+            at = paint(meter, dark);
+            CHECK(at(31, 12) == red && at(36, 12) != red);
+            meter.action.value = 10;
+            CHECK(paint(meter, dark)(12, 12) != red);
+            meter.minimum = meter.maximum = 0;
+            meter.action.value = 5;
+            CHECK(paint(meter, dark)(12, 12) != red);
+            // Without a color: its ink.
+            UiItem inked;
+            inked.maximum = 100;
+            inked.action.value = 50;
+            inked.ink = UiInk::Success;
+            CHECK(paint(inked, dark)(22, 12) == (UiColorKey(UiPaletteFor(dark).success) & 0xFFFFFF));
+            // High contrast: the selection's system color, whatever the client's color or the ink;
+            // the track differs from it.
+            UiThemeInput contrast;
+            contrast.kind = UiThemeKind::HighContrast;
+            contrast.system.highlight = 0x00FF00;
+            meter = inked;
+            meter.color = UiRgb(red);
+            at = paint(meter, contrast);
+            CHECK(at(22, 12) == 0x00FF00 && at(46, 12) != 0x00FF00 && at(46, 12) != 0);
+            CHECK(paint(inked, contrast)(22, 12) == 0x00FF00);
+        }
+        if (SUCCEEDED(com)) CoUninitialize();
+    });
 }

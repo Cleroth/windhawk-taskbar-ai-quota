@@ -63,18 +63,16 @@ static void SetAccountVisibility(uint64_t identityHash, bool wantVisible) {
                     // Showing: keep the existing (possibly stale) data and only re-query if it has
                     // already gone stale, matching the UI's grey-out threshold. This stops repeated
                     // hide/show from triggering fetches and hitting provider rate limits.
-                    ULONGLONG staleIntervalMin =
-                        settingsSnapshot.accounts[accountIndex].provider == L"antigravity"
-                            ? 1
-                            : (ULONGLONG)settingsSnapshot.pollMinutes;
+                    ULONGLONG staleAfterMs = AccountStaleAfterMs(settingsSnapshot.accounts[accountIndex],
+                                                                 settingsSnapshot.pollMinutes,
+                                                                 settingsSnapshot.hiddenPollMinutes);
                     ULONGLONG now = NowUnixMs();
                     std::lock_guard<std::mutex> lk2(g_dataMutex);
                     if (accountIndex >= (int)g_data.size()) {
                         refreshNow = true;
                     } else {
                         const AccountData& d = g_data[accountIndex];
-                        refreshNow = d.stale || d.lastSuccessMs == 0 ||
-                                     now - d.lastSuccessMs > staleIntervalMin * 2 * 60000;
+                        refreshNow = d.stale || d.lastSuccessMs == 0 || now - d.lastSuccessMs > staleAfterMs;
                     }
                 }
             }
@@ -105,9 +103,14 @@ static void SetAccountVisibility(uint64_t identityHash, bool wantVisible) {
     PublishSettings(settingsSnapshot);
     Wh_SetStringValue(L"hiddenAccounts", hashes.c_str());
     // RefreshQuota re-queries only this account (and posts the UI); otherwise just repaint so the
-    // column collapses/reappears with its existing data without any network request.
+    // column collapses/reappears with its existing data, and wake the fetch thread, which polls the
+    // account only if its new interval already ran out since its reading.
     configLock.unlock();
     NotifySettingsWindowChanged();
-    if (refreshNow) RefreshQuotaByIdentity(identityHash);
-    else PostUiUpdate();
+    if (refreshNow) {
+        RefreshQuotaByIdentity(identityHash);
+    } else {
+        PostUiUpdate();
+        if (g_refreshEvent) SetEvent(g_refreshEvent);
+    }
 }

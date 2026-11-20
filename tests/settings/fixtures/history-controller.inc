@@ -555,6 +555,7 @@ static void RunHistoryControllerTests() {
         CHECK(c.view.pill == HistoryUiPill::Waiting && c.view.cards.size() == 3);
         // Each account's recording state: its Record history off; paused while hidden accounts
         // aren't polled, not while they are; a removed account neither. Its first card says so.
+        s.hiddenPollMinutes = kHiddenPollNever;
         s.accounts[0].recordHistory = false;
         s.accounts[1].hidden = true;
         c.Load();
@@ -562,7 +563,18 @@ static void RunHistoryControllerTests() {
               !c.view.accounts[1].recordingOff && !c.view.accounts[2].recordingOff && !c.view.accounts[2].paused);
         CHECK(c.view.cards[0].status == L"recording off" && c.view.cards[1].status == L"paused" &&
               c.view.cards[2].status.empty());
-        s.skipHiddenPolling = false;
+        // Polled at an interval, the default hour included, or as visible ones: not paused. OAI's
+        // poll, 30 minutes old, is stale only where it is polled every 10 minutes.
+        CHECK(c.view.accounts[1].stale);
+        for (int minutes : {60, 2, 1440, kHiddenPollAsShown}) {
+            s.hiddenPollMinutes = minutes;
+            c.Load();
+            CHECK(!c.view.accounts[1].paused && c.view.cards[1].status.empty());
+            CHECK(c.view.accounts[1].stale == (minutes == 2 || minutes == kHiddenPollAsShown));
+        }
+        // A visible account is never paused.
+        s.hiddenPollMinutes = kHiddenPollNever;
+        s.accounts[1].hidden = false;
         c.Load();
         CHECK(!c.view.accounts[1].paused && c.view.cards[1].status.empty());
         // Recording off for this user: off, whatever else holds.

@@ -88,11 +88,17 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             note.kind = UiItemKind::Text;
             note.font = UiFont::Note;
             note.ink = UiInk::Muted;
-            note.runs.push_back({I18nText(view.locale, view.settings.skipHiddenPolling ?
-                                                           Tr(L"Drag to reorder. Toggle hides an account from the "
-                                                              L"taskbar; hidden accounts are not polled.") :
-                                                           Tr(L"Drag to reorder. Toggle hides an account from the "
-                                                              L"taskbar."))});
+            // What hiding costs: no polls, or fewer of them.
+            const Settings& s = view.settings;
+            note.runs.push_back(
+                {I18nText(view.locale,
+                          s.hiddenPollMinutes == kHiddenPollNever ?
+                              Tr(L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are "
+                                 L"not polled.") :
+                          s.hiddenPollMinutes > s.pollMinutes ?
+                              Tr(L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are "
+                                 L"polled less often.") :
+                              Tr(L"Drag to reorder. Toggle hides an account from the taskbar."))});
             float noteLeft = kSettingsNavWidth + left;
             header = 50 + UiLayoutSize(UiRichLayout(g, note.runs, UiFont::Note, right - noteLeft)).height;
             note.rect = {noteLeft, 50, right, header};

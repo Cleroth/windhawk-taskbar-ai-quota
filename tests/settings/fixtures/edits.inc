@@ -193,6 +193,8 @@ static std::wstring Op(SettingsField field, int value) {
 static constexpr SettingsField kRetention = SettingsField::RetentionDays;
 static constexpr SettingsField kKeep = SettingsField::KeepHistory;
 static constexpr SettingsField kPoll = SettingsField::PollMinutes;
+static constexpr SettingsField kHidden = SettingsField::HiddenPolling;
+static constexpr SettingsField kHiddenMinutes = SettingsField::HiddenPollMinutes;
 
 static void RunEditTests() {
     Run("parse: spaces, sign, digit grouping; empty, malformed and overflow fail; range clamps", [] {
@@ -260,6 +262,31 @@ static void RunEditTests() {
         CHECK(s.historyRetentionDays == 30 && SettingsFieldValue(s, kKeep) == 30);
         SettingsAssign(s, kRetention, 99999);
         CHECK(s.historyRetentionDays == 3650);
+        // Hidden accounts: every hour by default. The choice takes an interval of 2 to 1440
+        // minutes, not polled (0) or as visible ones (-1); the custom box sets an interval
+        // whatever the choice, and shows the default one without one.
+        CHECK(s.hiddenPollMinutes == 60 && SettingsFieldValue(s, kHidden) == 60 && SettingsFieldValue(s, kHiddenMinutes) == 60);
+        CHECK(!SettingsFieldRange(kHidden) && SettingsFieldRange(kHiddenMinutes)->minimum == 2 &&
+              SettingsFieldRange(kHiddenMinutes)->maximum == 1440);
+        SettingsAssign(s, kHidden, 240);
+        CHECK(s.hiddenPollMinutes == 240 && SettingsFieldValue(s, kHidden) == 240 && SettingsFieldValue(s, kHiddenMinutes) == 240);
+        SettingsAssign(s, kHiddenMinutes, 45);
+        CHECK(s.hiddenPollMinutes == 45 && SettingsFieldValue(s, kHidden) == 45);
+        SettingsAssign(s, kHiddenMinutes, 1);
+        CHECK(s.hiddenPollMinutes == 2);
+        SettingsAssign(s, kHiddenMinutes, 99999);
+        CHECK(s.hiddenPollMinutes == 1440);
+        SettingsAssign(s, kHidden, 1);
+        CHECK(s.hiddenPollMinutes == 2);
+        SettingsAssign(s, kHidden, 99999);
+        CHECK(s.hiddenPollMinutes == 1440);
+        for (int choice : {kHiddenPollNever, kHiddenPollAsShown}) {
+            SettingsAssign(s, kHidden, choice);
+            CHECK(s.hiddenPollMinutes == choice && SettingsFieldValue(s, kHidden) == choice);
+            CHECK(SettingsFieldValue(s, kHiddenMinutes) == 60);
+            SettingsAssign(s, kHiddenMinutes, 45);
+            CHECK(s.hiddenPollMinutes == 45);
+        }
         // The history window's default range: 7 days, choices clamped to 24 hours and All retained.
         CHECK(SettingsFieldValue(s, SettingsField::HistoryRange) == int(HistoryUiRange::Week));
         SettingsAssign(s, SettingsField::HistoryRange, int(HistoryUiRange::Month));
@@ -280,6 +307,7 @@ static void RunEditTests() {
         SettingsAssign(s, SettingsField::ResetBehavior, 0);
         CHECK(s.taskbarMonitorMode == TaskbarMonitorMode::Primary && s.taskbarMonitorNumber == 1);
         CHECK(s.showDetailsOnHover && s.pollMinutes == 10 && s.notificationLevel == NotificationLevel::Red);
+        CHECK(s.hiddenPollMinutes == 60);
         CHECK(!s.historyEnabled && s.historyRetentionDays == 3650);  // Not Behavior's
         CHECK(s.historyDefaultRange == HistoryUiRange::Day);
         SettingsAssign(s, SettingsField::ResetHistory, 0);
@@ -429,6 +457,58 @@ static void RunEditTests() {
         CHECK(edits.Projection().historyRetentionDays == 0);
         CHECK(edits.RequestCommit(0, kRetention) && edits.Process() == 0);
         CHECK(edits.drafts.empty() && store.settings.historyRetentionDays == 0);
+    });
+
+    Run("controller: Hidden accounts and its custom minutes drop each other's drafts, failed ones included; the "
+        "minutes make any choice an interval", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        // A preset whose save failed, then minutes typed: closing saves only the typed minutes.
+        store.failNext = 1;
+        CHECK(edits.Commit(0, kHidden, 240) == 1);
+        CHECK(edits.Projection().hiddenPollMinutes == 240 && store.settings.hiddenPollMinutes == 60);
+        edits.SetText(0, kHiddenMinutes, L"90");
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].field == kHiddenMinutes);
+        CHECK(edits.Projection().hiddenPollMinutes == 90);
+        CHECK(edits.PrepareClose() == SettingsCloseResult::Saved);
+        CHECK((store.Applied() == std::vector<std::wstring>{Op(kHidden, 240), Op(kHiddenMinutes, 90)}));
+        CHECK(store.settings.hiddenPollMinutes == 90);
+        // Typed minutes project and save clamped to 2 to 1440.
+        edits.SetText(0, kHiddenMinutes, L"1");
+        CHECK(edits.Projection().hiddenPollMinutes == 2);
+        edits.SetText(0, kHiddenMinutes, L"5,000");
+        CHECK(edits.Projection().hiddenPollMinutes == 1440);
+        // Minutes typed and queued, then each choice that isn't an interval: the typed minutes go
+        // with their request. Minutes that arrive after it make an interval of it.
+        for (int choice : {kHiddenPollNever, kHiddenPollAsShown}) {
+            edits.SetText(0, kHiddenMinutes, L"45");
+            CHECK(edits.RequestCommit(0, kHiddenMinutes));
+            CHECK(edits.Commit(0, kHidden, choice) == 0);
+            CHECK(edits.drafts.empty() && edits.queue.empty() && store.settings.hiddenPollMinutes == choice);
+            CHECK(store.Applied().back() == Op(kHidden, choice));
+            // A step starts from the default interval the box shows.
+            edits.Step(0, kHiddenMinutes, 1);
+            CHECK(edits.drafts[0].raw == L"61" && edits.Projection().hiddenPollMinutes == 61);
+            edits.Revert(0, kHiddenMinutes);
+            CHECK(edits.Projection().hiddenPollMinutes == choice);
+            edits.SetText(0, kHiddenMinutes, L"45");
+            CHECK(edits.Projection().hiddenPollMinutes == 45);
+            CHECK(edits.RequestCommit(0, kHiddenMinutes) && edits.Process() == 0);
+            CHECK(edits.drafts.empty() && store.settings.hiddenPollMinutes == 45);
+        }
+        // A choice again: its queued request goes when minutes are typed after it, and they show.
+        edits.SetValue(0, kHidden, 120);
+        CHECK(edits.RequestCommit(0, kHidden));
+        edits.SetText(0, kHiddenMinutes, L"50");
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].field == kHiddenMinutes && edits.queue.empty());
+        CHECK(edits.Projection().hiddenPollMinutes == 50);
+        edits.Discard();
+        // Another field's draft stays through either one's edit.
+        edits.SetText(0, kPoll, L"7");
+        CHECK(edits.Commit(0, kHidden, 30) == 0 && store.settings.hiddenPollMinutes == 30);
+        edits.SetText(0, kHiddenMinutes, L"31");
+        CHECK(edits.drafts.size() == 2 && edits.drafts[0].field == kPoll && edits.drafts[0].raw == L"7");
     });
 
     Run("controller: steps start from the last valid value, clamped, as text", [] {
@@ -632,14 +712,28 @@ static void RunEditTests() {
         CHECK(store.settings.pollMinutes == 10 && edits.baseline.settings.pollMinutes == 10);
     });
 
-    Run("page reset: drops only its own fields' drafts", [] {
+    Run("page reset: drops only its own fields' drafts; Behavior's holds the hidden accounts' choice and its "
+        "custom minutes", [] {
         TestStore store;
+        store.settings.hiddenPollMinutes = 90;
         SettingsEdits edits(store);
         edits.Reload();
         edits.SetText(0, kRetention, L"30");
         edits.SetText(0, kPoll, L"7");
+        edits.SetText(0, kHiddenMinutes, L"45");
+        CHECK(edits.RequestCommit(0, kHiddenMinutes));
         CHECK(edits.Reset(SettingsField::ResetBehavior) == 0);
         CHECK(edits.drafts.size() == 1 && edits.drafts[0].field == kRetention);
+        CHECK(store.Applied() == std::vector<std::wstring>{Op(SettingsField::ResetBehavior, 0)});
+        CHECK(store.settings.hiddenPollMinutes == 60 && store.settings.pollMinutes == 10);
+        // A choice's draft goes the same way.
+        store.failNext = 1;
+        CHECK(edits.Commit(0, kHidden, kHiddenPollNever) == 1 && edits.drafts.size() == 2);
+        CHECK(edits.Reset(SettingsField::ResetBehavior) == 0);
+        CHECK(edits.drafts.size() == 1 && edits.drafts[0].field == kRetention && store.settings.hiddenPollMinutes == 60);
+        std::vector<SettingsField> behavior = SettingsGroupFields(SettingsField::ResetBehavior);
+        CHECK(behavior.size() == 7 && std::count(behavior.begin(), behavior.end(), kHidden) == 1 &&
+              std::count(behavior.begin(), behavior.end(), kHiddenMinutes) == 1);
     });
 }
 
@@ -687,10 +781,8 @@ static void RunPageTests() {
         const UiItem& custom = Control(frame, kPoll);
         CHECK(custom.kind == UiItemKind::NumberBox && !custom.enabled && custom.text == L"10");
         CHECK(HasText(frame, L"Choose Custom in Cloud poll interval to edit."));
-        for (SettingsField field : {SettingsField::ShowDetailsOnHover, SettingsField::SkipHiddenPolling}) {
-            const UiItem& toggle = Control(frame, field);
-            CHECK(toggle.kind == UiItemKind::Toggle && toggle.selected && toggle.action.value == 0);
-        }
+        const UiItem& toggle = Control(frame, SettingsField::ShowDetailsOnHover);
+        CHECK(toggle.kind == UiItemKind::Toggle && toggle.selected && toggle.action.value == 0);
         // Threshold notifications: Off or a level, each with its threshold.
         const UiItem& notifications = Control(frame, SettingsField::Notifications);
         CHECK(notifications.kind == UiItemKind::Dropdown && notifications.text == L"Red (90%)" &&
@@ -706,10 +798,15 @@ static void RunPageTests() {
         }
         CHECK(Control(frame, SettingsField::ResetBehavior).text == L"Reset");
         CHECK(HasText(frame, L"Notifies when a taskbar quota first reaches the chosen threshold."));
-        // Focus order: language and display dropdowns, poll dropdown, (disabled box skipped),
-        // toggles, notifications dropdown, reset.
+        // Focus order: language and display dropdowns, the hover toggle, the poll and hidden
+        // accounts dropdowns (each one's disabled box skipped), notifications dropdown, reset.
         std::vector<UiFocusStop> stops = UiFocusStops(frame);
         CHECK(stops.size() == 6 + 7);
+        const SettingsField order[] = {SettingsField::Language, SettingsField::ShowOn, SettingsField::ShowDetailsOnHover,
+                                       kPoll, kHidden, SettingsField::Notifications, SettingsField::ResetBehavior};
+        for (size_t i = 0; i < std::size(order); i++) {
+            CHECK(stops[6 + i].ref.id == SettingsControlId(order[i], order[i] == kPoll ? 8 : 0));
+        }
 
         // A chosen display that is gone stays chosen, marked unavailable; Custom enables the box
         // and its draft text and error show.
@@ -724,7 +821,7 @@ static void RunPageTests() {
         CHECK(Control(frame, kPoll, 8).text == L"Custom");
         CHECK(Control(frame, kPoll).enabled && Control(frame, kPoll).text == L"7x");
         CHECK(HasText(frame, L"Enter a whole number from 2 to 1440."));
-        CHECK(!HasText(frame, L"Choose Custom"));
+        CHECK(!HasText(frame, L"Choose Custom in Cloud poll interval"));
         const UiItem& hover = Control(frame, SettingsField::ShowDetailsOnHover);
         CHECK(!hover.selected && hover.text == L"Off" && hover.action.value == 1);
         // The control ids stay put when lines appear above them.
@@ -750,6 +847,99 @@ static void RunPageTests() {
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, kPoll, 8).text == L"Custom" && Control(frame, kPoll).enabled);
+    });
+
+    Run("behavior page: Hidden accounts' choices under the poll interval's cards; its custom box enabled only "
+        "while Custom shows, else with the reason; typed text and errors", [] {
+        UiGraphics& g = TestGraphics();
+        auto build = [&](const SettingsView& view) {
+            UiFrame frame;
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            return frame;
+        };
+        // Every hour by default, a preset: the box shows its minutes, disabled, and says why.
+        SettingsView view = TestView(SettingsUiPage::Behavior);
+        UiFrame frame = build(view);
+        const UiItem& choice = Control(frame, kHidden);
+        CHECK(choice.kind == UiItemKind::Dropdown && choice.enabled && choice.text == L"1 hour" && choice.action.value == 60);
+        const std::pair<PCWSTR, int> options[] = {{L"Not polled", 0}, {L"Same as visible accounts", -1},
+                                                  {L"30 minutes", 30},  {L"1 hour", 60},
+                                                  {L"2 hours", 120},    {L"4 hours", 240},
+                                                  {L"12 hours", 720},   {L"24 hours", 1440},
+                                                  {L"Custom", kSettingsHiddenPollCustom}};
+        CHECK(choice.options.size() == std::size(options));
+        for (size_t i = 0; i < std::size(options); i++) {
+            CHECK(choice.options[i].text == options[i].first && choice.options[i].value == options[i].second);
+        }
+        // Custom's value is none a stored choice takes.
+        CHECK(kSettingsHiddenPollCustom < 0 && kSettingsHiddenPollCustom != kHiddenPollAsShown);
+        CHECK_NEAR(choice.rect.right - choice.rect.left,
+                   std::max(200.0f, TestTextWidth(L"Same as visible accounts", UiFont::Body) + 41));
+        const UiItem& box = Control(frame, kHiddenMinutes);
+        CHECK(box.kind == UiItemKind::NumberBox && !box.enabled && box.text == L"60");
+        CHECK(Control(frame, kHiddenMinutes, 3).runs[0].text == L"minutes");
+        CHECK(TextCount(frame, L"Hidden accounts") == 1 && TextCount(frame, L"Custom hidden interval") == 1 &&
+              TextCount(frame, L"Choose Custom in Hidden accounts to edit.") == 1);
+        CHECK(HasText(frame, L"How often accounts hidden from the taskbar are polled, for Accounts and usage history: "
+                             L"never more often than visible ones. Shared across Windows users."));
+        CHECK(Control(frame, kPoll).rect.bottom < choice.rect.top && choice.rect.bottom < box.rect.top &&
+              box.rect.bottom < Control(frame, SettingsField::Notifications).rect.top);
+
+        struct HiddenCase {
+            int minutes;   // The setting
+            bool custom;   // Custom chosen earlier
+            PCWSTR shown;  // The dropdown's text
+            int value;     // The dropdown's value
+            bool enabled;  // The custom box
+            PCWSTR box;    // The custom box's text
+        };
+        for (const HiddenCase& c : {HiddenCase{kHiddenPollNever, false, L"Not polled", 0, false, L"60"},
+                                    HiddenCase{kHiddenPollAsShown, false, L"Same as visible accounts", -1, false, L"60"},
+                                    HiddenCase{30, false, L"30 minutes", 30, false, L"30"},
+                                    HiddenCase{1440, false, L"24 hours", 1440, false, L"1,440"},
+                                    // Minutes no preset has, or Custom chosen: Custom, its box enabled.
+                                    HiddenCase{90, false, L"Custom", kSettingsHiddenPollCustom, true, L"90"},
+                                    HiddenCase{240, true, L"Custom", kSettingsHiddenPollCustom, true, L"240"},
+                                    // Without an interval, Custom chosen earlier enables nothing.
+                                    HiddenCase{kHiddenPollNever, true, L"Not polled", 0, false, L"60"},
+                                    HiddenCase{kHiddenPollAsShown, true, L"Same as visible accounts", -1, false, L"60"}}) {
+            view.settings.hiddenPollMinutes = c.minutes;
+            view.hiddenPollCustom = c.custom;
+            frame = build(view);
+            CHECK(Control(frame, kHidden).text == c.shown && Control(frame, kHidden).action.value == c.value);
+            CHECK(Control(frame, kHiddenMinutes).enabled == c.enabled && Control(frame, kHiddenMinutes).text == c.box);
+            CHECK(HasText(frame, L"Choose Custom in Hidden accounts to edit.") == !c.enabled);
+            // The enabled box is a tab stop after its dropdown.
+            std::vector<UiFocusStop> stops = UiFocusStops(frame);
+            CHECK(stops.size() == size_t(6 + 7 + c.enabled));
+            CHECK(stops[6 + 4].ref.id == SettingsControlId(kHidden) &&
+                  (stops[6 + 5].ref.id == SettingsControlId(kHiddenMinutes)) == c.enabled);
+        }
+
+        // A saved custom interval being retyped: "30" projects to a preset, yet Custom stays and
+        // the box stays enabled; text that isn't a number shows with its error, on this card only.
+        view = TestView(SettingsUiPage::Behavior);
+        view.settings.hiddenPollMinutes = 30;
+        view.drafts.push_back({0, kHiddenMinutes, 1, true, L"30", 30, true, false});
+        frame = build(view);
+        CHECK(Control(frame, kHidden).text == L"Custom" && Control(frame, kHiddenMinutes).enabled &&
+              Control(frame, kHiddenMinutes).text == L"30");
+        view.drafts[0] = {0, kHiddenMinutes, 2, true, L"30x", 30, false, false, SettingsDraftError::Range};
+        frame = build(view);
+        CHECK(Control(frame, kHiddenMinutes).text == L"30x" && TextCount(frame, L"Enter a whole number from 2 to 1440.") == 1);
+        CHECK(Control(frame, kPoll, 8).text == L"10 minutes" && !Control(frame, kPoll).enabled &&
+              HasText(frame, L"Choose Custom in Cloud poll interval to edit."));
+        // The poll interval's Custom leaves the hidden accounts' box as it is, and the other way.
+        view = TestView(SettingsUiPage::Behavior);
+        view.pollCustom = true;
+        frame = build(view);
+        CHECK(Control(frame, kPoll).enabled && !Control(frame, kHiddenMinutes).enabled && Control(frame, kHidden).text == L"1 hour");
+        // A choice whose save failed shows as chosen, with its error.
+        view = TestView(SettingsUiPage::Behavior);
+        view.settings.hiddenPollMinutes = kHiddenPollNever;
+        view.drafts.push_back({0, kHidden, 1, false, L"", 0, true, true, SettingsDraftError::SaveFailed});
+        frame = build(view);
+        CHECK(Control(frame, kHidden).text == L"Not polled" && TextCount(frame, L"This change couldn't be saved.") == 1);
     });
 
     Run("history page: status lines, retention presets, forever and custom, consent, links, folder", [] {

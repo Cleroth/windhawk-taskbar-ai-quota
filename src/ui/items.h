@@ -28,14 +28,15 @@
 // rectangle's top edge. Segmented: one tab stop choosing among `options` (action.value = the
 // selected one's value); the pointer targets each segment (UiFocusRef::link = its index).
 // Pill: a status chip tinted with its `ink`, a dot (hollow unless selected) before `text`; never
-// interactive. Chart: client-drawn, a tab stop while enabled (no action needed, never activated):
+// interactive. Meter: a 4 DIP track along the rectangle's middle, filled from its start up to
+// action.value within [minimum, maximum] in `color`, else its ink; never interactive. Chart: client-drawn, a tab stop while enabled (no action needed, never activated):
 // the pointer over it reports to the client, which may answer with a readout (ui/host.h), and
 // its arrows scroll the content. Custom: client-drawn whole; a decoration, or with an action a
 // control like a button (hot, pressed, a tab stop, activated, its tooltip) whose focus ring is
 // rounded at its ends.
 enum class UiItemKind : uint8_t {
     Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option,
-    Slider, Swatch, Gallery, Preview, Chip, TextBox, Handle, Rule, Segmented, Pill, Chart, Custom
+    Slider, Swatch, Gallery, Preview, Chip, TextBox, Handle, Rule, Segmented, Pill, Meter, Chart, Custom
 };
 enum class UiButtonStyle : uint8_t { Standard, Accent, Subtle, Danger };
 
@@ -89,6 +90,7 @@ struct UiItem {
     std::vector<UiOption> options;   // Dropdown; menu Button; Segmented
     std::vector<UiRun> tooltip;      // Complete text shown after the hover delay (icon buttons, chips)
     float viewBox = 24;              // Shape: square view box mapped onto the rectangle
+    std::optional<D2D1_COLOR_F> color;  // Meter: its fill, a client color (high contrast ignores it)
     float opacity = 1;
     UiButtonStyle button = UiButtonStyle::Standard;  // Button; Card (Subtle)
     UiAction action;
@@ -138,7 +140,7 @@ struct UiFocusStop {
 
 static bool UiInteractiveKind(UiItemKind kind) {
     return kind != UiItemKind::Text && kind != UiItemKind::Glyph && kind != UiItemKind::Shape &&
-           kind != UiItemKind::Rule && kind != UiItemKind::Pill;
+           kind != UiItemKind::Rule && kind != UiItemKind::Pill && kind != UiItemKind::Meter;
 }
 
 // Reacts to the pointer and can be activated (a chart only reacts).

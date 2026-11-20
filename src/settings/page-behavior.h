@@ -1,7 +1,10 @@
-// Settings > Behavior: this user's language, where the bars show, hover details, polling and
-// notifications (approved mockup behavior.png). Pure builder.
+// Settings > Behavior: this user's language, where the bars show, hover details, polling (hidden
+// accounts' too) and notifications (approved mockup behavior.png). Pure builder.
 
 static constexpr int kSettingsPollPresets[] = {2, 5, 10, 15, 30, 60};
+// Hidden accounts' intervals, in minutes, and the dropdown's value for Custom.
+static constexpr int kSettingsHiddenPollPresets[] = {30, 60, 120, 240, 720, 1440};
+static constexpr int kSettingsHiddenPollCustom = -2;
 
 // Lays out the page from content y; returns the bottom of the last card.
 static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
@@ -104,14 +107,45 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
                                   I18nText(locale, TrCtx(L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}"),
                                            {{L"minutes", s.pollMinutes}}));
     }
+    // Hidden accounts: not polled, polled as the others, or at a slower interval: a preset, or
+    // Custom with its own number, as the cloud interval's.
+    bool hiddenPreset = std::find(std::begin(kSettingsHiddenPollPresets), std::end(kSettingsHiddenPollPresets),
+                                  s.hiddenPollMinutes) != std::end(kSettingsHiddenPollPresets);
+    const SettingsDraft* hiddenTyped = SettingsViewDraft(view, SettingsField::HiddenPollMinutes);
+    bool hiddenCustom = s.hiddenPollMinutes > 0 &&
+                        (view.hiddenPollCustom || !hiddenPreset || (hiddenTyped && hiddenTyped->text));
+    {
+        std::vector<UiOption> options{
+            {I18nText(locale, TrCtx(L"hidden-polling", L"Not polled")), kHiddenPollNever},
+            {I18nText(locale, TrCtx(L"hidden-polling", L"Same as visible accounts")), kHiddenPollAsShown}};
+        for (int minutes : kSettingsHiddenPollPresets) {
+            options.push_back(
+                {minutes % 60 ?
+                     I18nText(locale, TrCtx(L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}"),
+                              {{L"minutes", minutes}}) :
+                     I18nText(locale, TrCtx(L"poll-interval", L"{hours, plural, one{# hour} other{# hours}}"),
+                              {{L"hours", minutes / 60}}),
+                 minutes});
+        }
+        options.push_back({I18nText(locale, TrCtx(L"poll-interval", L"Custom")), kSettingsHiddenPollCustom});
+        UiCardSpec spec;
+        spec.title = I18nText(locale, Tr(L"Hidden accounts"));
+        spec.description = {{I18nText(locale, Tr(L"How often accounts hidden from the taskbar are polled, for "
+                                                 L"Accounts and usage history: never more often than visible ones. "
+                                                 L"Shared across Windows users."))}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HiddenPolling, 200,
+                                    std::move(options), hiddenCustom ? kSettingsHiddenPollCustom : s.hiddenPollMinutes);
+    }
     {
         UiCardSpec spec;
-        spec.title = I18nText(locale, Tr(L"Do not poll hidden accounts"));
-        spec.description = {{I18nText(locale, Tr(L"Hidden accounts are neither polled nor recorded, even with Record "
-                                                 L"history on. Turn off to keep recording them. Shared across Windows "
-                                                 L"users."))}};
-        y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec,
-                                  SettingsField::SkipHiddenPolling);
+        spec.title = I18nText(locale, Tr(L"Custom hidden interval"));
+        spec.description = {{I18nText(locale, Tr(L"2 to 1440 minutes."))}};
+        spec.enabled = hiddenCustom;
+        if (!hiddenCustom) spec.reason = I18nText(locale, Tr(L"Choose Custom in Hidden accounts to edit."));
+        // The unit agrees with the saved interval, not text still being typed.
+        y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HiddenPollMinutes,
+                                  I18nText(locale, TrCtx(L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}"),
+                                           {{L"minutes", SettingsFieldValue(s, SettingsField::HiddenPollMinutes)}}));
     }
 
     // Alerts: each level with its threshold from Display.

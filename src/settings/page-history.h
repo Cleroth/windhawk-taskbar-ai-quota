@@ -83,9 +83,9 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
     }
     y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::RetentionDays, 8), x, y + 3, width,
                      I18nUiRuns(I18nRuns(locale, Tr(L"Each account chooses whether it records: <link "
-                                                    L"id=\"accounts\">Accounts</link> > Record history. Hidden "
-                                                    L"accounts are not recorded while <link id=\"hidden\">Do not "
-                                                    L"poll hidden accounts</link> is on in Behavior.")),
+                                                    L"id=\"accounts\">Accounts</link> > Record history. A hidden "
+                                                    L"account records when it is polled: <link "
+                                                    L"id=\"hidden\">Behavior</link> > Hidden accounts.")),
                                 {{L"accounts", {UiActionKind::Navigate, int(SettingsUiPage::Accounts)}},
                                  {L"hidden", {UiActionKind::Navigate, int(SettingsUiPage::Behavior)}}}));
 

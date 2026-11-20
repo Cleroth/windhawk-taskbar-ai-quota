@@ -80,6 +80,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"ローカルのサンプルからのグラフ、統計、CSV エクスポート。記録がオフでも使えます。"},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"編集するには、［クラウドのポーリング間隔］で［カスタム］を選択してください。"},
+    {L"", L"Choose Custom in Hidden accounts to edit.", L"編集するには、［非表示のアカウント］で［カスタム］を選択してください。"},
     {L"", L"Choose Custom in Keep history to edit.", L"編集するには、［履歴の保持］で［カスタム］を選択してください。"},
     {L"", L"Choose an identity position to change this.", L"変更するには、識別表示の位置を選択してください。"},
     {L"", L"Claude logo", L"Claude のロゴ"},
@@ -103,6 +104,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"アカウントを保存できませんでした。コピーされたサインインは、変更しようとした新しい ID に残っています。削除するには、そのプロバイダーとラベルでアカウントを追加してから削除してください。"},
     {L"", L"Could not update account visibility.", L"アカウントの表示状態を更新できませんでした。"},
     {L"", L"Credits max", L"クレジット上限"},
+    {L"", L"Custom hidden interval", L"非表示アカウントのカスタム間隔"},
     {L"", L"Custom interval", L"カスタム間隔"},
     {L"", L"Custom retention", L"カスタムの保持期間"},
     {L"", L"Default time span", L"既定の期間"},
@@ -129,13 +131,15 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Display {number}’s taskbar is on a side of the screen: its tray takes no bars on this Windows build. "
           L"Update Windows to show them.",
      L"ディスプレイ {number} のタスク バーは画面の左右の端にあります。この Windows のビルドでは、そのシステム トレイにバーを表示できません。表示するには、Windows を更新してください。"},
-    {L"", L"Do not poll hidden accounts", L"非表示のアカウントをポーリングしない"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.", L"ドラッグして並べ替えます。スイッチでアカウントをタスク バーから非表示にします。"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
      L"ドラッグして並べ替えます。スイッチでアカウントをタスク バーから非表示にします。非表示のアカウントはポーリングされません。"},
-    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
-          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
-     L"記録するかどうかはアカウントごとに選択できます (［<link id=\"accounts\">アカウント</link>］>［履歴を記録］)。［動作］の［<link id=\"hidden\">非表示のアカウントをポーリングしない</link>］がオンの間、非表示のアカウントは記録されません。"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are polled less often.",
+     L"ドラッグして並べ替えます。スイッチでアカウントをタスク バーから非表示にします。非表示のアカウントはポーリングの頻度が下がります。"},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. A hidden "
+          L"account records when it is polled: <link id=\"hidden\">Behavior</link> > Hidden accounts.",
+     L"記録するかどうかはアカウントごとに選択できます (［<link id=\"accounts\">アカウント</link>］>［履歴を記録］)。非表示のアカウントはポーリングされたときに記録されます (［<link "
+     L"id=\"hidden\">動作</link>］>［非表示のアカウント］)。"},
     {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
           L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
           L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
@@ -173,10 +177,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Gauge thickness", L"ゲージの太さ"},
     {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
      L"高さ (ピクセル単位)。クォータごとに円グラフが 1 つで、3 つ目以降は小さくなります。"},
-    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
-          L"them. Shared across Windows users.",
-     L"非表示のアカウントは、［履歴を記録］がオンでもポーリングも記録もされません。記録を続けるにはオフにしてください。"
-     L"Windows のユーザー間で共有されます。"},
+    {L"", L"Hidden accounts", L"非表示のアカウント"},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
      L"履歴は、サインインし直してもこのエントリに引き継がれます。別のアカウントでサインインする場合は、新しいエントリを使ってください。"},
     {L"", L"History recording is off. Saved history stays; nothing new is recorded.",
@@ -185,6 +186,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"Anthropic、OpenAI、GitHub Copilot、OpenCode Go をポーリングする頻度です。Antigravity はローカル セッションを 1 分ごとにポーリングします。"},
+    {L"", L"How often accounts hidden from the taskbar are polled, for Accounts and usage history: never more often "
+          L"than visible ones. Shared across Windows users.",
+     L"タスク バーで非表示にしたアカウントを、［アカウント］と使用履歴のためにポーリングする頻度です。表示中のアカウントより頻繁にはなりません。Windows のユーザー間で共有されます。"},
     {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
           L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
      L"詳細フライアウトでの Anthropic の追加使用量の表示方法: その月のグラフ、週間クォータの期間に合わせた同じ目盛りのグラフ、またはバー。［使用量グラフ］のタイルで追加使用量に専用のグラフがある場合も、この設定に従います。"},
@@ -323,9 +327,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Report an issue", L"問題を報告"},
     {L"", L"Reset Behavior to defaults", L"動作を既定値にリセット"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
-          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
-     L"動作を既定値にリセットしますか？\n\n言語は自動、メイン ディスプレイのみに表示、ホバー時に詳細を表示、10 "
-     L"分ごとにポーリング、非表示のアカウントはポーリングしない、しきい値の通知は赤。"},
+          L"hover, poll every 10 minutes, hidden accounts every hour, threshold notifications at red.",
+     L"動作を既定値にリセットしますか？\n\n言語は自動、メイン ディスプレイのみに表示、ホバー時に詳細を表示、10 分ごとにポーリング、非表示のアカウントは 1 時間ごと、しきい値の通知は赤。"},
     {L"", L"Reset Display to defaults", L"表示を既定値にリセット"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
           L"reset too) with yellow from 50%, orange from 75% and red from 90%, stale data marked, additional OpenAI "
@@ -598,6 +601,12 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"account-state", L"Signed in", L"サインイン済み"},
     {L"account-state", L"Signing in…", L"サインイン中…"},
     {L"account-state", L"Waiting for the local app", L"ローカル アプリを待機中"},
+    {L"account-state", L"{hours, plural, one{Hidden, polled every hour} other{Hidden, polled every # hours}}",
+     L"{hours, plural, other{非表示、# 時間ごとにポーリング}}"},
+    {L"account-state", L"{minutes, plural, one{Hidden, polled every minute} other{Hidden, polled every # minutes}}",
+     L"{minutes, plural, other{非表示、# 分ごとにポーリング}}"},
+    {L"account-usage", L"{quota}: {percent} left, read {time}", L"{quota}: 残り {percent}、{time} 時点"},
+    {L"account-usage", L"{quota}: {percent} used, read {time}", L"{quota}: {percent} 使用、{time} 時点"},
     {L"add-account", L"Sign in with a code on github.com", L"github.com でコードを使ってサインイン"},
     {L"add-account", L"Sign in with an API key from the OpenCode console", L"OpenCode コンソールの API キーでサインイン"},
     {L"add-account", L"Sign in with your browser", L"ブラウザーでサインイン"},
@@ -733,6 +742,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"{count, plural, other{週間リセットが # 回利用可能}}"},
     {L"free-resets", L"{resets} · expires {when}", L"{resets} · 期限: {when}"},
     {L"free-resets", L"{resets} · next expires {when}", L"{resets} · 次回の期限: {when}"},
+    {L"hidden-polling", L"Not polled", L"ポーリングしない"},
+    {L"hidden-polling", L"Same as visible accounts", L"表示中のアカウントと同じ"},
     {L"history-about", L"Axes and units", L"軸と単位"},
     {L"history-about", L"Cards", L"カード"},
     {L"history-about", L"Legend and readout", L"凡例と値の表示"},
@@ -898,6 +909,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"placement", L"Right of Start", L"スタート ボタンの右"},
     {L"plan", L"Visual test", L"ビジュアル テスト"},
     {L"poll-interval", L"Custom", L"カスタム"},
+    {L"poll-interval", L"{hours, plural, one{# hour} other{# hours}}", L"{hours, plural, other{# 時間}}"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}", L"{minutes, plural, other{# 分}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}", L"{minutes, plural, other{分}}"},
     {L"preview", L"Preview", L"プレビュー"},

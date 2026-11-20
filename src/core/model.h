@@ -219,6 +219,11 @@ enum class NotificationLevel {
     Red,
 };
 
+// Settings::hiddenPollMinutes in place of an interval: hidden accounts aren't polled, or are
+// polled as often as shown ones.
+static constexpr int kHiddenPollNever = 0;
+static constexpr int kHiddenPollAsShown = -1;
+
 struct Settings {
     std::vector<AccountConfig> accounts;
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
@@ -238,7 +243,9 @@ struct Settings {
     int historyRetentionDays = 0;
     // The range the usage history window opens on.
     HistoryUiRange historyDefaultRange = HistoryUiRange::Week;
-    bool skipHiddenPolling = true;
+    // Minutes between a hidden account's polls (AccountPollMinutes), or kHiddenPollNever or
+    // kHiddenPollAsShown.
+    int hiddenPollMinutes = 60;
     int barLength = 100;          // Stacked bars'
     int verticalBarLength = 32;   // Vertical bars', short enough to fit the taskbar
     int barThickness = 8;
@@ -319,6 +326,23 @@ struct Settings {
 // The tile style's percentage text: vertical bars keep their own.
 static PercentTextVisibility PercentTextVisibilityFor(const Settings& s) {
     return s.barLayout == BarLayout::Vertical ? s.verticalPercentTextVisibility : s.percentTextVisibility;
+}
+
+// Minutes between an account's polls: Antigravity's local server every minute, the others at the
+// cloud poll interval; a hidden account at the hidden interval, never more often than shown. 0: a
+// hidden account that isn't polled. `pollMinutes`, `hiddenPollMinutes`: the settings'.
+static int AccountPollMinutes(const AccountConfig& account, int pollMinutes, int hiddenPollMinutes) {
+    int shown = account.provider == L"antigravity" ? 1 : pollMinutes;
+    if (!account.hidden || hiddenPollMinutes < 0) return shown;
+    return hiddenPollMinutes ? std::max(hiddenPollMinutes, shown) : 0;
+}
+
+// How long after it was read an account's reading is stale: two of its polls; a hidden account's
+// that isn't polled, two of a shown one's.
+static ULONGLONG AccountStaleAfterMs(const AccountConfig& account, int pollMinutes, int hiddenPollMinutes) {
+    int minutes = AccountPollMinutes(account, pollMinutes, hiddenPollMinutes);
+    if (!minutes) minutes = AccountPollMinutes(account, pollMinutes, kHiddenPollAsShown);
+    return ULONGLONG(minutes) * 2 * 60000;
 }
 
 static constexpr ULONGLONG kFiveHourWindowMs = 5ULL * 60 * 60 * 1000;
@@ -483,6 +507,30 @@ struct AccountData {
     bool stale = true;
     bool needsLogin = false;  // Sign-in required; left-click signs in instead of refreshing.
 };
+
+// An account's usage where one number stands for it (the Accounts list, the taskbar menu's Show
+// on taskbar entries): its weekly quota; its Fable or Argon weekly while that one is on the
+// taskbar and the weekly isn't; GitHub Copilot's only quota, its monthly allowance.
+struct AccountUsageSummary {
+    int bar = kWeeklyBar;  // The quota's QuotaBarIndex
+    double pct = -1;       // Used %; < 0: no reading
+    bool stale = false;    // The last poll failed, or the reading is older than AccountStaleAfterMs
+};
+
+// A reading counts until its window resets: after that it says nothing about the new one.
+static AccountUsageSummary AccountUsageSummaryFor(const Settings& s, const AccountConfig& account,
+                                                  const AccountData& data, ULONGLONG now) {
+    AccountUsageSummary summary;
+    summary.bar = account.provider == L"copilot"                                     ? kExtraUsageBar :
+                  !account.showBars[kWeeklyBar] && account.showBars[kFableWeeklyBar] ? kFableWeeklyBar : kWeeklyBar;
+    const WindowUsage& usage = summary.bar == kExtraUsageBar  ? data.extraUsage :
+                               summary.bar == kFableWeeklyBar ? data.fableWeek : data.winWeek;
+    summary.stale = data.stale || !data.lastSuccessMs ||
+                    now - data.lastSuccessMs > AccountStaleAfterMs(account, s.pollMinutes, s.hiddenPollMinutes);
+    bool reset = usage.resetUnixMs > data.lastSuccessMs && now >= usage.resetUnixMs;
+    if (std::isfinite(usage.pct) && !reset) summary.pct = usage.pct;
+    return summary;
+}
 
 // A provider's status page state, by severity: its worst watched component that isn't operational.
 enum class OutageLevel : uint8_t {

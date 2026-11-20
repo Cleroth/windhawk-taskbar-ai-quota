@@ -111,6 +111,11 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
 
     int visible = int(std::count_if(s.accounts.begin(), s.accounts.end(),
                                     [](const AccountConfig& account) { return !account.hidden; }));
+    // Each card's usage at a glance: a percentage in the room of "100%", after a meter on a card
+    // wide enough for it.
+    const float percentWidth = textWidth(I18nFixed(locale, 100, 0) + L"%", UiFont::Note);
+    const float meterWidth = width >= 560 ? 48 : 0;
+    const std::array<uint32_t, 4> usageColors = UsagePaletteColors(s.usagePalette, s.customUsageColors);
     std::vector<UiItem> lifted;
     float top = y + 14;
     for (size_t i = 0; i < s.accounts.size() && i < view.accounts.size(); i++) {
@@ -133,8 +138,15 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         const bool anthropic = account.provider == L"anthropic", openai = account.provider == L"openai";
         const bool copilot = account.provider == L"copilot", opencode = account.provider == L"opencode";
         const bool signsIn = anthropic || openai || copilot || opencode;
-        const bool notPolled = account.hidden && (s.skipHiddenPolling || !s.historyEnabled || !account.recordHistory);
+        const bool notPolled = account.hidden && s.hiddenPollMinutes == kHiddenPollNever;
         const bool signInNeeded = signsIn && !status.signingIn && (!status.signedIn || status.needsSignIn);
+        // Its usage at a glance, as the taskbar shows it (used or left; three digits at most); none
+        // on a card that asks for a sign-in, whose button takes the room.
+        const AccountUsageSummary& usage = status.usage;
+        const bool usageRead = !signInNeeded && usage.pct >= 0;
+        const double usageShown =
+            std::min(s.barMode == BarMode::Remaining ? std::clamp(100 - usage.pct, 0.0, 100.0) : usage.pct, 999.0);
+        const std::wstring usageText = usageRead ? I18nFixed(locale, usageShown, 0) + L"%" : L"\u2014";
         const int bars = SettingsAccountValue(account, SettingsField::AccountBars);
         std::vector<UiItem> cardItems;
         auto push = [&](UiItem item) { cardItems.push_back(std::move(item)); };
@@ -157,7 +169,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         push(header);
 
         // Grip, logo; then, laid out from the right but in reading (and focus) order: Sign in,
-        // quota keys, visibility, chevron.
+        // quota keys, usage, visibility, chevron.
         UiItem handle;
         handle.id = control(SettingsField::AccountMove);
         handle.kind = UiItemKind::Handle;
@@ -193,6 +205,38 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                     !account.hidden, account.hidden || visible > 1,
                     command(SettingsField::AccountHidden, !account.hidden), UiToggleText{});
         right -= 40 + 14;
+        // Usage, at the same spot on every card that shows it: the percentage, right-aligned,
+        // after its meter; both in the reading's usage color, grey once it is out of date. A dash
+        // without a reading.
+        if (!signInNeeded) {
+            const uint32_t color = UsageColor(usage.pct, usage.stale, s.yellowThreshold, s.orangeThreshold,
+                                              s.redThreshold, usageColors);
+            UiItem percent;
+            percent.id = id++;
+            percent.kind = UiItemKind::Text;
+            percent.font = UiFont::Note;
+            percent.ink = UiInk::Muted;
+            percent.align = DWRITE_TEXT_ALIGNMENT_TRAILING;
+            percent.rect = {right - percentWidth, cy - 10, right, cy + 10};
+            percent.runs.push_back({usageText});
+            if (usageRead && !usage.stale) {
+                percent.ink = UiInk::Primary;
+                percent.runs[0].color = UiRgb(UsageTextColor(color, view.theme == UiThemeKind::Light));
+            }
+            trailing.push_back(std::move(percent));
+            right -= percentWidth;
+            if (usageRead && meterWidth > 0) {
+                UiItem meter;
+                meter.id = id++;
+                meter.kind = UiItemKind::Meter;
+                meter.rect = {right - 8 - meterWidth, cy - 8, right - 8, cy + 8};
+                meter.maximum = 100;
+                meter.action.value = int(std::lround(std::min(usageShown, 100.0)));
+                meter.color = UiRgb(color & 0xFFFFFF);
+                trailing.push_back(std::move(meter));
+            }
+            right -= (meterWidth > 0 ? 8 + meterWidth : 0) + 14;
+        }
         for (int bar = kQuotaBarCount - 1; bar >= 0; bar--) {
             if (!((bars >> bar) & 1)) continue;
             std::wstring text = QuotaKey(view.locale, account.provider, bar);
@@ -228,7 +272,9 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         // Label and "Provider · plan · status", the status in its color (the last poll's error on
         // its own), each one line before the controls. Where the details don't fit they drop the
         // plan, then the provider (its logo stays), then the status ellipsizes; the label
-        // ellipsizes. Anything left out or cut, the header's tooltip holds both lines whole.
+        // ellipsizes. Anything left out or cut, the header's tooltip holds both lines whole; it
+        // also shows for a reading that is out of date, and then names the usage's quota and when
+        // it was read.
         std::wstring stateText;
         UiInk stateInk = UiInk::Success;
         std::wstring error = AccountErrorText(view.locale, status.error, AccountErrorForm::Alone);
@@ -245,6 +291,20 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             stateText = !signsIn && status.error.code == AccountErrorCode::AntigravityNotRunning ?
                             I18nText(view.locale, TrCtx(L"account-state", L"Local app not running")) : error;
             stateInk = UiInk::Caution;
+        } else if (account.hidden) {
+            // Its interval, in hours when it is whole ones.
+            int minutes = AccountPollMinutes(account, s.pollMinutes, s.hiddenPollMinutes);
+            stateText =
+                minutes % 60 ?
+                    I18nText(locale,
+                             TrCtx(L"account-state", L"{minutes, plural, one{Hidden, polled every minute} "
+                                                     L"other{Hidden, polled every # minutes}}"),
+                             {{L"minutes", minutes}}) :
+                    I18nText(locale,
+                             TrCtx(L"account-state", L"{hours, plural, one{Hidden, polled every hour} "
+                                                     L"other{Hidden, polled every # hours}}"),
+                             {{L"hours", minutes / 60}});
+            stateInk = UiInk::Secondary;
         } else if (!signsIn) {
             stateText = I18nText(locale, status.polled ? TrCtx(L"account-state", L"Local app running") :
                                                          TrCtx(L"account-state", L"Waiting for the local app"));
@@ -286,9 +346,20 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         state.rect = {textLeft, cy + 2, textRight, cy + 18};
         state.runs = shown;
         state.trim = true;
-        if (!fits(title.runs, UiFont::Body) || !fits(details, UiFont::Caption)) {
+        if (!fits(title.runs, UiFont::Body) || !fits(details, UiFont::Caption) || (usageRead && usage.stale)) {
             cardItems[1].tooltip = {{account.label, UiRunStyle::Strong}, {L"\n"}};
             cardItems[1].tooltip.insert(cardItems[1].tooltip.end(), details.begin(), details.end());
+            if (usageRead) {
+                cardItems[1].tooltip.push_back({L"\n"});
+                cardItems[1].tooltip.push_back(
+                    {I18nText(locale,
+                              s.barMode == BarMode::Remaining ?
+                                  TrCtx(L"account-usage", L"{quota}: {percent} left, read {time}") :
+                                  TrCtx(L"account-usage", L"{quota}: {percent} used, read {time}"),
+                              {{L"quota", QuotaKey(locale, account.provider, usage.bar)},
+                               {L"percent", usageText},
+                               {L"time", status.usageTime.empty() ? L"?" : status.usageTime}})});
+            }
         }
         push(std::move(title));
         push(std::move(state));
@@ -482,7 +553,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                         Recording{L"\u25CF ", TrCtx(L"recording-status", L"Waiting"), UiInk::Caution} :
                     !account.historyId ?
                         Recording{L"\u25CF ", TrCtx(L"recording-status", L"Unavailable"), UiInk::Caution} :
-                    account.hidden && s.skipHiddenPolling ?
+                    notPolled ?
                         Recording{L"\u25CF ", TrCtx(L"recording-status", L"Paused while hidden"), UiInk::Caution} :
                     view.status.recording == SettingsRecording::StorageError ?
                         Recording{L"\u25CF ", TrCtx(L"recording-status", L"Not saving"), UiInk::Danger} :

@@ -47,15 +47,16 @@ static const SettingsDraft* DraftOf(const SettingsEdits& edits, uint64_t key, Se
 static constexpr SettingsField kLabel = SettingsField::AccountLabel;
 
 // The Accounts page as the mockups show it: OAI signed in (Plus), CC 1 needing a sign-in (Pro),
-// CC 2 signed in (Ultra), Go with its local app running (AI Pro).
+// CC 2 signed in (Ultra), Go with its local app running (AI Pro). Each with a fresh weekly reading
+// taken at 14:32: OAI 62%, CC 1 40% (a card that needs a sign-in shows none), CC 2 93%, Go 12%.
 static SettingsView AccountsView(std::initializer_list<int> expanded = {}) {
     SettingsView view = TestView(SettingsUiPage::Accounts);
     AddTestAccounts(view.settings);
     const SettingsAccountStatus statuses[] = {
-        {L"Plus", {}, true, true, false, false},
-        {L"Pro", {AccountErrorCode::NotSignedIn}, false, false, true, false},
-        {L"Ultra", {}, true, true, false, false},
-        {L"AI Pro", {}, true, false, false, false},
+        {L"Plus", {}, true, true, false, false, {kWeeklyBar, 62, false}, L"14:32"},
+        {L"Pro", {AccountErrorCode::NotSignedIn}, false, false, true, false, {kWeeklyBar, 40, false}, L"14:32"},
+        {L"Ultra", {}, true, true, false, false, {kWeeklyBar, 93, false}, L"14:32"},
+        {L"AI Pro", {}, true, false, false, false, {kWeeklyBar, 12, false}, L"14:32"},
     };
     for (int i = 0; i < 4; i++) {
         SettingsViewAccount account;
@@ -72,24 +73,44 @@ static uint32_t AccountId(uint32_t slot, SettingsField field, uint32_t part = 0)
     return SettingsAccountControlId(slot, field, part);
 }
 
-// Nine accounts of every provider with long labels, plans and errors: history IDs (keys) 21-29,
-// slots 1-9, cards in `order` (indexes into that list), the listed ones expanded.
+// The usage a card's 68 DIP header shows: its percentage (or dash), the header's only
+// right-aligned text, and its meter; null where it shows none.
+struct TestCardUsage {
+    const UiItem* percent = nullptr;
+    const UiItem* meter = nullptr;
+};
+
+static TestCardUsage CardUsage(const UiFrame& frame, uint32_t slot) {
+    const UiItem* header = UiFindItem(frame, AccountId(slot, SettingsField::AccountExpand));
+    if (!header) throw std::runtime_error("missing card " + std::to_string(slot));
+    TestCardUsage usage;
+    for (const UiItem& item : frame.content) {
+        if (item.rect.top < header->rect.top || item.rect.bottom > header->rect.bottom) continue;
+        if (item.kind == UiItemKind::Meter) usage.meter = &item;
+        if (item.kind == UiItemKind::Text && item.align == DWRITE_TEXT_ALIGNMENT_TRAILING) usage.percent = &item;
+    }
+    return usage;
+}
+
+// Nine accounts of every provider with long labels, plans and errors, some with readings (fresh,
+// stale, past 100%): history IDs (keys) 21-29, slots 1-9, cards in `order` (indexes into that
+// list), the listed ones expanded.
 static SettingsView NineAccountsView(std::vector<size_t> order, std::initializer_list<size_t> expanded) {
     struct Entry {
         PCWSTR provider, label;
         SettingsAccountStatus status;
     };
     const Entry entries[] = {
-        {L"anthropic", L"Claude Max (personal)", {L"Ultra", {}, true, true, false, false}},
-        {L"anthropic", L"Work", {L"Team", {}, true, true, false, false}},
+        {L"anthropic", L"Claude Max (personal)", {L"Ultra", {}, true, true, false, false, {kWeeklyBar, 112, false}, L"14:32"}},
+        {L"anthropic", L"Work", {L"Team", {}, true, true, false, false, {kWeeklyBar, 47, false}, L"14:32"}},
         {L"openai", L"ChatGPT Pro", {L"Pro", {}, true, true, false, false}},
         {L"anthropic", L"Old login",
          {L"Pro", {AccountErrorCode::NotSignedIn}, false, false, true, false}},
-        {L"antigravity", L"Gemini desktop", {L"AI Pro", {}, true, false, false, false}},
+        {L"antigravity", L"Gemini desktop", {L"AI Pro", {}, true, false, false, false, {kWeeklyBar, 8, false}, L"14:32"}},
         {L"openai", L"Codex (team seat)", {L"Plus", {}, true, true, false, false}},
         {L"anthropic", L"Side project",
          {L"Max", {AccountErrorCode::Message, L"HTTP 429: rate limited, retrying in 5 minutes"}, true, true, false,
-          false}},
+          false, {kWeeklyBar, 81, true}, L"Tue 09:05"}},
         {L"openai", L"Business", {L"Business", {}, true, true, false, false}},
         {L"antigravity", L"Laptop", {L"", {AccountErrorCode::AntigravityNotRunning}, false, false, false, false}},
     };
@@ -563,7 +584,308 @@ static void RunAccountEditTests() {
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(!UiFindItem(frame, AccountId(4, SettingsField::AccountHidden))->enabled);
         CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountHidden))->enabled);
-        CHECK(HasText(frame, L"Hidden, not polled"));
+        CHECK(HasText(frame, L"OpenAI \u00B7 Plus \u00B7 Hidden, polled every hour"));
+    });
+
+    Run("accounts page: each card's usage left of its switch, at the same spot on every card: the percentage in "
+        "the room of 100% after a 48 DIP meter; a dash without a reading; neither where a sign-in is needed; no "
+        "meter on a card under 560 DIP", [] {
+        UiGraphics& g = TestGraphics();
+        SettingsView view = AccountsView();
+        view.accounts[3].status.usage = {};  // Go: no reading
+        const float room = TestTextWidth(L"100%", UiFont::Note);
+        auto lastChip = [](const UiFrame& frame, uint32_t slot) {
+            const UiItem* header = UiFindItem(frame, AccountId(slot, SettingsField::AccountExpand));
+            float right = 0;
+            for (const UiItem& item : frame.content) {
+                if (item.kind == UiItemKind::Chip && item.rect.top >= header->rect.top && item.rect.bottom <= header->rect.bottom) {
+                    right = std::max(right, item.rect.right);
+                }
+            }
+            return right;
+        };
+        auto index = [](const UiFrame& frame, const UiItem* item) { return item - frame.content.data(); };
+        UiFrame frame;
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        // 680 DIP cards from 20: 17 DIP in, the 16 DIP chevron, 14, the 40 DIP switch, 14, the
+        // percentage, 8, the meter, then the quota keys 14 before it.
+        const float percentRight = 700 - 17 - 16 - 14 - 40 - 14, meterRight = percentRight - room - 8;
+        const std::pair<uint32_t, PCWSTR> shown[] = {{1, L"62%"}, {3, L"93%"}, {4, L"\u2014"}};
+        for (auto [slot, text] : shown) {
+            TestCardUsage usage = CardUsage(frame, slot);
+            float cy = 14 + 72.0f * float(slot - 1) + 34;
+            CHECK(usage.percent && usage.percent->font == UiFont::Note && UiRunsText(usage.percent->runs) == text &&
+                  !usage.percent->trim);
+            CHECK_NEAR(usage.percent->rect.right, percentRight);
+            CHECK_NEAR(usage.percent->rect.left, percentRight - room);
+            CHECK_NEAR(usage.percent->rect.top, cy - 10);
+            CHECK_NEAR(usage.percent->rect.bottom, cy + 10);
+            // The room stays where no meter shows: every card's keys end at the same spot.
+            CHECK_NEAR(lastChip(frame, slot), meterRight - 48 - 14);
+            const UiItem* visible = UiFindItem(frame, AccountId(slot, SettingsField::AccountHidden));
+            CHECK_NEAR(visible->rect.left, percentRight + 14);
+            CHECK((usage.meter != nullptr) == (slot != 4));
+            if (!usage.meter) {
+                // The dash: the muted ink, no color.
+                CHECK(usage.percent->ink == UiInk::Muted && !usage.percent->runs[0].color);
+                continue;
+            }
+            CHECK_NEAR(usage.meter->rect.right, meterRight);
+            CHECK_NEAR(usage.meter->rect.left, meterRight - 48);
+            CHECK_NEAR(usage.meter->rect.top, cy - 8);
+            CHECK_NEAR(usage.meter->rect.bottom, cy + 8);
+            CHECK(usage.meter->minimum == 0 && usage.meter->maximum == 100 && usage.meter->enabled);
+            // In reading order: the keys, the meter, the percentage, the switch.
+            CHECK(index(frame, usage.meter) < index(frame, usage.percent) && index(frame, usage.percent) < index(frame, visible));
+            // Neither takes the pointer or the focus: the header under them does.
+            for (const UiItem* item : {usage.meter, usage.percent}) {
+                D2D1_POINT_2F center{(item->rect.left + item->rect.right) / 2, (item->rect.top + item->rect.bottom) / 2};
+                CHECK(UiHitTest(g, frame.content, center) == UiFocusRef{AccountId(slot, SettingsField::AccountExpand)});
+            }
+        }
+        CHECK(UiFocusStops(frame).size() == 6 + 1 + 4 * 2 + 1);
+        // CC 1 needs a sign-in: no usage, its keys 14 DIP before the switch, Sign in before them.
+        TestCardUsage none = CardUsage(frame, 2);
+        CHECK(!none.percent && !none.meter);
+        CHECK_NEAR(lastChip(frame, 2), percentRight);
+        CHECK(UiFindItem(frame, AccountId(2, SettingsField::AccountSignIn))->rect.right < percentRight - room);
+        // While its sign-in window is open the button is gone and its reading shows.
+        view.accounts[1].status.signingIn = true;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(UiRunsText(CardUsage(frame, 2).percent->runs) == L"40%" && CardUsage(frame, 2).meter &&
+              !UiFindItem(frame, AccountId(2, SettingsField::AccountSignIn)));
+        view.accounts[1].status.signingIn = false;
+
+        // A 560 DIP card (an 880 DIP client) still has the meter, a 559 DIP one only the
+        // percentage, its keys 14 DIP before it; so the window's minimum, 464 DIP. The card is the
+        // client less the 260 DIP pane and 60 DIP around it, from 20; the percentage ends 101 DIP
+        // before its edge.
+        for (float client : {880.0f, 879.0f, 784.0f}) {
+            frame = {};
+            SettingsUiBuildFrame(g, view, {client, 820}, frame);
+            const float right = 20 + (client - 320) - 101;
+            const bool meters = client == 880;
+            for (uint32_t slot : {1u, 3u, 4u}) {
+                TestCardUsage usage = CardUsage(frame, slot);
+                CHECK(usage.percent && (usage.meter != nullptr) == (meters && slot != 4));
+                CHECK_NEAR(usage.percent->rect.right, right);
+                CHECK_NEAR(usage.percent->rect.left, right - room);
+                CHECK_NEAR(lastChip(frame, slot), right - room - (meters ? 8 + 48 : 0) - 14);
+                if (usage.meter) CHECK_NEAR(usage.meter->rect.right - usage.meter->rect.left, 48);
+            }
+            CHECK(!CardUsage(frame, 2).percent && !CardUsage(frame, 2).meter);
+        }
+    });
+
+    Run("accounts page: a fresh reading in its usage color, as text in the theme's variant; a stale one muted "
+        "with a grey meter; used or left as the taskbar shows it, rounded, the meter within 0 to 100", [] {
+        UiGraphics& g = TestGraphics();
+        auto usageOf = [&](const SettingsView& view, uint32_t slot) {
+            UiFrame frame;
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            TestCardUsage usage = CardUsage(frame, slot);
+            if (!usage.percent || !usage.meter) throw std::runtime_error("no usage shown");
+            // Text, the percentage's run color (0: its ink alone), its ink; the meter's value and color.
+            struct Shown {
+                std::wstring text;
+                uint32_t textColor;
+                UiInk ink;
+                int value;
+                uint32_t color;
+            };
+            const UiRun& run = usage.percent->runs.at(0);
+            return Shown{run.text, run.color ? UiColorKey(*run.color) : 0, usage.percent->ink, usage.meter->action.value,
+                         usage.meter->color ? UiColorKey(*usage.meter->color) : 0};
+        };
+        auto contrast = [](uint32_t rgb) { return 1.05 / (RelativeLuminance(rgb & 0xFFFFFF) + 0.05); };
+        SettingsView view = AccountsView();
+        // By the default thresholds (50, 75, 90): OAI's 62% yellow, CC 2's 93% red, Go's 12% green.
+        // Dark and high contrast: the color itself; light: red and green as the usage history
+        // window's sidebar shows them, yellow darkened until it reads on white. The meter keeps
+        // the usage color in every theme.
+        for (UiThemeKind theme : {UiThemeKind::Dark, UiThemeKind::HighContrast, UiThemeKind::Light}) {
+            view.theme = theme;
+            const bool light = theme == UiThemeKind::Light;
+            auto red = usageOf(view, 3), green = usageOf(view, 4), yellow = usageOf(view, 1);
+            CHECK(red.text == L"93%" && red.ink == UiInk::Primary && red.value == 93 && red.color == 0xFFE53935);
+            CHECK(red.textColor == (light ? 0xFFC42B1C : 0xFFE53935));
+            CHECK(green.text == L"12%" && green.ink == UiInk::Primary && green.value == 12 && green.color == 0xFF43A047);
+            CHECK(green.textColor == (light ? 0xFF1D7A35 : 0xFF43A047));
+            CHECK(yellow.text == L"62%" && yellow.value == 62 && yellow.color == 0xFFFDD835);
+            CHECK(light ? yellow.textColor != 0xFFFDD835 && contrast(yellow.textColor) >= 4.5 : yellow.textColor == 0xFFFDD835);
+            // Stale: the muted ink without a color, a grey meter, whatever the theme.
+            SettingsView old = view;
+            old.accounts[2].status.usage.stale = true;
+            auto stale = usageOf(old, 3);
+            CHECK(stale.text == L"93%" && stale.ink == UiInk::Muted && !stale.textColor && stale.value == 93 &&
+                  stale.color == 0xFF9E9E9E);
+        }
+        // The settings' thresholds and palette: 12% is yellow from 10; the colorblind blue reads on
+        // white as it is; a custom color (0xBBGGRR) below yellow.
+        view.theme = UiThemeKind::Light;
+        view.settings.yellowThreshold = 10;
+        CHECK(usageOf(view, 4).color == 0xFFFDD835);
+        view.settings.yellowThreshold = 50;
+        view.settings.usagePalette = UsagePalette::Colorblind;
+        CHECK(usageOf(view, 4).color == 0xFF0072B2 && usageOf(view, 4).textColor == 0xFF0072B2);
+        CHECK(usageOf(view, 3).color == 0xFFD55E00);
+        view.settings.usagePalette = UsagePalette::Custom;
+        view.settings.customUsageColors[0] = RGB(0x10, 0x20, 0x30);
+        CHECK(usageOf(view, 4).color == 0xFF102030 && usageOf(view, 4).textColor == 0xFF102030);
+        view.settings.usagePalette = UsagePalette::Default;
+
+        // Remaining mode: what is left, in the used share's color.
+        view.theme = UiThemeKind::Dark;
+        view.settings.barMode = BarMode::Remaining;
+        auto left = usageOf(view, 1);
+        CHECK(left.text == L"38%" && left.value == 38 && left.color == 0xFFFDD835 && left.textColor == 0xFFFDD835);
+        CHECK(usageOf(view, 3).text == L"7%" && usageOf(view, 3).color == 0xFFE53935);
+        // Past 100% used: nothing left, an empty meter; used, the number as read and a full meter.
+        view.accounts[2].status.usage.pct = 112.4;
+        CHECK(usageOf(view, 3).text == L"0%" && usageOf(view, 3).value == 0);
+        view.settings.barMode = BarMode::Used;
+        CHECK(usageOf(view, 3).text == L"112%" && usageOf(view, 3).value == 100 && usageOf(view, 3).color == 0xFFE53935);
+        // Whole percents, rounded.
+        view.accounts[2].status.usage.pct = 41.6;
+        CHECK(usageOf(view, 3).text == L"42%" && usageOf(view, 3).value == 42);
+        view.accounts[2].status.usage.pct = 0.4;
+        CHECK(usageOf(view, 3).text == L"0%" && usageOf(view, 3).value == 0);
+        view.settings.barMode = BarMode::Remaining;
+        CHECK(usageOf(view, 3).text == L"100%" && usageOf(view, 3).value == 100);
+    });
+
+    Run("accounts page: the header's tooltip shows for a stale reading and names its quota and when it was "
+        "read; a tooltip for cut text ends with the same line; none without a reading", [] {
+        UiGraphics& g = TestGraphics();
+        auto tooltip = [&](const SettingsView& view, uint32_t slot) {
+            UiFrame frame;
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            return UiFindItem(frame, AccountId(slot, SettingsField::AccountExpand))->tooltip;
+        };
+        SettingsView view = AccountsView();
+        for (uint32_t slot = 1; slot <= 4; slot++) CHECK(tooltip(view, slot).empty());
+        // CC 2's reading out of date: its label (strong), its details, then the reading.
+        view.accounts[2].status.usage.stale = true;
+        std::vector<UiRun> stale = tooltip(view, 3);
+        CHECK(UiRunsText(stale) == L"CC 2\nAnthropic \u00B7 Ultra \u00B7 Signed in\n7d: 93% used, read 14:32");
+        CHECK(stale.at(0).text == L"CC 2" && stale[0].style == UiRunStyle::Strong);
+        for (uint32_t slot : {1u, 2u, 4u}) CHECK(tooltip(view, slot).empty());
+        // Read on another day, or at a time that couldn't be told.
+        view.accounts[2].status.usageTime = L"Tue 09:05";
+        CHECK(UiRunsText(tooltip(view, 3)).ends_with(L"\n7d: 93% used, read Tue 09:05"));
+        view.accounts[2].status.usageTime.clear();
+        CHECK(UiRunsText(tooltip(view, 3)).ends_with(L"\n7d: 93% used, read ?"));
+        view.accounts[2].status.usageTime = L"14:32";
+        // Remaining mode: what is left.
+        view.settings.barMode = BarMode::Remaining;
+        CHECK(UiRunsText(tooltip(view, 3)).ends_with(L"\n7d: 7% left, read 14:32"));
+        view.settings.barMode = BarMode::Used;
+        // The quota's key: Fable's, Antigravity's Argon, GitHub Copilot's month.
+        view.accounts[2].status.usage.bar = kFableWeeklyBar;
+        CHECK(UiRunsText(tooltip(view, 3)).ends_with(L"\nFa: 93% used, read 14:32"));
+        view.accounts[3].status.usage = {kFableWeeklyBar, 12, true};
+        CHECK(UiRunsText(tooltip(view, 4)) == L"Go\nAntigravity \u00B7 AI Pro \u00B7 Local app running\nAr: 12% used, read 14:32");
+        view.settings.accounts[0].provider = L"copilot";
+        view.accounts[0].status.usage = {kExtraUsageBar, 62, true};
+        CHECK(UiRunsText(tooltip(view, 1)) == L"OAI\nGitHub Copilot \u00B7 Plus \u00B7 Signed in\nMo: 62% used, read 14:32");
+        // A stale state without a reading, or on a card that needs a sign-in: no tooltip.
+        view.accounts[3].status.usage = {kWeeklyBar, -1, true};
+        view.accounts[1].status.usage.stale = true;
+        CHECK(tooltip(view, 4).empty() && tooltip(view, 2).empty());
+
+        // A fresh reading: its line only once the tooltip shows, here for a label cut before the
+        // controls; a cut card without a reading has the two lines alone.
+        view = AccountsView();
+        const std::wstring label = L"The shared seat of the research and platform teams, renewed every March by procurement";
+        view.settings.accounts[0].label = label;
+        CHECK(UiRunsText(tooltip(view, 1)) == label + L"\nOpenAI \u00B7 Plus \u00B7 Signed in\n7d: 62% used, read 14:32");
+        view.accounts[0].status.usage = {};
+        CHECK(UiRunsText(tooltip(view, 1)) == label + L"\nOpenAI \u00B7 Plus \u00B7 Signed in");
+    });
+
+    Run("accounts page: a hidden account's state says how often it is polled, in hours when they are whole; "
+        "not polled only while hidden accounts aren't; the Record history row and the header's note follow", [] {
+        UiGraphics& g = TestGraphics();
+        // OAI (cloud, its card expanded) and Go (Antigravity's local app) hidden; cards wide enough
+        // for every state's whole line.
+        SettingsView view = AccountsView({0});
+        view.settings.accounts[0].hidden = view.settings.accounts[3].hidden = true;
+        auto build = [&](int hiddenMinutes, int pollMinutes = 10) {
+            view.settings.hiddenPollMinutes = hiddenMinutes;
+            view.settings.pollMinutes = pollMinutes;
+            UiFrame frame;
+            SettingsUiBuildFrame(g, view, {1300, 820}, frame);
+            return frame;
+        };
+        struct StateCase {
+            int hidden, poll;
+            PCWSTR cloud, local;
+        };
+        for (const StateCase& c : {StateCase{60, 10, L"Hidden, polled every hour", L"Hidden, polled every hour"},
+                                   StateCase{120, 10, L"Hidden, polled every 2 hours", L"Hidden, polled every 2 hours"},
+                                   StateCase{1440, 10, L"Hidden, polled every 24 hours", L"Hidden, polled every 24 hours"},
+                                   StateCase{30, 10, L"Hidden, polled every 30 minutes", L"Hidden, polled every 30 minutes"},
+                                   StateCase{90, 10, L"Hidden, polled every 90 minutes", L"Hidden, polled every 90 minutes"},
+                                   // Never more often than visible ones: the cloud interval, Antigravity's minute.
+                                   StateCase{5, 10, L"Hidden, polled every 10 minutes", L"Hidden, polled every 5 minutes"},
+                                   StateCase{60, 120, L"Hidden, polled every 2 hours", L"Hidden, polled every hour"},
+                                   StateCase{kHiddenPollAsShown, 10, L"Hidden, polled every 10 minutes", L"Hidden, polled every minute"},
+                                   StateCase{kHiddenPollAsShown, 60, L"Hidden, polled every hour", L"Hidden, polled every minute"},
+                                   StateCase{kHiddenPollNever, 10, L"Hidden, not polled", L"Hidden, not polled"}}) {
+            UiFrame frame = build(c.hidden, c.poll);
+            CHECK(TextCount(frame, std::wstring(L"OpenAI \u00B7 Plus \u00B7 ") + c.cloud) == 1);
+            CHECK(TextCount(frame, std::wstring(L"Antigravity \u00B7 AI Pro \u00B7 ") + c.local) == 1);
+            // The visible cards keep their states; the hidden ones keep their readings.
+            CHECK(HasText(frame, L"Anthropic \u00B7 Ultra \u00B7 Signed in"));
+            CHECK(UiRunsText(CardUsage(frame, 1).percent->runs) == L"62%" && CardUsage(frame, 4).meter);
+            // Record history on the expanded hidden card: paused only where it isn't polled.
+            CHECK(HasText(frame, L"\u25CF Paused while hidden") == (c.hidden == kHiddenPollNever));
+            CHECK(HasText(frame, L"\u25CF Recording") == (c.hidden != kHiddenPollNever));
+        }
+        // The state in the secondary ink, after the provider and plan in the line's own.
+        UiFrame frame = build(60);
+        auto line = std::find_if(frame.content.begin(), frame.content.end(), [](const UiItem& item) {
+            return UiRunsText(item.runs) == L"OpenAI \u00B7 Plus \u00B7 Hidden, polled every hour";
+        });
+        CHECK(line != frame.content.end() && line->runs.back().text == L"Hidden, polled every hour" &&
+              line->runs.back().ink == UiInk::Secondary);
+        // Polled whether or not it records: recording off for this user, or for the account.
+        view.settings.historyEnabled = false;
+        CHECK(HasText(build(60), L"OpenAI \u00B7 Plus \u00B7 Hidden, polled every hour"));
+        view.settings.historyEnabled = true;
+        view.settings.accounts[0].recordHistory = false;
+        CHECK(HasText(build(60), L"OpenAI \u00B7 Plus \u00B7 Hidden, polled every hour"));
+        view.settings.accounts[0].recordHistory = true;
+        // A failed poll shows its error instead; not polled, nothing fails.
+        view.accounts[0].status.error = {AccountErrorCode::Message, L"HTTP 503"};
+        CHECK(HasText(build(60), L"OpenAI \u00B7 Plus \u00B7 HTTP 503"));
+        CHECK(HasText(build(kHiddenPollNever), L"OpenAI \u00B7 Plus \u00B7 Hidden, not polled"));
+        view.accounts[0].status.error = {};
+        // Visible, the setting changes neither its state nor its recording.
+        view.settings.accounts[0].hidden = false;
+        frame = build(kHiddenPollNever);
+        CHECK(HasText(frame, L"OpenAI \u00B7 Plus \u00B7 Signed in") && HasText(frame, L"\u25CF Recording"));
+
+        // The pinned header's note: hidden accounts aren't polled; are polled less often (an
+        // interval longer than the poll interval); or nothing about polling.
+        const std::wstring note = L"Drag to reorder. Toggle hides an account from the taskbar";
+        struct NoteCase {
+            int hidden, poll;
+            PCWSTR end;
+        };
+        for (const NoteCase& c : {NoteCase{kHiddenPollNever, 10, L"; hidden accounts are not polled."},
+                                  NoteCase{60, 10, L"; hidden accounts are polled less often."},
+                                  NoteCase{11, 10, L"; hidden accounts are polled less often."},
+                                  NoteCase{10, 10, L"."}, NoteCase{5, 10, L"."}, NoteCase{60, 60, L"."},
+                                  NoteCase{60, 120, L"."}, NoteCase{kHiddenPollAsShown, 10, L"."}}) {
+            frame = build(c.hidden, c.poll);
+            const UiItem* shown = UiFindItem(frame, 101);
+            CHECK(shown && shown->font == UiFont::Note && shown->ink == UiInk::Muted && UiRunsText(shown->runs) == note + c.end);
+        }
+        // With every account visible it reads the same.
+        view.settings.accounts[3].hidden = false;
+        CHECK(UiRunsText(UiFindItem(build(60), 101)->runs) == note + L"; hidden accounts are polled less often.");
     });
 
     Run("accounts page: an expanded card's rows per provider; Short text needs Label; chips keep one", [] {

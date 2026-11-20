@@ -351,7 +351,19 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
 
         // Keep every instance's menu checkboxes and Hide items in sync with the shared hidden
         // state, live while a menu is open (programmatic IsChecked does not raise Click). The
-        // last visible account can't be hidden, so its checkbox and Hide item are disabled.
+        // last visible account can't be hidden, so its checkbox and Hide item are disabled. Each
+        // checkbox ends with its account's usage at a glance, hidden accounts' too: the
+        // percentage as the taskbar shows it (used or left; three digits at most), after when it
+        // was read once it is out of date; nothing without a reading.
+        std::vector<std::wstring> usageTexts(accounts.size());
+        for (size_t i = 0; i < accounts.size() && !state.accountToggleItems.empty(); i++) {
+            AccountUsageSummary usage = AccountUsageSummaryFor(settings, accounts[i], data[i], now);
+            if (usage.pct < 0) continue;
+            double shown = settings.barMode == BarMode::Remaining ? std::clamp(100 - usage.pct, 0.0, 100.0) : usage.pct;
+            usageTexts[i] = I18nFixed(state.buildLocale, std::min(shown, 999.0), 0) + L"%";
+            std::wstring read = usage.stale ? FormatReadingTime(data[i].lastSuccessMs, now) : std::wstring();
+            if (!read.empty()) usageTexts[i] = read + L" \u00B7 " + usageTexts[i];
+        }
         int visibleCount = (int)std::count_if(accounts.begin(), accounts.end(),
             [](const AccountConfig& account) { return !account.hidden; });
         for (auto& [idx, item] : state.accountToggleItems) {
@@ -360,6 +372,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             if (item.IsChecked() != checked) item.IsChecked(checked);
             bool enabled = !checked || visibleCount > 1;
             if (item.IsEnabled() != enabled) item.IsEnabled(enabled);
+            if (std::wstring_view(item.KeyboardAcceleratorTextOverride()) != usageTexts[idx]) {
+                item.KeyboardAcceleratorTextOverride(usageTexts[idx]);
+            }
         }
         for (size_t i = 0; i < state.accountRefs.size(); i++) {
             MenuFlyoutItem const& hideItem = state.accountRefs[i].hideItem;

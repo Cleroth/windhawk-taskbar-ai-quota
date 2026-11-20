@@ -121,7 +121,7 @@ static std::optional<BurnUpCurve> CopyBurnUpCurve(uint64_t historyId, int flyout
     auto account = std::find_if(g_settings.accounts.begin(), g_settings.accounts.end(),
         [&](const AccountConfig& candidate) { return candidate.historyId == historyId; });
     if (!g_settings.historyEnabled || g_historyIdsPendingSave || account == g_settings.accounts.end() ||
-        !account->recordHistory || (account->hidden && g_settings.skipHiddenPolling)) {
+        !account->recordHistory || (account->hidden && g_settings.hiddenPollMinutes == kHiddenPollNever)) {
         return std::nullopt;
     }
     uint32_t provider = HistoryProviderCode(account->provider);

@@ -78,6 +78,8 @@ static bool NormalizeSettings(Settings* s) {
         s->accounts[0].hidden = false;
     }
     s->pollMinutes = std::clamp(s->pollMinutes > 0 ? s->pollMinutes : 10, 2, 24 * 60);
+    s->hiddenPollMinutes = s->hiddenPollMinutes < 0 ? kHiddenPollAsShown :
+                           s->hiddenPollMinutes > 0 ? std::clamp(s->hiddenPollMinutes, 2, 24 * 60) : kHiddenPollNever;
     const I18nLanguage* language = I18nLanguageByTag(s->language);
     s->language = language ? std::wstring(language->tag) : std::wstring();
     s->historyRetentionDays = std::clamp(s->historyRetentionDays, 0, 3650);
@@ -227,7 +229,10 @@ static std::wstring SerializeSettings(const Settings& s) {
                                           s.historyDefaultRange == HistoryUiRange::Month ? L"month" :
                                           s.historyDefaultRange == HistoryUiRange::Quarter ? L"quarter" :
                                           s.historyDefaultRange == HistoryUiRange::All ? L"all" : L"week");
-        setBool(L"skipHiddenPolling", s.skipHiddenPolling);
+        setNumber(L"hiddenPollMinutes", s.hiddenPollMinutes);
+        // Builds before hidden intervals read only this switch: they poll hidden accounts as often
+        // as shown ones, or not at all, so an interval is not at all for them.
+        setBool(L"skipHiddenPolling", s.hiddenPollMinutes != kHiddenPollAsShown);
         setNumber(L"barLength", s.barLength);
         setNumber(L"verticalBarLength", s.verticalBarLength);
         setNumber(L"barThickness", s.barThickness);
@@ -404,7 +409,12 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                                 historyDefaultRange == L"month" ? HistoryUiRange::Month :
                                 historyDefaultRange == L"quarter" ? HistoryUiRange::Quarter :
                                 historyDefaultRange == L"all" ? HistoryUiRange::All : HistoryUiRange::Week;
-        s.skipHiddenPolling = getBoolDefault(L"skipHiddenPolling", true);
+        // Settings saved before hidden intervals have only the switch: on, or none, takes the
+        // default interval; off polled hidden accounts as often as shown ones.
+        double hiddenPollMinutes =
+            root.HasKey(L"hiddenPollMinutes") ? GetNum(root, L"hiddenPollMinutes", s.hiddenPollMinutes) :
+            getBoolDefault(L"skipHiddenPolling", true) ? s.hiddenPollMinutes : kHiddenPollAsShown;
+        if (std::isfinite(hiddenPollMinutes)) s.hiddenPollMinutes = (int)std::clamp(hiddenPollMinutes, -1.0, 24.0 * 60);
         s.barLength = (int)GetNum(root, L"barLength", 100);
         s.barThickness = (int)GetNum(root, L"barThickness", 8);
         s.barStyle = GetStr(root, L"barStyle") == L"rail" ? BarStyle::Rail : BarStyle::Track;
@@ -885,7 +895,7 @@ static void PublishSettings(Settings s, uint64_t oldIdentity, uint64_t newIdenti
     std::lock_guard<std::mutex> lk(g_settingsMutex);
     std::lock_guard<std::mutex> lk2(g_dataMutex);
     bool historyBoundary = s.historyEnabled != g_settings.historyEnabled ||
-                           s.skipHiddenPolling != g_settings.skipHiddenPolling ||
+                           s.hiddenPollMinutes != g_settings.hiddenPollMinutes ||
                            s.pollMinutes != g_settings.pollMinutes;
     for (const auto& account : s.accounts) {
         auto previous = std::find_if(g_settings.accounts.begin(), g_settings.accounts.end(),

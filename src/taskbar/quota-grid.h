@@ -694,6 +694,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 // Per-account show/hide checkboxes (checked = visible). Every column carries the
                 // same list; toggling sets global state, persists, and re-syncs all instances.
                 // The menu stays open for more toggles, even when one hides this column.
+                // UpdateQuotaUi gives each its account's usage, where a shortcut's text shows.
                 showSub = MenuFlyoutSubItem{};
                 showSub.Text(I18nText(locale, TrCtx(L"taskbar-action", L"Show on taskbar")));
                 SetXamlLanguage(showSub, locale);

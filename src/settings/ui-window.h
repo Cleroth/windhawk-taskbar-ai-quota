@@ -43,14 +43,14 @@ struct SettingsUiClient final : UiHostClient {
     SettingsEdits edits{store};
     std::map<SettingsField, std::pair<uint64_t, uint64_t>> steps;
 
-    // Window state. The title is in the language it was last set in. Custom poll and retention
-    // modes stick once chosen or typed into, so their boxes don't disable themselves when a
-    // partial number happens to match a preset. The preview's scroll belongs to the position it
-    // was built for. The last built view paints the preview; the color dialog's custom colors last
-    // for the window. Copy version info's result shows until kSettingsCopiedTimer.
+    // Window state. The title is in the language it was last set in. Custom poll, hidden poll and
+    // retention modes stick once chosen or typed into, so their boxes don't disable themselves
+    // when a partial number happens to match a preset. The preview's scroll belongs to the
+    // position it was built for. The last built view paints the preview; the color dialog's custom
+    // colors last for the window. Copy version info's result shows until kSettingsCopiedTimer.
     I18nLocale titleLocale;
     SettingsUiPage page = SettingsUiPage::Accounts;
-    bool pollCustom = false, retentionCustom = false;
+    bool pollCustom = false, hiddenPollCustom = false, retentionCustom = false;
     float previewScroll = 0;
     TaskbarPlacement previewPlacement = TaskbarPlacement::BeforeIcons;
     SettingsView view;
@@ -205,10 +205,12 @@ struct SettingsUiClient final : UiHostClient {
         view.version = WH_MOD_VERSION;
         view.settings = edits.Projection();
         UiHostSetBackdrop(host, MaterialBackdrop(view.settings.material));
+        view.theme = host.theme.kind;
         view.transparencyEffects = host.theme.transparency;
         view.status = edits.baseline.status;
         view.drafts = edits.drafts;
         view.pollCustom = pollCustom;
+        view.hiddenPollCustom = hiddenPollCustom;
         view.retentionCustom = retentionCustom;
         view.scale = UiHostScale(host);
         if (std::exchange(previewPlacement, view.settings.placement) != view.settings.placement) previewScroll = 0;
@@ -303,6 +305,26 @@ struct SettingsUiClient final : UiHostClient {
                         KillStepTimer(host, field);
                         Report(host, edits.Commit(0, field, action.value));
                         break;
+                    case SettingsField::HiddenPolling: {
+                        // The hidden accounts dropdown: not polled, as shown ones, an interval, or
+                        // Custom, which drops a failed choice, enables the custom box and moves
+                        // focus there; without an interval yet, it starts at the default one. A
+                        // commit drops the custom box's draft (settings/edits.h).
+                        bool interval = edits.baseline.settings.hiddenPollMinutes > 0;
+                        hiddenPollCustom = action.value == kSettingsHiddenPollCustom;
+                        if (hiddenPollCustom && interval) {
+                            edits.Revert(0, field);
+                            UiHostRequestRebuild(host, false);
+                        } else {
+                            KillStepTimer(host, SettingsField::HiddenPollMinutes);
+                            Report(host, edits.Commit(0, field, hiddenPollCustom ? Settings().hiddenPollMinutes :
+                                                                                   action.value));
+                        }
+                        if (hiddenPollCustom) {
+                            UiHostRequestFocus(host, {SettingsControlId(SettingsField::HiddenPollMinutes), -1}, true);
+                        }
+                        break;
+                    }
                     case SettingsField::KeepHistory: {
                         // The retention dropdown: days, 0 for Forever, or -1 for Custom, which
                         // drops a failed choice, enables the custom box and moves focus there.
@@ -347,8 +369,8 @@ struct SettingsUiClient final : UiHostClient {
                             locale,
                             field == SettingsField::ResetBehavior ?
                                 Tr(L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary "
-                                   L"display only, show details on hover, poll every 10 minutes, do not poll hidden "
-                                   L"accounts, threshold notifications at red.") :
+                                   L"display only, show details on hover, poll every 10 minutes, hidden accounts "
+                                   L"every hour, threshold notifications at red.") :
                             field == SettingsField::ResetLayout ?
                                 Tr(L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px "
                                    L"with labels on the left, 32 px rings, logos and number badges in the taskbar\u2019s "
@@ -369,7 +391,7 @@ struct SettingsUiClient final : UiHostClient {
                             break;
                         }
                         KillStepTimers(host);
-                        if (field == SettingsField::ResetBehavior) pollCustom = false;
+                        if (field == SettingsField::ResetBehavior) pollCustom = hiddenPollCustom = false;
                         if (field == SettingsField::ResetHistory) retentionCustom = false;
                         Report(host, edits.Reset(field));
                         break;
@@ -555,6 +577,7 @@ struct SettingsUiClient final : UiHostClient {
                 // Typing supersedes a pending step: its timer no longer commits.
                 KillStepTimer(host, field);
                 if (field == SettingsField::PollMinutes) pollCustom = true;
+                if (field == SettingsField::HiddenPollMinutes) hiddenPollCustom = true;
                 if (field == SettingsField::RetentionDays) retentionCustom = true;
                 auto shown = boxNumbers.find({action.key, action.target});
                 edits.SetText(action.key, field, std::move(action.text),
@@ -595,6 +618,7 @@ struct SettingsUiClient final : UiHostClient {
                     break;
                 }
                 if (field == SettingsField::PollMinutes) pollCustom = true;
+                if (field == SettingsField::HiddenPollMinutes) hiddenPollCustom = true;
                 if (field == SettingsField::RetentionDays) retentionCustom = true;
                 steps[field] = {action.key, edits.Step(action.key, field, action.value, view.locale)};
                 SetTimer(host.main, kSettingsStepTimer + UINT_PTR(field), 250, nullptr);

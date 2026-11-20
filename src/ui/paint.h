@@ -449,6 +449,20 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                              {r.left + 19, centerY - label.lineHeight / 2}, ink);
                 break;
             }
+            // Meter: a faint 4 DIP track; its fill, at least a dot for any value above the
+            // minimum, in the client's color, else its ink. High contrast: a slider's track and
+            // fill colors.
+            case UiItemKind::Meter: {
+                float share = item.maximum > item.minimum ?
+                    std::clamp(float(item.action.value - item.minimum) / float(item.maximum - item.minimum), 0.0f, 1.0f) : 0;
+                UiFillRect(target, cache, {r.left, centerY - 2, r.right, centerY + 2}, 2,
+                           hc ? p.controlStrong : UiFade(p.text, 0.16f), scale);
+                if (share > 0) {
+                    UiFillRect(target, cache, {r.left, centerY - 2, r.left + std::max(share * width, 4.0f), centerY + 2}, 2,
+                               hc ? p.highlight : item.color ? *item.color : UiInkColor(p, item.ink), scale);
+                }
+                break;
+            }
             // Segmented control (history mockup .segctl): a control panel; the selected segment
             // raised with primary text and a 2 DIP accent underline (high contrast: the
             // selection colors), the others in secondary text under the pointer's subtle fill.

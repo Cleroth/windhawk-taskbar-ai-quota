@@ -16,13 +16,18 @@ static D2D1_SIZE_F I18nLayoutMinClient() {
     return {kSettingsWindowMinSize.width - 16, kSettingsWindowMinSize.height - 39};
 }
 
+// An account's status; `usage` with when it was read (none: no reading).
 static SettingsAccountStatus I18nAccountStatus(PCWSTR plan, AccountError error, bool polled, bool signedIn,
+                                               AccountUsageSummary usage = {}, PCWSTR usageTime = L"",
                                                bool needsSignIn = false, bool signingIn = false) {
-    return {plan, std::move(error), polled, signedIn, needsSignIn, signingIn};
+    return {plan, std::move(error), polled, signedIn, needsSignIn, signingIn, usage, usageTime};
 }
 
 // Accounts in every card state: signed in, needing a sign-in, signing in, a long coded error with
-// provider text, the local app waiting and not running, hidden and not polled; every provider.
+// provider text, the local app waiting and not running, hidden (Zen: polled every hour by default);
+// every provider. Their usage: fresh (OAI 42%, Zen 8%), past 100% (CC 2), out of date with the
+// tooltip that says so (Work's month, Laptop read days ago, Team), none (Go), and a reading that
+// must not show beside Sign in (CC 1).
 static SettingsView I18nAccountsView(std::initializer_list<int> expanded = {}) {
     SettingsView view = TestView(SettingsUiPage::Accounts);
     view.settings.accounts = {TestAccount(L"openai", L"OAI", 11, {true, true, false, true}),
@@ -39,14 +44,15 @@ static SettingsView I18nAccountsView(std::initializer_list<int> expanded = {}) {
     refresh.cause = AccountErrorCode::Message;
     refresh.detail = L"invalid_grant: The refresh token was already used or revoked by the user.";  // i18n-en
     const SettingsAccountStatus statuses[] = {
-        I18nAccountStatus(L"Plus", {}, true, true),
-        I18nAccountStatus(L"Pro", {AccountErrorCode::NotSignedIn}, false, false, true),
-        I18nAccountStatus(L"Ultra", {}, true, true),
+        I18nAccountStatus(L"Plus", {}, true, true, {kWeeklyBar, 42, false}, L"14:32"),
+        I18nAccountStatus(L"Pro", {AccountErrorCode::NotSignedIn}, true, false, {kWeeklyBar, 40, true}, L"14:32", true),
+        I18nAccountStatus(L"Ultra", {}, true, true, {kWeeklyBar, 112, false}, L"14:32"),
         I18nAccountStatus(L"", {}, false, false),
-        I18nAccountStatus(L"Business", {}, false, false, false, true),
-        I18nAccountStatus(L"", {}, false, true),
-        I18nAccountStatus(L"", {AccountErrorCode::AntigravityNotRunning}, false, false),
-        I18nAccountStatus(L"Team", refresh, false, true),
+        I18nAccountStatus(L"Business", {}, true, false, {kExtraUsageBar, 33, true}, L"14:32", false, true),
+        I18nAccountStatus(L"", {}, true, true, {kWeeklyBar, 8, false}, L"13:40"),
+        I18nAccountStatus(L"", {AccountErrorCode::AntigravityNotRunning}, true, false, {kWeeklyBar, 64, true},
+                          L"11/14/2026"),
+        I18nAccountStatus(L"Team", refresh, true, true, {kWeeklyBar, 71, true}, L"Tue 09:05"),
     };
     for (size_t i = 0; i < view.settings.accounts.size(); i++) {
         SettingsViewAccount account;
@@ -69,11 +75,25 @@ static SettingsView I18nLayoutView(BarLayout layout) {
 
 static std::vector<I18nLayoutCase> I18nLayoutCases() {
     std::vector<I18nLayoutCase> cases;
+    // Accounts with hidden ones polled every hour (the default), every 30 minutes, every 2 hours
+    // (the usage as what is left), as often as visible ones, and not polled (the hidden account's
+    // card expanded, its recording paused): each with its state text and header note.
     cases.push_back({"accounts", I18nAccountsView()});
-    cases.push_back({"accounts-openai", I18nAccountsView({0})});
-    cases.push_back({"accounts-anthropic", I18nAccountsView({2})});
-    cases.push_back({"accounts-antigravity", I18nAccountsView({3})});
-    cases.push_back({"accounts-copilot", I18nAccountsView({4, 5})});
+    {
+        SettingsView view = I18nAccountsView({0});
+        view.settings.hiddenPollMinutes = 30;
+        cases.push_back({"accounts-openai", view});
+        view = I18nAccountsView({2});
+        view.settings.hiddenPollMinutes = 120;
+        view.settings.barMode = BarMode::Remaining;
+        cases.push_back({"accounts-anthropic", view});
+        view = I18nAccountsView({3});
+        view.settings.hiddenPollMinutes = kHiddenPollAsShown;
+        cases.push_back({"accounts-antigravity", view});
+        view = I18nAccountsView({4, 5});
+        view.settings.hiddenPollMinutes = kHiddenPollNever;
+        cases.push_back({"accounts-copilot", view});
+    }
     cases.push_back({"accounts-empty", TestView(SettingsUiPage::Accounts)});
     static constexpr const char* kStyles[] = {"spark",  "stacked", "vertical", "ring",     "concentric",
                                               "gauge",  "pies",    "square",   "headline", "matrix"};
@@ -111,12 +131,22 @@ static std::vector<I18nLayoutCase> I18nLayoutCases() {
         cases.push_back({"display-ring", view});
     }
     {
+        // Hidden accounts every hour; both custom boxes enabled with their errors; then its two
+        // choices that aren't an interval.
         SettingsView view = TestView(SettingsUiPage::Behavior);
         cases.push_back({"behavior", view});
         view.pollCustom = true;
         view.settings.taskbarMonitorNumber = 3;
+        view.settings.hiddenPollMinutes = 90;
         view.drafts.push_back({0, SettingsField::PollMinutes, 1, true, L"7x", 10, false, false, SettingsDraftError::Range});
+        view.drafts.push_back({0, SettingsField::HiddenPollMinutes, 2, true, L"9x", 90, false, false,
+                               SettingsDraftError::Range});
         cases.push_back({"behavior-custom", view});
+        view = TestView(SettingsUiPage::Behavior);
+        view.settings.hiddenPollMinutes = kHiddenPollAsShown;
+        cases.push_back({"behavior-hidden-as-shown", view});
+        view.settings.hiddenPollMinutes = kHiddenPollNever;
+        cases.push_back({"behavior-hidden-not-polled", view});
     }
     {
         SettingsView view = TestView(SettingsUiPage::History);
@@ -201,7 +231,7 @@ static void RunI18nLayoutTests() {
     });
 
     Run("account state lines: one line each; details that don't fit drop the plan, then the provider, then "
-        "ellipsize; the header's tooltip holds the label and the whole line", [] {
+        "ellipsize; the header's tooltip holds the label and the whole line, then the card's reading", [] {
         auto stateLine = [](const UiFrame& frame, uint32_t slot) -> const UiItem* {
             const UiItem* header = UiFindItem(frame, AccountId(slot, SettingsField::AccountExpand));
             for (const UiItem& item : frame.content) {
@@ -227,13 +257,14 @@ static void RunI18nLayoutTests() {
                                     L"full on one line beside the account's controls";
         view.accounts[3].status.error = {AccountErrorCode::Message, detail};
         frame = I18nLayoutFrame(view, "en");
+        // CC 1 needs a sign-in: its tooltip holds no reading.
         CHECK(UiRunsText(stateLine(frame, 2)->runs) == L"Anthropic \u00B7 Sign-in needed");
         CHECK(UiRunsText(UiFindItem(frame, AccountId(2, SettingsField::AccountExpand))->tooltip) ==
               L"CC 1\nAnthropic \u00B7 " + plan + L" \u00B7 Sign-in needed");
         const UiItem* go = stateLine(frame, 4);
         CHECK(go->runs.size() == 1 && go->runs[0].text == detail && go->runs[0].ink == UiInk::Caution);
         CHECK(UiRunsText(UiFindItem(frame, AccountId(4, SettingsField::AccountExpand))->tooltip) ==
-              L"Go\nAntigravity \u00B7 AI Pro \u00B7 " + detail);
+              L"Go\nAntigravity \u00B7 AI Pro \u00B7 " + detail + L"\n7d: 12% used, read 14:32");
         CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountExpand))->tooltip.empty());
     });
 
@@ -325,11 +356,17 @@ static void RunI18nLayoutTests() {
     });
 
     Run("accounts header note: as tall as it wraps, the viewport under it", [] {
-        CHECK_NEAR(I18nLayoutFrame(AccountsView(), "en").viewport.top, 50 + 19);
-        // Zum Neuordnen ziehen. ... werden nicht abgefragt: two 19 DIP lines at 680 DIP.
-        UiFrame german = I18nLayoutFrame(AccountsView(), "de");
-        CHECK_NEAR(german.viewport.top, 50 + 2 * 19);
-        CHECK_NEAR(UiFindItem(german, 101)->rect.bottom, german.viewport.top);
+        // Each of the three notes on one 19 DIP line in English. In German, at 680 DIP: Zum
+        // Neuordnen ziehen. ... ausgeblendete Konten werden seltener abgefragt, or nicht abgefragt,
+        // on two lines; without that clause, on one.
+        SettingsView view = AccountsView();
+        for (auto [hidden, lines] : {std::pair{60, 2}, std::pair{kHiddenPollNever, 2}, std::pair{kHiddenPollAsShown, 1}}) {
+            view.settings.hiddenPollMinutes = hidden;
+            CHECK_NEAR(I18nLayoutFrame(view, "en").viewport.top, 50 + 19);
+            UiFrame german = I18nLayoutFrame(view, "de");
+            CHECK_NEAR(german.viewport.top, 50 + lines * 19);
+            CHECK_NEAR(UiFindItem(german, 101)->rect.bottom, german.viewport.top);
+        }
     });
 
     Run("tile style gallery: cards as tall as the longest name wraps, one line in English", [] {
@@ -387,6 +424,55 @@ static void RunI18nLayoutTests() {
         custom = &Control(narrow, SettingsField::PaceTickColorCustom);
         CHECK_NEAR(custom->rect.top, swatch->rect.top - 4 + 32 + 8);
         CHECK_NEAR(custom->rect.right, Control(narrow, SettingsField::PaceTickColor, 5).rect.right);
+    });
+
+    Run("accounts layout cases: readings with their meters at the default width, without at the minimum; a "
+        "hidden account polled at each kind of interval, or not; each header note", [] {
+        std::vector<I18nLayoutCase> cases = I18nLayoutCases();
+        auto frameOf = [&](std::string_view name, D2D1_SIZE_F client = {1000, 820}) {
+            auto entry = std::find_if(cases.begin(), cases.end(), [&](const I18nLayoutCase& c) { return c.name == name; });
+            if (entry == cases.end()) throw std::runtime_error("no layout case");
+            return I18nLayoutFrame(entry->view, "en", client);
+        };
+        // Each card's percentage, empty where it shows none.
+        auto percents = [](const UiFrame& frame) {
+            std::vector<std::wstring> texts;
+            for (uint32_t slot = 1; slot <= 8; slot++) {
+                TestCardUsage usage = CardUsage(frame, slot);
+                texts.push_back(usage.percent ? UiRunsText(usage.percent->runs) : L"");
+            }
+            return texts;
+        };
+        auto meters = [](const UiFrame& frame) {
+            return std::count_if(frame.content.begin(), frame.content.end(),
+                                 [](const UiItem& item) { return item.kind == UiItemKind::Meter; });
+        };
+        auto note = [](const UiFrame& frame) { return UiRunsText(UiFindItem(frame, 101)->runs); };
+        const std::wstring drag = L"Drag to reorder. Toggle hides an account from the taskbar";
+        // OAI, CC 1 (Sign in), CC 2, Go (no reading), Work, Zen, Laptop, Team.
+        UiFrame frame = frameOf("accounts");
+        CHECK((percents(frame) ==
+               std::vector<std::wstring>{L"42%", L"", L"112%", L"\u2014", L"33%", L"8%", L"64%", L"71%"}));
+        CHECK(meters(frame) == 6 && meters(frameOf("accounts", I18nLayoutMinClient())) == 0);
+        CHECK(percents(frameOf("accounts", I18nLayoutMinClient())) == percents(frame));
+        CHECK(HasText(frame, L"OpenCode Go \u00B7 Hidden, polled every hour") &&
+              note(frame) == drag + L"; hidden accounts are polled less often.");
+        // Out of date: Laptop's reading from days ago, Work's month.
+        CHECK(UiRunsText(UiFindItem(frame, AccountId(7, SettingsField::AccountExpand))->tooltip)
+                  .ends_with(L"\n7d: 64% used, read 11/14/2026"));
+        CHECK(UiRunsText(UiFindItem(frame, AccountId(5, SettingsField::AccountExpand))->tooltip)
+                  .ends_with(L"\nMo: 33% used, read 14:32"));
+        CHECK(HasText(frameOf("accounts-openai"), L"OpenCode Go \u00B7 Hidden, polled every 30 minutes"));
+        frame = frameOf("accounts-anthropic");
+        CHECK(HasText(frame, L"OpenCode Go \u00B7 Hidden, polled every 2 hours"));
+        CHECK((percents(frame) ==
+               std::vector<std::wstring>{L"58%", L"", L"0%", L"\u2014", L"67%", L"92%", L"36%", L"29%"}));
+        frame = frameOf("accounts-antigravity");
+        CHECK(HasText(frame, L"OpenCode Go \u00B7 Hidden, polled every 10 minutes") &&
+              note(frame) == drag + L".");
+        frame = frameOf("accounts-copilot");
+        CHECK(HasText(frame, L"OpenCode Go \u00B7 Hidden, not polled") && HasText(frame, L"\u25CF Paused while hidden") &&
+              note(frame) == drag + L"; hidden accounts are not polled.");
     });
 
     Run("localized layout: every page, state and popup fits in every language at the default and minimum size", [] {

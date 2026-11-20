@@ -99,6 +99,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Графики, статистика и экспорт в CSV по локальным замерам, даже когда запись выключена."},
     {L"", L"Choose Custom in Cloud poll interval to edit.",
      L"Чтобы изменить, выберите «Другой» в списке «Интервал опроса облака»."},
+    {L"", L"Choose Custom in Hidden accounts to edit.",
+     L"Чтобы изменить, выберите «Другой» в списке «Скрытые аккаунты»."},
     {L"", L"Choose Custom in Keep history to edit.", L"Чтобы изменить, выберите «Другой» в списке «Хранить историю»."},
     {L"", L"Choose an identity position to change this.", L"Чтобы изменить, выберите положение идентификации."},
     {L"", L"Claude logo", L"Логотип Claude"},
@@ -126,6 +128,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Чтобы удалить его, добавьте аккаунт с этим поставщиком и меткой, а затем удалите этот аккаунт."},
     {L"", L"Could not update account visibility.", L"Не удалось изменить видимость аккаунта."},
     {L"", L"Credits max", L"Максимум кредитов"},
+    {L"", L"Custom hidden interval", L"Свой интервал для скрытых аккаунтов"},
     {L"", L"Custom interval", L"Свой интервал"},
     {L"", L"Custom retention", L"Свой срок хранения"},
     {L"", L"Default time span", L"Период по умолчанию"},
@@ -156,17 +159,19 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"Update Windows to show them.",
      L"Панель задач дисплея {number} находится сбоку экрана: в этой сборке Windows её область уведомлений не может "
      L"разместить полосы. Обновите Windows, чтобы показать их."},
-    {L"", L"Do not poll hidden accounts", L"Не опрашивать скрытые аккаунты"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
      L"Перетащите, чтобы изменить порядок. Переключатель скрывает аккаунт с панели задач."},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
      L"Перетащите, чтобы изменить порядок. Переключатель скрывает аккаунт с панели задач; скрытые аккаунты не "
      L"опрашиваются."},
-    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
-          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are polled less often.",
+     L"Перетащите, чтобы изменить порядок. Переключатель скрывает аккаунт с панели задач; скрытые аккаунты "
+     L"опрашиваются реже."},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. A hidden "
+          L"account records when it is polled: <link id=\"hidden\">Behavior</link> > Hidden accounts.",
      L"Каждый аккаунт сам определяет, записывать ли историю: <link id=\"accounts\">Аккаунты</link> > Записывать "
-     L"историю. История скрытых аккаунтов не записывается, пока в разделе «Поведение» включено <link id=\"hidden\">Не "
-     L"опрашивать скрытые аккаунты</link>."},
+     L"историю. История скрытого аккаунта записывается, когда он опрашивается: <link "
+     L"id=\"hidden\">Поведение</link> > Скрытые аккаунты."},
     {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
           L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
           L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
@@ -216,10 +221,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Gauge thickness", L"Толщина шкалы"},
     {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
      L"Высота в пикселях; по одной диаграмме на квоту, начиная с третьей — меньше."},
-    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
-          L"them. Shared across Windows users.",
-     L"Скрытые аккаунты не опрашиваются и не записываются, даже если включено «Записывать историю». Выключите, чтобы "
-     L"продолжить их запись. Общий параметр для всех пользователей Windows."},
+    {L"", L"Hidden accounts", L"Скрытые аккаунты"},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
      L"История привязана к этому аккаунту и сохраняется при повторном входе. Для входа под другим логином добавьте "
      L"новый аккаунт."},
@@ -231,6 +233,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"session every minute.",
      L"Как часто опрашиваются Anthropic, OpenAI, GitHub Copilot и OpenCode Go. Локальный сеанс Antigravity "
      L"опрашивается каждую минуту."},
+    {L"", L"How often accounts hidden from the taskbar are polled, for Accounts and usage history: never more often "
+          L"than visible ones. Shared across Windows users.",
+     L"Как часто опрашиваются аккаунты, скрытые с панели задач, — для раздела «Аккаунты» и истории использования: "
+     L"не чаще, чем видимые. Общий параметр для всех пользователей Windows."},
     {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
           L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
      L"Как панель сведений показывает доп. использование Anthropic: за его месяц, за окно недельной квоты в том же "
@@ -392,9 +398,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Report an issue", L"Сообщить о проблеме"},
     {L"", L"Reset Behavior to defaults", L"Сбросить «Поведение» к значениям по умолчанию"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
-          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
+          L"hover, poll every 10 minutes, hidden accounts every hour, threshold notifications at red.",
      L"Сбросить «Поведение» к значениям по умолчанию?\n\nАвтоматический язык, показ только на основном дисплее, "
-     L"сведения при наведении, опрос каждые 10 минут, скрытые аккаунты не опрашиваются, уведомления о пороге на "
+     L"сведения при наведении, опрос каждые 10 минут, скрытые аккаунты — каждый час, уведомления о пороге на "
      L"красном уровне."},
     {L"", L"Reset Display to defaults", L"Сбросить «Отображение» к значениям по умолчанию"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
@@ -732,6 +738,14 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"account-state", L"Signed in", L"Вход выполнен"},
     {L"account-state", L"Signing in…", L"Выполняется вход…"},
     {L"account-state", L"Waiting for the local app", L"Ожидание приложения"},
+    {L"account-state", L"{hours, plural, one{Hidden, polled every hour} other{Hidden, polled every # hours}}",
+     L"{hours, plural, one{Скрыт, опрос каждый # час} few{Скрыт, опрос каждые # часа} many{Скрыт, опрос каждые # "
+     L"часов} other{Скрыт, опрос каждые # часа}}"},
+    {L"account-state", L"{minutes, plural, one{Hidden, polled every minute} other{Hidden, polled every # minutes}}",
+     L"{minutes, plural, one{Скрыт, опрос каждую # минуту} few{Скрыт, опрос каждые # минуты} many{Скрыт, опрос "
+     L"каждые # минут} other{Скрыт, опрос каждые # минуты}}"},
+    {L"account-usage", L"{quota}: {percent} left, read {time}", L"{quota}: осталось {percent}, данные на {time}"},
+    {L"account-usage", L"{quota}: {percent} used, read {time}", L"{quota}: использовано {percent}, данные на {time}"},
     {L"add-account", L"Sign in with a code on github.com", L"Вход с кодом на github.com"},
     {L"add-account", L"Sign in with an API key from the OpenCode console", L"Вход с ключом API из консоли OpenCode"},
     {L"add-account", L"Sign in with your browser", L"Вход через браузер"},
@@ -874,6 +888,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"сбросов} other{Доступно # недельного сброса}}"},
     {L"free-resets", L"{resets} · expires {when}", L"{resets} · истекает {when}"},
     {L"free-resets", L"{resets} · next expires {when}", L"{resets} · ближайший истекает {when}"},
+    {L"hidden-polling", L"Not polled", L"Не опрашиваются"},
+    {L"hidden-polling", L"Same as visible accounts", L"Как видимые аккаунты"},
     {L"history-about", L"Axes and units", L"Оси и единицы измерения"},
     {L"history-about", L"Cards", L"Карточки"},
     {L"history-about", L"Legend and readout", L"Легенда и подсказка"},
@@ -1048,6 +1064,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"placement", L"Right of Start", L"Справа от кнопки «Пуск»"},
     {L"plan", L"Visual test", L"Визуальный тест"},
     {L"poll-interval", L"Custom", L"Другой"},
+    {L"poll-interval", L"{hours, plural, one{# hour} other{# hours}}",
+     L"{hours, plural, one{# час} few{# часа} many{# часов} other{# часа}}"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# минута} few{# минуты} many{# минут} other{# минуты}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",

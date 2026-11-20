@@ -92,6 +92,16 @@ static D2D1_POINT_2F PreviewPointer(UiGraphics& g, const SettingsView& view, con
     return {left + (c.left + c.right) / 2, r.top + (c.top + c.bottom) / 2};
 }
 
+// The Accounts page for review in `theme`: AccountsView with CC 2's reading out of date and Go
+// hidden, polled every hour.
+static SettingsView RenderAccountsView(UiThemeKind theme) {
+    SettingsView view = AccountsView();
+    view.theme = theme;
+    view.accounts[2].status.usage.stale = true;
+    view.settings.accounts[3].hidden = true;
+    return view;
+}
+
 static SettingsView LayoutView(BarLayout layout, UINT dpi) {
     SettingsView view = TestView(SettingsUiPage::Layout);
     view.settings.barLayout = layout;
@@ -730,7 +740,8 @@ static void RunRenders(const std::wstring& directory) {
                     std::string name = std::string("render-") + pageName + "-" + theme.name + "-" +
                                        std::to_string(dpi) + ".png";
                     Run(name, [&] {
-                        SettingsView view = page == SettingsUiPage::Accounts ? AccountsView() : TestView(page);
+                        SettingsView view = page == SettingsUiPage::Accounts ? RenderAccountsView(theme.input.kind) :
+                                                                               TestView(page);
                         view.version = L"2.0.1";
                         UiFrame frame;
                         SettingsUiBuildFrame(g, view, client, frame);
@@ -738,7 +749,25 @@ static void RunRenders(const std::wstring& directory) {
                         state.focus = {uint32_t(int(page) + 1)};
                         RenderFrame(g, wic.get(), path(name), frame, view, client, dpi, theme.input, state, 0,
                                     false);
-                        CHECK(true);
+                        // Accounts shows its cards' meters.
+                        CHECK(page != SettingsUiPage::Accounts ||
+                              std::count_if(frame.content.begin(), frame.content.end(), [](const UiItem& item) {
+                                  return item.kind == UiItemKind::Meter;
+                              }) == 3);
+                    });
+                }
+                // Accounts at the window's minimum width: the percentages without their meters.
+                if (dpi == 96) {
+                    std::string narrow = std::string("render-accounts-min-") + theme.name + "-96.png";
+                    Run(narrow, [&] {
+                        const D2D1_SIZE_F minimum = I18nLayoutMinClient();
+                        SettingsView view = RenderAccountsView(theme.input.kind);
+                        UiFrame frame;
+                        SettingsUiBuildFrame(g, view, minimum, frame);
+                        RenderFrame(g, wic.get(), path(narrow), frame, view, minimum, 96, theme.input, {}, 0, false);
+                        CHECK(std::none_of(frame.content.begin(), frame.content.end(), [](const UiItem& item) {
+                            return item.kind == UiItemKind::Meter;
+                        }));
                     });
                 }
                 // Layout with each tile style (every DPI for stacked bars and the segmented ring).
@@ -848,6 +877,7 @@ static void RunRenders(const std::wstring& directory) {
                 std::string accounts = std::string("render-backdrop-accounts-") + theme.name + "-144.png";
                 Run(accounts, [&] {
                     SettingsView view = AccountsView({0});
+                    view.theme = theme.input.kind;
                     UiFrame frame;
                     SettingsUiBuildFrame(g, view, client, frame);
                     UiPaintState state;
@@ -887,11 +917,13 @@ static void RunRenders(const std::wstring& directory) {
             Run(expanded, [&] {
                 const D2D1_SIZE_F tall{1000, 913};
                 SettingsView view = AccountsView({0});
+                view.theme = theme.input.kind;
                 UiFrame frame;
                 SettingsUiBuildFrame(g, view, tall, frame);
                 RenderFrame(g, wic.get(), path(expanded), frame, view, tall, 144, theme.input, {}, 0, false);
 
                 view = AccountsView();
+                view.theme = theme.input.kind;
                 frame = {};
                 SettingsUiBuildFrame(g, view, client, frame);
                 const UiItem& add = *UiFindItem(frame, SettingsControlId(SettingsField::AccountAdd));
@@ -920,6 +952,7 @@ static void RunRenders(const std::wstring& directory) {
                 RenderFrame(g, wic.get(), path(empty), frame, view, client, 144, theme.input, {}, 0, false);
 
                 view = AccountsView({1});
+                view.theme = theme.input.kind;
                 view.drafts.push_back({12, SettingsField::AccountLabel, 1, true, L"CC 2", 0, false, false,
                                        SettingsDraftError::LabelTaken});
                 frame = {};
@@ -934,6 +967,7 @@ static void RunRenders(const std::wstring& directory) {
 
                 // The dragged sheet with brand-colored logos (high contrast: the ink).
                 view = AccountsView();
+                view.theme = theme.input.kind;
                 view.settings.logoBrands = {true, true};
                 std::rotate(view.settings.accounts.begin() + 1, view.settings.accounts.begin() + 3,
                             view.settings.accounts.end());
@@ -1076,16 +1110,18 @@ static void RunRenders(const std::wstring& directory) {
                 });
             }
 
-            // Controls in their states at 144 DPI: the Behavior page with Custom chosen, an
-            // invalid draft with its error, a toggle off, the Show on popup open (the field
-            // pressed), the custom box editing, a hovered toggle and the keyboard focus ring on
-            // another; then History with recording off (a disabled box and its reason); then the
-            // popup's rows with the pointer on the third.
+            // Controls in their states at 144 DPI: the Behavior page with Custom chosen for the
+            // poll interval and for hidden accounts (every 90 minutes), an invalid draft with its
+            // error, a toggle off, the Show on popup open (the field pressed), the custom box
+            // editing, the Hidden accounts field hovered and the keyboard focus ring on another;
+            // then History with recording off (a disabled box and its reason); then the popup's
+            // rows with the pointer on the third.
             std::string controls = std::string("render-controls-") + theme.name + "-144.png";
             Run(controls, [&] {
                 SettingsView view = TestView(SettingsUiPage::Behavior);
                 view.settings.showDetailsOnHover = false;
                 view.pollCustom = true;
+                view.settings.hiddenPollMinutes = 90;
                 view.drafts.push_back({0, SettingsField::PollMinutes, 1, true, L"7x", 10, false, false,
                                        SettingsDraftError::Range});
                 UiFrame frame;
@@ -1093,8 +1129,8 @@ static void RunRenders(const std::wstring& directory) {
                 UiPaintState state;
                 state.open = SettingsControlId(SettingsField::ShowOn);
                 state.editing = SettingsControlId(SettingsField::PollMinutes);
-                state.hot = {SettingsControlId(SettingsField::SkipHiddenPolling)};
-                state.focus = {SettingsControlId(SettingsField::Notifications)};
+                state.hot = {SettingsControlId(SettingsField::HiddenPolling)};
+                state.focus = {SettingsControlId(SettingsField::Language)};
                 state.focusVisible = true;
                 RenderFrame(g, wic.get(), path(controls), frame, view, client, 144, theme.input, state, 0,
                             false);
@@ -1180,6 +1216,7 @@ static void RunRenders(const std::wstring& directory) {
             auto renderPage = [&](const std::string& name, SettingsView view, D2D1_SIZE_F size, UINT dpi) {
                 Run(name, [&] {
                     view = I18nLayoutLocalized(std::move(view), tag);
+                    view.theme = UiThemeKind::Light;
                     g.locale = locale.LocaleName();
                     UiFrame frame;
                     SettingsUiBuildFrame(g, view, size, frame);
@@ -1251,6 +1288,7 @@ static void RunRenders(const std::wstring& directory) {
                     {TestView(SettingsUiPage::Behavior), SettingsControlId(SettingsField::Language)},
                     {TestView(SettingsUiPage::Behavior), SettingsControlId(SettingsField::ShowOn)},
                     {TestView(SettingsUiPage::Behavior), SettingsControlId(SettingsField::PollMinutes, 8)},
+                    {TestView(SettingsUiPage::Behavior), SettingsControlId(SettingsField::HiddenPolling)},
                     {TestView(SettingsUiPage::Behavior), SettingsControlId(SettingsField::Notifications)},
                     {TestView(SettingsUiPage::History), SettingsControlId(SettingsField::KeepHistory)},
                     {TestView(SettingsUiPage::History), SettingsControlId(SettingsField::HistoryRange)},

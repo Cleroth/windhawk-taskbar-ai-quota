@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.21.3
+// @version         2.22.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -63,7 +63,8 @@ signed-in local app or CLI session, which must remain running.
 
 ## Settings
 
-- **Accounts:** Add, reorder, hide, or remove accounts; per account, set its label, taskbar
+- **Accounts:** Add, reorder, hide, or remove accounts, each listed with its weekly usage, hidden
+  ones too; per account, set its label, taskbar
   quotas, identity (logo, logo with a number badge, or label, on its bars and tiles), history
   recording, and sign-in. Removing an account deletes its sign-in and, if you choose, its
   history.
@@ -79,11 +80,11 @@ signed-in local app or CLI session, which must remain running.
   remaining, usage colors (default, colorblind or your own) and thresholds, stale marker,
   provider outages, and how the details flyout charts Anthropic extra usage (its month, the
   weekly window, or a bar).
-- **Behavior:** Choose the language, displays, hover details, polling, and alerts.
+- **Behavior:** Choose the language, displays, hover details, polling (hidden accounts every
+  hour by default, at another interval, as often as visible ones, or not at all), and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
   default) or for a number of days, and choose recording per account independently of taskbar
-  visibility. Hidden accounts stop polling unless you disable **Do not poll hidden accounts**
-  and enable their recording.
+  visibility. A hidden account records whenever it is polled.
 
 ## Usage history
 

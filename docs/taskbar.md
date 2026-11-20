@@ -47,10 +47,15 @@ in each reset window. Stale errors can mark the identity with `!` and the detail
 warning icon.
 
 Click a column to refresh it. Right-click it for Settings, Usage history, Refresh all, provider
-actions, **Hide**, and show/hide toggles that keep the menu open while you toggle several
-accounts. Hidden accounts are not polled by default, and the last visible account can't be
-hidden. History recording can explicitly enable hidden-account polling without showing taskbar
-bars or firing threshold notifications for those accounts.
+actions, **Hide**, and **Show on taskbar**: show/hide toggles that keep the menu open while you
+toggle several accounts. Each toggle ends with its account's usage at a glance, as the
+[Accounts page](settings.md#accounts) shows it (the weekly quota's percentage, used or left as
+the bar mode says), after the time it was read once it is out of date, and nothing without a
+reading. The last visible account can't be hidden.
+
+Hidden accounts keep being polled, every hour by default, without taskbar bars, threshold
+notifications or status page reads on their behalf; **Settings > Behavior > Hidden accounts**
+sets how often, or stops it.
 
 On a taskbar at the left or right of the screen (Windows 11's own taskbar position setting), the
 accounts stack down the taskbar and each style rearranges to fit its width: identities sit above

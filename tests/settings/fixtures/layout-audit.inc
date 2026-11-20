@@ -157,6 +157,7 @@ static std::vector<std::string> I18nLayoutAudit(UiGraphics& g, const UiFrame& fr
                 case UiItemKind::Handle:
                 case UiItemKind::Preview:
                 case UiItemKind::Segmented:
+                case UiItemKind::Meter:
                 case UiItemKind::Chart:
                 case UiItemKind::Custom:
                     boxes.push_back({&item, r});
