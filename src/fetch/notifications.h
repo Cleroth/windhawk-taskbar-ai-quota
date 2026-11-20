@@ -198,7 +198,7 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
                     return RegSetValueExW(key, name, 0, REG_SZ, reinterpret_cast<const BYTE*>(value),
                                           DWORD((wcslen(value) + 1) * sizeof(wchar_t)));
                 };
-                status = setValue(L"DisplayName", L"Taskbar AI Quota");  // i18n-en
+                status = setValue(L"DisplayName", L"Taskbar AI Usage Quota");  // i18n-en
                 LSTATUS iconStatus = icon.empty() ? ERROR_FILE_NOT_FOUND : setValue(L"IconUri", icon.c_str());
                 if (status == ERROR_SUCCESS && iconStatus != ERROR_SUCCESS) {
                     Wh_Log(L"Could not register the notifications' icon: %ld", iconStatus);

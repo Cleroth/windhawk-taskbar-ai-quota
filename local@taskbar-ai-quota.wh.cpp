@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              taskbar-ai-quota
-// @name            Taskbar AI Quota
+// @name            Taskbar AI Usage Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
 // @description:de-DE Zeigt konfigurierbare Kontingentbalken für KI-Agenten- und LLM-Abos von Anthropic, OpenAI, Google Antigravity, GitHub Copilot und OpenCode Go in der Taskleiste von Windows 11
 // @description:es-ES Muestra barras configurables de las cuotas de suscripciones de agentes de IA y LLM de Anthropic, OpenAI, Google Antigravity, GitHub Copilot y OpenCode Go en la barra de tareas de Windows 11
@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.23.0
+// @version         2.23.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -23,7 +23,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar AI Quota
+# Taskbar AI Usage Quota
 
 A Windows 11 taskbar mod that shows subscription quota bars next to the system tray, or
 elsewhere in the tray or beside Start. On a taskbar at the left or right of the screen (Windows
@@ -17698,7 +17698,7 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
                     return RegSetValueExW(key, name, 0, REG_SZ, reinterpret_cast<const BYTE*>(value),
                                           DWORD((wcslen(value) + 1) * sizeof(wchar_t)));
                 };
-                status = setValue(L"DisplayName", L"Taskbar AI Quota");  // i18n-en
+                status = setValue(L"DisplayName", L"Taskbar AI Usage Quota");  // i18n-en
                 LSTATUS iconStatus = icon.empty() ? ERROR_FILE_NOT_FOUND : setValue(L"IconUri", icon.c_str());
                 if (status == ERROR_SUCCESS && iconStatus != ERROR_SUCCESS) {
                     Wh_Log(L"Could not register the notifications' icon: %ld", iconStatus);
@@ -37194,7 +37194,7 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
             items.push_back(std::move(line));
             lineTop += height;
         };
-        addLine(L"Taskbar AI Quota", UiFont::Subtitle, UiInk::Primary, 26);  // i18n-en: the product name
+        addLine(L"Taskbar AI Usage Quota", UiFont::Subtitle, UiInk::Primary, 26);  // i18n-en: the product name
         lineTop += 2;
         addLine(versionLine, UiFont::Caption, UiInk::Muted, versionHeight);
         addLine(summary, UiFont::Caption, UiInk::Muted, summaryHeight);
@@ -39262,7 +39262,7 @@ static constexpr UINT_PTR kSettingsCopiedTimer = 0x5C00;
 static constexpr UINT_PTR kSettingsCountdownTimer = 0x5B00;
 // The product name, English in every language: the general message boxes' caption, and in the
 // window's title.
-static constexpr PCWSTR kSettingsProductName = L"Taskbar AI Quota";  // i18n-en
+static constexpr PCWSTR kSettingsProductName = L"Taskbar AI Usage Quota";  // i18n-en
 
 // The window's title in a language.
 static std::wstring SettingsWindowTitle(const I18nLocale& locale) {
@@ -39689,8 +39689,9 @@ struct SettingsUiClient final : UiHostClient {
                         }
                         // English in every language: diagnostics for issue reports.
                         wchar_t text[128];
-                        swprintf(text, ARRAYSIZE(text), L"Taskbar AI Quota %s\r\nWindows %lu.%lu.%lu.%lu",  // i18n-en
-                                 WH_MOD_VERSION, os.dwMajorVersion, os.dwMinorVersion, os.dwBuildNumber, revision);
+                        swprintf(text, ARRAYSIZE(text), L"%s %s\r\nWindows %lu.%lu.%lu.%lu",  // i18n-en
+                                 kSettingsProductName, WH_MOD_VERSION, os.dwMajorVersion, os.dwMinorVersion,
+                                 os.dwBuildNumber, revision);
                         bool copied = false;
                         size_t bytes = (wcslen(text) + 1) * sizeof(wchar_t);
                         if (OpenClipboard(host.main)) {

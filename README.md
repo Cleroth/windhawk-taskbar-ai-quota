@@ -1,4 +1,4 @@
-# Taskbar AI Quota
+# Taskbar AI Usage Quota
 
 Shows Anthropic Claude, OpenAI/Codex, Google Antigravity, GitHub Copilot, and OpenCode Go AI agent and LLM subscription quota usage as compact bars on the Windows 11 taskbar.
 Can show on the primary taskbar only, all taskbars, or one specific monitor.
@@ -25,7 +25,7 @@ Details: [taskbar, flyout and notifications](docs/taskbar.md).
 
 ## Setup
 
-Install **Taskbar AI Quota** from the Windhawk catalog. Click the **AI +** taskbar tile to open the settings window, choose **Add account** and a provider, then type a label (or keep the default) and press Enter: its sign-in window opens.
+Install **Taskbar AI Usage Quota** from the Windhawk catalog. Click the **AI +** taskbar tile to open the settings window, choose **Add account** and a provider, then type a label (or keep the default) and press Enter: its sign-in window opens.
 
 - **Anthropic** and **OpenAI**: approve in a browser on this PC; the mod catches the redirect on `localhost` (Anthropic also offers a code to paste).
 - **GitHub Copilot**: enter the code the window shows at `github.com/login/device`.

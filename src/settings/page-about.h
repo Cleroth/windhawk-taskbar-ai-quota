@@ -80,7 +80,7 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
             items.push_back(std::move(line));
             lineTop += height;
         };
-        addLine(L"Taskbar AI Quota", UiFont::Subtitle, UiInk::Primary, 26);  // i18n-en: the product name
+        addLine(L"Taskbar AI Usage Quota", UiFont::Subtitle, UiInk::Primary, 26);  // i18n-en: the product name
         lineTop += 2;
         addLine(versionLine, UiFont::Caption, UiInk::Muted, versionHeight);
         addLine(summary, UiFont::Caption, UiInk::Muted, summaryHeight);

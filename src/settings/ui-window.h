@@ -20,7 +20,7 @@ static constexpr UINT_PTR kSettingsCopiedTimer = 0x5C00;
 static constexpr UINT_PTR kSettingsCountdownTimer = 0x5B00;
 // The product name, English in every language: the general message boxes' caption, and in the
 // window's title.
-static constexpr PCWSTR kSettingsProductName = L"Taskbar AI Quota";  // i18n-en
+static constexpr PCWSTR kSettingsProductName = L"Taskbar AI Usage Quota";  // i18n-en
 
 // The window's title in a language.
 static std::wstring SettingsWindowTitle(const I18nLocale& locale) {
@@ -447,8 +447,9 @@ struct SettingsUiClient final : UiHostClient {
                         }
                         // English in every language: diagnostics for issue reports.
                         wchar_t text[128];
-                        swprintf(text, ARRAYSIZE(text), L"Taskbar AI Quota %s\r\nWindows %lu.%lu.%lu.%lu",  // i18n-en
-                                 WH_MOD_VERSION, os.dwMajorVersion, os.dwMinorVersion, os.dwBuildNumber, revision);
+                        swprintf(text, ARRAYSIZE(text), L"%s %s\r\nWindows %lu.%lu.%lu.%lu",  // i18n-en
+                                 kSettingsProductName, WH_MOD_VERSION, os.dwMajorVersion, os.dwMinorVersion,
+                                 os.dwBuildNumber, revision);
                         bool copied = false;
                         size_t bytes = (wcslen(text) + 1) * sizeof(wchar_t);
                         if (OpenClipboard(host.main)) {
