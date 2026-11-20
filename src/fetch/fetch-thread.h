@@ -21,13 +21,10 @@ static constexpr ULONGLONG kDetailsRetryMs = 2ULL * 60 * 60 * 1000;  // Unless a
 // Returns the sign-in generation the result was read through. Once that sign-in is replaced,
 // removed or moved, the result is that login's, whatever it says (a rejected refresh included):
 // the fetch thread polls again rather than publish it. A refreshed token's stale save means just
-// that. `d` comes in with the account's reading through the sign-in of `readingGeneration`: a
-// poll through another one starts from no reading, so a failure keeps nothing of that login's.
+// that. If `d` belongs to an earlier generation, start from the current published reading:
+// empty after a sign-in or sign-out, carried with the token after a rename.
 static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, uint64_t readingGeneration,
                              int* retryAfterSec, AccountDetailsCache* details) {
-    d->error = {};
-    d->retryDeadlineMs = 0;
-    d->needsLogin = false;
     uint64_t idHash = AccountIdentityHash(acc);
 
     // Antigravity uses local language server discovery, not OAuth.
@@ -54,12 +51,20 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, uint64_t 
         bool configured;
         {
             std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
-            configured = std::any_of(g_settings.accounts.begin(), g_settings.accounts.end(),
+            auto it = std::find_if(g_settings.accounts.begin(), g_settings.accounts.end(),
                 [&](const AccountConfig& account) { return AccountIdentityHash(account) == idHash; });
+            configured = it != g_settings.accounts.end();
+            if (signInGeneration != readingGeneration) {
+                std::lock_guard<std::mutex> dataLock(g_dataMutex);
+                size_t index = it - g_settings.accounts.begin();
+                *d = configured && index < g_data.size() ? g_data[index] : AccountData{};
+            }
         }
         signedIn = configured && LoadStoredToken(idHash, &tok) && !tok.accessToken.empty();
     }
-    if (signInGeneration != readingGeneration) *d = {};
+    d->error = {};
+    d->retryDeadlineMs = 0;
+    d->needsLogin = false;
     if (!signedIn) {
         d->stale = true;
         d->needsLogin = true;
@@ -563,8 +568,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             pollSignInGeneration[i] = readingGeneration[i] =
                 FetchAccount(accounts[i], &results[i], readingGeneration[i], &retryAfter, &accountDetails[i]);
             // Its sign-in changed meanwhile: poll once more with the current one (none after a
-            // sign-out), which starts from no reading. Should it change again, publication drops
-            // the result.
+            // sign-out). Should it change again, publication drops the result.
             if (pollSignInGeneration[i] != CurrentSignInGeneration(retryIdentityHashes[i])) {
                 retryAfter = 0;
                 pollSignInGeneration[i] = readingGeneration[i] =
