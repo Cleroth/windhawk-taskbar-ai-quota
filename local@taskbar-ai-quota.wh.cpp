@@ -18314,15 +18314,14 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 pollSignInGeneration[i] = signInGeneration;
                 continue;
             }
+            // Not asked for in a refresh of chosen accounts: it waits for its own retry or poll,
+            // and one already due polls in the next round, which follows at once.
             if (refreshSelected && !refreshRequested[i]) {
-                if (retryDeadlineMs[i] > nowMs &&
-                    (nextRetryMs == 0 || retryDeadlineMs[i] < nextRetryMs)) {
-                    nextRetryMs = retryDeadlineMs[i];
-                } else if (nextPollDeadlineMs[i] > nowMs &&
-                           (nextPollMs == 0 || nextPollDeadlineMs[i] < nextPollMs)) {
-                    nextPollMs = nextPollDeadlineMs[i];
-                } else if (nextPollMs == 0 || nowMs < nextPollMs) {
-                    nextPollMs = nowMs;
+                if (retryDeadlineMs[i] > nowMs) {
+                    if (nextRetryMs == 0 || retryDeadlineMs[i] < nextRetryMs) nextRetryMs = retryDeadlineMs[i];
+                } else {
+                    ULONGLONG dueMs = std::max(nextPollDeadlineMs[i], nowMs);
+                    if (nextPollMs == 0 || dueMs < nextPollMs) nextPollMs = dueMs;
                 }
                 continue;
             }
