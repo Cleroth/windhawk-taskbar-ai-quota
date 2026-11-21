@@ -218,7 +218,7 @@ static void RunHistoryRenders(const std::wstring& directory) {
     defaults.chart = week;
 
     // s-account: OAI with its recording off (credits); CC 1 paused, its value stale (extra
-    // budget, dollars details only).
+    // budget with its dollars).
     HistoryRenderPart oai{L"One account: OpenAI, Extra usage, recording off for this account", TestHistoryView()};
     oai.view.selected = 0;
     oai.view.view = HistoryView::ExtraUsage;
@@ -232,10 +232,8 @@ static void RunHistoryRenders(const std::wstring& directory) {
     cc1.view.accounts[1].paused = true;
     cc1.view.accounts[1].stale = true;
     cc1.view.cards = {TestCard(L"Extra budget", 3, L"22%", L"Fri 30 Oct 20:32",
-                               TestLines(L"22% \u00B7 Fri 30 Oct 20:32", L"150 h (89.3%)", L"0 h")),
-                      TestCard(L"Extra spending (USD) \u2014 details only", 6, L"USD 11.00", L"Fri 30 Oct 20:32",
-                               {L"Peak USD 11.00 \u00B7 Fri 30 Oct 20:32"})};
-    cc1.view.cards[1].detailsOnly = true;
+                               {L"USD 11.00 spent", L"Peak 22% \u00B7 USD 11.00 \u00B7 Fri 30 Oct 20:32",
+                                L"Coverage 150 h (89.3%)", L"Est. \u226590%: 0 h"})};
     cc1.chart = TestChartOf(TestMockupWeek(), select(0xC1, HistoryView::ExtraUsage));
 
     // s-compare: CC 2, Weekly, comparing (two columns of both periods).
@@ -372,8 +370,6 @@ static void RunHistoryRenders(const std::wstring& directory) {
         TestCard(L"5h", 0, L"12%", L"now", TestLines(L"58% \u00B7 Sun 25 Oct 12:32", L"141 h (83.9%)", L"0 h")),
         TestCard(L"Weekly", 1, L"91%", L"now", TestLines(L"91% \u00B7 Sat 31 Oct 14:32", L"166 h (98.8%)", L"3 h")),
         TestCard(L"Fable weekly", 2, L"58%", L"now", TestLines(L"63% \u00B7 Sun 25 Oct 23:32", L"166 h (98.8%)", L"0 h")),
-        TestCard(L"Extra budget", 3, L"20%", L"Sat 31 Oct 04:31",
-                 TestLines(L"20% \u00B7 Sat 31 Oct 04:31", L"158 h (94.0%)", L"0 h")),
         TestCard(L"Extra spending (USD)", 6, L"USD 10.00", L"Sat 31 Oct 04:31",
                  {L"Peak USD 10.00 \u00B7 Sat 31 Oct 04:31", L"Coverage 158 h (94.0%)"})};
     nav.chart = TestChartOf(TestMockupWeek(), select(0xC2, HistoryView::AllMeters));
@@ -409,7 +405,7 @@ static void RunHistoryRenders(const std::wstring& directory) {
                  c.Command(HistoryUiCommand::Range, int(HistoryUiRange::Day));
              })),
         real(L"Weekly, All accounts, 7d (a scoped quota 2 DIP wide)", week),
-        real(L"Extra usage, All accounts: credits on the right axis; dollars details only",
+        real(L"Extra usage, All accounts: credits on the right axis; a budget's dollars with it, dollars alone details only",
              TestChartOf(TestMockupWeek(), [](HistoryController& c) { c.Command(HistoryUiCommand::View, int(HistoryView::ExtraUsage)); })),
         real(L"All meters, All accounts: percent, USD and credits axes",
              TestChartOf(TestMockupWeek(), [](HistoryController& c) { c.Command(HistoryUiCommand::View, int(HistoryView::AllMeters)); })),
@@ -480,6 +476,13 @@ static void RunHistoryRenders(const std::wstring& directory) {
             if (distance(i) < distance(best)) best = i;
         }
         return HistoryChartPoint(c, c.lines[0], points[best]);
+    };
+    states.push_back(real(L"The readout on an extra budget (CC 1, Extra usage): its row, then its dollars' in its swatch; "
+                          L"its card names them",
+                          TestChartOf(TestMockupWeek(), select(0xC1, HistoryView::ExtraUsage)), 640));
+    states.back().hover = [](const HistoryChart& c) {
+        const std::vector<HistoryRenderPoint>& points = c.render[0][0].points;
+        return HistoryChartPoint(c, c.lines[0], points[points.size() / 2]);
     };
 
     // One removed account (CC 2 no longer configured): its info bar with Delete history.

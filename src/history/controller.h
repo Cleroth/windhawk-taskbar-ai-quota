@@ -589,9 +589,10 @@ struct HistoryController {
                 L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the "
                 L"limit, and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI "
                 L"credits used and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI "
-                L"credits remaining, which fall as usage rises, on their own axis. Dollar spending shows on the "
-                L"cards; All meters also plots it on its own axis. Accounts without readings in the range are listed "
-                L"under No readings.")},
+                L"credits remaining, which fall as usage rises, on their own axis. Dollars spent show with an "
+                L"Anthropic budget's readings, on its card and when pointing at its line. Without a monthly limit "
+                L"there is no budget line: the dollars get their own card, and All meters plots them on their own "
+                L"axis. Accounts without readings in the range are listed under No readings.")},
             {TrCtx(L"history-about", L"Lines and markers"),
              Tr(L"All accounts gives each account a color: primary quotas are thicker, scoped quotas thinner and "
                 L"tinted. One account gives each meter its own color. Solid lines: current. Dashed lines: previous "
@@ -952,6 +953,7 @@ struct HistoryController {
                 shown.account = line.account;
                 shown.name = line.legendTitle;
                 shown.title = line.hoverTitle;
+                shown.spentName = line.spentTitle;
                 shown.color = line.color;
                 shown.stroke = line.stroke;
                 shown.low = line.low;

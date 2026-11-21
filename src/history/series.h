@@ -30,12 +30,19 @@ static constexpr COLORREF kHistoryColors[] = {
     RGB(115, 45, 200), RGB(0, 140, 170), RGB(35, 35, 35), RGB(220, 25, 35),
 };
 
+// The dollars recorded with a reading of `meter`, -1 without: Anthropic's extra usage spending
+// (meter 6) with its budget percentage (meter 3), the same spending over the monthly limit.
+static double HistorySpentWith(const HistorySample& sample, int meter) {
+    return meter == 3 && HistoryHasValue(sample, 6) ? sample.meters[6].value : -1;
+}
+
 struct HistoryStatistics {
     bool hasValue = false;
     double peak = 0;
     ULONGLONG peakTime = 0;
     double latest = 0;
     ULONGLONG latestTime = 0;
+    double peakSpent = -1, latestSpent = -1;  // HistorySpentWith those readings
     double coverageMs = 0;
     double nearLimitMs = 0;
     size_t validSamples = 0;
@@ -68,6 +75,8 @@ struct HistorySeries {
     int meter = 0;
     // Its short name (without the account in one account's view) and full title (with it)
     std::wstring legendTitle, hoverTitle;
+    // An extra budget whose dollars have no series: their short name; else empty
+    std::wstring spentTitle;
     COLORREF color = 0;
     int stroke = 3;  // Logical pixels; scoped quotas use 2, never thin 1px dashes.
     bool plotted = true;
@@ -179,11 +188,13 @@ static HistoryStatistics HistoryAnalyzeRows(const std::vector<HistorySample>& sa
             double value = sample.meters[meter].value;
             result.latest = value;
             result.latestTime = sample.timeMs;
+            result.latestSpent = HistorySpentWith(sample, meter);
             ++result.validSamples;
             if (!result.hasValue || value > result.peak) {
                 result.hasValue = true;
                 result.peak = value;
                 result.peakTime = sample.timeMs;
+                result.peakSpent = result.latestSpent;
             }
             if (previous && HistoryConnection(*previous, sample, meter) == HistoryBreak::None) {
                 double elapsed = double(sample.timeMs - previous->timeMs);
@@ -212,7 +223,9 @@ static HistoryStatistics HistoryAnalyzeRows(const std::vector<HistorySample>& sa
 
 // Series of the selected account (or every account) in the query's view: one per meter with
 // readings in either period, in account then meter order. An account with none is listed
-// without readings.
+// without readings. Dollars recorded with a budget percentage are that line's (HistorySpentWith,
+// named by its spentTitle): they get a series only when a reading in either period has none
+// (extra usage without a limit).
 static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& samples,
                                            const std::vector<HistoryUiAccount>& accounts,
                                            const HistorySeriesQuery& query,
@@ -245,10 +258,20 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
             if (!account.showFableWeekly) meters &= ~(1U << 2);
         }
         if (!meters) continue;
+        // Whether its dollars keep a series: some reading in either period has no budget percentage.
+        bool spentAlone = false;
+        if (meters & (1U << 6)) {
+            for (size_t row : account.rows) {
+                if (spentAlone || cancelled()) break;
+                const auto& sample = samples[row];
+                spentAlone = sample.timeMs >= query.readFrom && sample.timeMs < query.to &&
+                             HistoryHasValue(sample, 6) && !HistoryHasValue(sample, 3);
+            }
+        }
         size_t firstSeries = result.series.size();
         for (int meter = 0; meter < int(kHistoryMeterCount); ++meter) {
             if (cancelled()) break;
-            if (!(meters & (1U << meter))) continue;
+            if (!(meters & (1U << meter)) || (meter == 6 && !spentAlone)) continue;
             HistorySeries series;
             series.account = i;
             series.meter = meter;
@@ -338,6 +361,10 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                                 {{L"account", account.label}, {L"meter", name}});
             };
             series.legendTitle = query.selected < 0 ? titled(label) : label;
+            if (meter == 3 && (meters & (1U << 6)) && !spentAlone) {
+                std::wstring spent = I18nText(locale, TrCtx(L"history-meter", L"Extra spending (USD)"));
+                series.spentTitle = query.selected < 0 ? titled(spent) : spent;
+            }
             series.hoverTitle =
                 titled(meter >= 6 ? label :
                                     I18nText(locale, query.remaining ? TrCtx(L"history-series", L"{meter} left (%)") :

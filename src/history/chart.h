@@ -413,7 +413,8 @@ static UiReadoutRow HistoryChartRow(const I18nLocale& locale, std::wstring name,
 
 // The readout of picked points in the locale's language: one row each, in their order, keyed by
 // the recorded samples they name, the language and the decimal separator their values show (none:
-// key 0). Its overflow hint names what shows the rest.
+// key 0). An extra budget's point whose dollars have no line (HistoryUiLine::spentName) gets a
+// second row for them, in the line's swatch. Its overflow hint names what shows the rest.
 static UiTooltipContent HistoryChartReadout(const I18nLocale& locale, const HistoryChart& c,
                                             const std::vector<HistoryChartHit>& hits, const UiPalette& p,
                                             bool oneAccount, ULONGLONG now, const HistoryUiLocalTime& localTime) {
@@ -433,9 +434,15 @@ static UiTooltipContent HistoryChartReadout(const I18nLocale& locale, const Hist
         mix(line.chip);
         mix(uint64_t(hit.period));
         mix(point.sourceRow);
-        content.rows.push_back(HistoryChartRow(locale, line.name, HistoryChartColor(line, p), line.stroke, line.meter,
-                                               hit.period, HistoryUiShown(line.meter, point.value, c.remaining),
-                                               c.snapshot->samples[point.sourceRow].timeMs, now, localTime));
+        const HistorySample& sample = c.snapshot->samples[point.sourceRow];
+        D2D1_COLOR_F color = HistoryChartColor(line, p);
+        content.rows.push_back(HistoryChartRow(locale, line.name, color, line.stroke, line.meter, hit.period,
+                                               HistoryUiShown(line.meter, point.value, c.remaining), sample.timeMs, now,
+                                               localTime));
+        if (double spent = HistorySpentWith(sample, line.meter); spent >= 0 && !line.spentName.empty()) {
+            content.rows.push_back(HistoryChartRow(locale, line.spentName, color, line.stroke, 6, hit.period, spent,
+                                                   sample.timeMs, now, localTime));
+        }
     }
     if (content.rows.empty()) return {};
     content.key = key ? key : 1;

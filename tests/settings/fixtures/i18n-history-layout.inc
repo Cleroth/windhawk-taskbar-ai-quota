@@ -58,7 +58,9 @@ static std::vector<HistoryLayoutCase> HistoryLayoutCases() {
                          c.Command(HistoryUiCommand::View, int(HistoryView::AllMeters));
                      })});
     // One account: OAI's credits with its recording off; CC 1 paused (hidden, while hidden
-    // accounts aren't polled); CC 2 in All meters; CC 2 removed with Delete history.
+    // accounts aren't polled), its budget's card naming its dollars, and in the Remaining bar mode
+    // (the lowest share left names them as spent); CC 2 in All meters; CC 2 removed with Delete
+    // history.
     cases.push_back({"account-oai", reloaded([](TestChartWindow& w) { w.ops.settings.settings.accounts[0].recordHistory = false; },
                                              TestMockupWeek(), select(0x0A, HistoryView::ExtraUsage))});
     cases.push_back({"account-paused", reloaded([](TestChartWindow& w) {
@@ -66,6 +68,10 @@ static std::vector<HistoryLayoutCase> HistoryLayoutCases() {
                                                     w.ops.settings.settings.accounts[1].hidden = true;
                                                 },
                                                 TestMockupWeek(), select(0xC1, HistoryView::ExtraUsage))});
+    cases.push_back({"account-budget-left", reloaded([](TestChartWindow& w) {
+                                                         w.ops.settings.settings.barMode = BarMode::Remaining;
+                                                     },
+                                                     TestMockupWeek(), select(0xC1, HistoryView::ExtraUsage))});
     cases.push_back({"account-all-meters", chart(TestMockupWeek(), select(0xC2, HistoryView::AllMeters))});
     {
         std::vector<AccountConfig> kept = TestMockupAccounts();

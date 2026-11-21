@@ -320,6 +320,53 @@ static void RunHistoryViewTests() {
                                                                  L"Coverage 1 h (0.6%)"}));
     });
 
+    Run("history cards: an extra budget whose dollars have no series names them under its headline and with its "
+        "peak (as spent beside a share left in the Remaining mode), per period while comparing; with dollars also "
+        "recorded alone, both cards as before", [] {
+        // CC 1's budget at 20, 90 and 60% used: USD 10 and 45 of 50, then 48 of 80 (the limit raised).
+        TestHistory h;
+        h.configured = {TestHistoryAccount(L"anthropic", L"CC 1", 0xC1)};
+        double percent[] = {20, 90, 60}, spent[] = {10, 45, 48};
+        for (int i = 0; i < 3; i++) {
+            h.samples.push_back(TestReading(0xC1, 1, kWeekFrom + ULONGLONG(i + 1) * kHourMs,
+                                            {{3, percent[i]}, {6, spent[i]}}));
+        }
+        h.selected = 0;
+        for (HistoryView shown : {HistoryView::ExtraUsage, HistoryView::AllMeters}) {
+            h.view = shown;
+            HistoryUiView view = TestCards(h);
+            CHECK(view.cards.size() == 1 && view.cards[0].title == L"Extra budget" && !view.cards[0].detailsOnly);
+            CHECK(view.cards[0].value == L"60%" && view.cards[0].when == L"Sat 24 Oct 17:32");
+            CHECK((view.cards[0].lines ==
+                   std::vector<std::wstring>{L"USD 48.00 spent", L"Peak 90% \u00B7 USD 45.00 \u00B7 Sat 24 Oct 16:32",
+                                             L"Coverage 2 h (1.2%)", L"Est. \u226590%: 0 h"}));
+        }
+        // Remaining: 40% left, 10% at its lowest; the dollars stay the ones spent.
+        HistoryUiView view = TestCards(h, [](HistoryUiView& v) { v.remaining = true; });
+        CHECK(view.cards[0].value == L"40%");
+        CHECK((view.cards[0].lines ==
+               std::vector<std::wstring>{L"USD 48.00 spent", L"Lowest 10% \u00B7 USD 45.00 spent \u00B7 Sat 24 Oct 16:32",
+                                         L"Coverage 2 h (1.2%)", L"Est. \u226410%: 0 h"}));
+        // Comparing: the headline's dollars first, then each period's peak with its own.
+        h.compare = true;
+        h.samples.insert(h.samples.begin(), TestReading(0xC1, 1, kWeekFrom - kHistoryWeekMs + kHourMs, {{3, 50}, {6, 25}}));
+        view = TestCards(h);
+        CHECK((view.cards[0].lines ==
+               std::vector<std::wstring>{L"USD 48.00 spent",
+                                         L"Current: Peak 90% \u00B7 USD 45.00 \u00B7 Sat 24 Oct 16:32",
+                                         L"Coverage 2 h (1.2%)", L"Est. \u226590%: 0 h",
+                                         L"Previous: Peak 50% \u00B7 USD 25.00 \u00B7 Sat 17 Oct 15:32",
+                                         L"Coverage 0 h (0.0%)", L"Est. \u226590%: \u2014"}));
+        // Dollars also recorded alone (no limit then): their own card, and the budget's without them.
+        h.compare = false;
+        h.samples.erase(h.samples.begin());
+        h.samples.push_back(TestReading(0xC1, 1, kWeekFrom + 4 * kHourMs, {{6, 50}}));
+        view = TestCards(h);
+        CHECK(view.cards.size() == 2 && view.cards[1].title == L"Extra spending (USD)" && view.cards[1].value == L"USD 50.00");
+        CHECK((view.cards[0].lines == std::vector<std::wstring>{L"Peak 90% \u00B7 Sat 24 Oct 16:32",
+                                                                 L"Coverage 2 h (1.2%)", L"Est. \u226590%: 0 h"}));
+    });
+
     Run("history cards: All accounts names each account (a removed one by its journal ID), its "
         "recording status once; accounts without readings in account order, unsupported ones left out", [] {
         TestHistory h;

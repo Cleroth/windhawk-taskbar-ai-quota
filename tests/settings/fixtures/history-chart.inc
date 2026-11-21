@@ -593,13 +593,15 @@ static void RunHistoryChartTests() {
 
     Run("history chart: unlike units on their own axes, one projection for painting and picking; finite extreme "
         "ranges", [] {
-        // All accounts, All meters: 25 to 100%, 250 to 1000 USD, 2500 to 10,000 credits, each a quarter up then at
-        // the top of its axis.
-        HistorySample anthropic = TestReading(0xC1, 1, kWeekFrom + kHourMs, {{3, 25}, {6, 250}});
-        HistorySample anthropic2 = TestReading(0xC1, 1, kWeekFrom + 2 * kHourMs, {{3, 100}, {6, 1000}});
+        // All accounts, All meters: 25 to 100% (CC 1's budget), 250 to 1000 USD (CC 2's dollars, without a
+        // budget), 2500 to 10,000 credits, each a quarter up then at the top of its axis.
+        HistorySample anthropic = TestReading(0xC1, 1, kWeekFrom + kHourMs, {{3, 25}});
+        HistorySample anthropic2 = TestReading(0xC1, 1, kWeekFrom + 2 * kHourMs, {{3, 100}});
+        HistorySample dollars = TestReading(0xC2, 1, kWeekFrom + kHourMs, {{6, 250}});
+        HistorySample dollars2 = TestReading(0xC2, 1, kWeekFrom + 2 * kHourMs, {{6, 1000}});
         HistorySample openai = TestReading(0x0A, 2, kWeekFrom + kHourMs, {{7, 2500}});
         HistorySample openai2 = TestReading(0x0A, 2, kWeekFrom + 2 * kHourMs, {{7, 10000}});
-        auto w = TestChartOf({anthropic, openai, anthropic2, openai2},
+        auto w = TestChartOf({anthropic, dollars, openai, anthropic2, dollars2, openai2},
                              [](HistoryController& c) { c.Command(HistoryUiCommand::View, int(HistoryView::AllMeters)); });
         HistoryChart& c = TestLaid(*w);
         CHECK(c.lines.size() == 3 && c.axes[1].high == 1000 && c.axes[2].high == 10000 && c.axes[0].high == 100);
@@ -653,6 +655,46 @@ static void RunHistoryChartTests() {
             HistoryChartAxis percent{true, 0, 100, {}};
             CHECK(HistoryChartY(percent, e.plot, -max) == e.plot.bottom && HistoryChartY(percent, e.plot, max) == e.plot.top);
         }
+    });
+
+    Run("history chart: an extra budget's dollars have no line, axis or card: its readout adds their row in its "
+        "swatch, as recorded in the Remaining mode; dollars also recorded alone keep their line and the budget's "
+        "readout one row", [] {
+        // CC 1 at 25% (USD 300) then 100% (USD 1200) of its budget, lone readings 50 hours apart.
+        HistorySample a = TestReading(0xC1, 1, kWeekFrom + 10 * kHourMs, {{3, 25}, {6, 300}});
+        HistorySample b = TestReading(0xC1, 1, kWeekFrom + 60 * kHourMs, {{3, 100}, {6, 1200}});
+        auto allMeters = [](HistoryController& c) { c.Command(HistoryUiCommand::View, int(HistoryView::AllMeters)); };
+        auto w = TestChartOf({a, b}, allMeters);
+        HistoryChart& c = TestLaid(*w);
+        CHECK(c.lines.size() == 1 && c.lines[0].meter == 3 && c.lines[0].name == L"CC 1 \u00B7 Extra budget" &&
+              c.lines[0].spentName == L"CC 1 \u00B7 Extra spending (USD)");
+        CHECK(!c.axes[1].visible && w->controller.view.cards.size() == 1);
+        UiTooltipContent readout;
+        w->controller.Hover(TestAt(c, 0, 0, 0), readout, TestPalette(UiThemeKind::Dark));
+        CHECK(readout.rows.size() == 2 && readout.rows[0].title == L"CC 1 \u00B7 Extra budget" &&
+              readout.rows[1].title == L"CC 1 \u00B7 Extra spending (USD)");
+        CHECK(UiRunsText(readout.rows[0].detail) == L"[Current] 25.0% \u00B7 " + TestTime(a.timeMs) &&
+              UiRunsText(readout.rows[1].detail) == L"[Current] USD 300.00 \u00B7 " + TestTime(a.timeMs));
+        CHECK(TestSameColor(readout.rows[0].color, readout.rows[1].color) && readout.rows[0].stroke == readout.rows[1].stroke);
+        // One account: both names drop it. Remaining: the share left, the dollars spent.
+        w->controller.Command(HistoryUiCommand::Select, 0, 0xC1);
+        w->ops.settings.settings.barMode = BarMode::Remaining;
+        w->controller.Load();
+        HistoryChart& left = TestLaid(*w);
+        w->controller.Hover(TestAt(left, 0, 0, 0), readout, TestPalette(UiThemeKind::Dark));
+        CHECK(readout.rows.size() == 2 && readout.rows[0].title == L"Extra budget" &&
+              readout.rows[1].title == L"Extra spending (USD)");
+        CHECK(UiRunsText(readout.rows[0].detail) == L"[Current] 75.0% \u00B7 " + TestTime(a.timeMs) &&
+              UiRunsText(readout.rows[1].detail) == L"[Current] USD 300.00 \u00B7 " + TestTime(a.timeMs));
+        // A later reading of dollars alone: their line on its axis (300 of 2000 USD, well under the
+        // budget's quarter), and the budget's point reads alone.
+        HistorySample alone = TestReading(0xC1, 1, kWeekFrom + 110 * kHourMs, {{6, 1300}});
+        auto mixed = TestChartOf({a, b, alone}, allMeters);
+        HistoryChart& m = TestLaid(*mixed);
+        CHECK(m.lines.size() == 2 && m.lines[0].meter == 3 && m.lines[0].spentName.empty() && m.lines[1].meter == 6 &&
+              m.axes[1].visible && m.axes[1].high == 2000 && mixed->controller.view.cards.size() == 2);
+        mixed->controller.Hover(TestAt(m, 0, 0, 0), readout, TestPalette(UiThemeKind::Dark));
+        CHECK(readout.rows.size() == 1 && readout.rows[0].title == L"CC 1 \u00B7 Extra budget");
     });
 
     Run("history chart: readout rows name removed accounts by their journal IDs and one account's lines without "

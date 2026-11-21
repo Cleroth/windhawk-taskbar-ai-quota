@@ -154,14 +154,18 @@
     });
 
     Run("csv: the history model names meters in its query's language while the CSV keeps its English meter IDs and "
-        "units (German: Anthropic's 5-hour, weekly, extra budget and dollars, OpenCode Go's monthly)", [&] {
-        std::vector<HistoryUiAccount> accounts(2);
+        "units (German: Anthropic's 5-hour, weekly and extra budget with its dollars, OpenCode Go's monthly, an "
+        "unknown provider's dollars alone)", [&] {
+        std::vector<HistoryUiAccount> accounts(3);
         accounts[0].id = 0xA1;
         accounts[0].provider = 1;
         accounts[0].label = L"CC";
         accounts[1].id = 0xF6;
         accounts[1].provider = 5;
         accounts[1].label = L"Go";
+        accounts[2].id = 0xD4;
+        accounts[2].provider = 7;
+        accounts[2].label = L"Neu";
         for (size_t row = 0; row < samples.size(); row++) {
             for (HistoryUiAccount& account : accounts) {
                 if (samples[row].accountId == account.id) account.rows.push_back(row);
@@ -170,12 +174,15 @@
         HistorySeriesQuery query{-1, HistoryView::AllMeters, baseTime, baseTime + kHistoryWeekMs, baseTime, false, 90,
                                  false, I18nLocale(*I18nLanguageByTag(L"de"))};
         HistorySeriesSet german = HistoryBuildSeries(samples, accounts, query, Never);
-        CHECK(Meters(german, 0) == (std::set<int>{0, 1, 3, 6}) && Meters(german, 1) == (std::set<int>{0, 1, 3}));
+        CHECK(Meters(german, 0) == (std::set<int>{0, 1, 3}) && Meters(german, 1) == (std::set<int>{0, 1, 3}) &&
+              Meters(german, 2) == std::set<int>{6});
         CHECK(Series(german, 0, 0).legendTitle == L"CC \u00B7 5\u00A0Std." &&
               Series(german, 0, 0).hoverTitle == L"CC \u00B7 5\u00A0Std. verbraucht (%)");
         CHECK(Series(german, 0, 1).hoverTitle == L"CC \u00B7 W\u00F6chentlich verbraucht (%)");
         CHECK(Series(german, 0, 3).hoverTitle == L"CC \u00B7 Zusatzbudget verbraucht (%)");
-        CHECK(Series(german, 0, 6).hoverTitle == L"CC \u00B7 Zusatzausgaben (USD)");
+        CHECK(Series(german, 0, 3).spentTitle == L"CC \u00B7 Zusatzausgaben (USD)" &&
+              Series(german, 0, 3).current.latestSpent == 3.5);
+        CHECK(Series(german, 2, 6).hoverTitle == L"Neu \u00B7 Zusatzausgaben (USD)");
         CHECK(Series(german, 1, 3).hoverTitle == L"Go \u00B7 Monatlich verbraucht (%)");
         query.locale = {};
         CHECK(Series(HistoryBuildSeries(samples, accounts, query, Never), 0, 3).hoverTitle ==

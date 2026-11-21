@@ -1,8 +1,9 @@
 // The history model (history/series.h) through its explicit inputs: grouping, accounts without
 // readings, styles, labels, reduction, statistics, account collection, selection and
 // cancellation.
+    // AllLanes records dollars with every budget percentage: they have no series of their own.
     const std::array<std::array<std::set<int>, 4>, 5> expected{{
-        {{{0}, {1, 2}, {3, 6}, {0, 1, 2, 3, 6}}},
+        {{{0}, {1, 2}, {3}, {0, 1, 2, 3}}},
         {{{0}, {1}, {7}, {0, 1, 7}}},
         {{{0, 4}, {1, 2, 5}, {}, {0, 1, 2, 4, 5}}},
         {{{}, {}, {3}, {3}}},
@@ -33,9 +34,13 @@
                 if (provider == 4 && (view == 2 || view == 3)) {
                     CHECK(Series(built, 0, 3).hoverTitle == L"account-100 · AI credits used (%)");
                     CHECK(Series(built, 0, 3).legendTitle == (selected < 0 ? L"account-100 · AI credits" : L"AI credits"));
+                    CHECK(Series(built, 0, 3).spentTitle.empty());
                 }
+                // Anthropic's extra budget names the dollars recorded with it.
                 if (provider == 1 && (view == 2 || view == 3)) {
                     CHECK(Series(built, 0, 3).hoverTitle == L"account-100 · Extra budget used (%)");
+                    CHECK(Series(built, 0, 3).spentTitle ==
+                          (selected < 0 ? L"account-100 · Extra spending (USD)" : L"Extra spending (USD)"));
                 }
                 // OpenCode Go: its 5-hour window, weekly, and its monthly in the extra percentage lane.
                 if (provider == 5 && (view == 0 || view == 3)) {
@@ -48,6 +53,7 @@
                 if (provider == 5 && (view == 2 || view == 3)) {
                     CHECK(Series(built, 0, 3).hoverTitle == L"account-100 · Monthly used (%)");
                     CHECK(Series(built, 0, 3).legendTitle == (selected < 0 ? L"account-100 · Monthly" : L"Monthly"));
+                    CHECK(Series(built, 0, 3).spentTitle.empty());
                 }
             });
             Run("no readings " + key, [&, provider, view, selected] {
@@ -84,7 +90,7 @@
     }
     // A later version's provider: every lane it recorded in range, in each view's lanes, under
     // the lanes' generic names.
-    const std::array<std::set<int>, 4> viewLanes{{{0, 4}, {1, 2, 5}, {3, 6, 7}, {0, 1, 2, 3, 4, 5, 6, 7}}};
+    const std::array<std::set<int>, 4> viewLanes{{{0, 4}, {1, 2, 5}, {3, 7}, {0, 1, 2, 3, 4, 5, 7}}};
     for (int selected : {-1, 0}) for (uint32_t provider : {6U, UINT_MAX}) for (int view = 0; view < 4; ++view) {
         std::string key = std::to_string(provider) + "/v" + std::to_string(view) + "/mode=" + std::to_string(selected);
         Run("later provider, every lane " + key, [&, provider, view, selected] {
@@ -149,8 +155,8 @@
                 CHECK(Meters(built) == (readings ? expected[0][view] : std::set<int>{}));
                 CHECK(built.noReadingAccounts.size() == (readings ? 0 : 1));
                 if (readings && view == 3) {
-                    CHECK(Series(built, 0, 6).plotted);
-                    CHECK(Reduce(state, Series(built, 0, 6), state.overlay ? 1 : 0).points.size() == 2);
+                    const auto& budget = Series(built, 0, 3);
+                    CHECK((state.overlay ? budget.previous : budget.current).latestSpent == 15.5);
                 }
             }
             if (state.overlay) {
@@ -210,22 +216,61 @@
         }
     });
 
-    Run("Extra USD is detail-only; All meters plots it", [] {
+    Run("dollars recorded with a budget percentage are its line's: no series, it names them, its latest and peak "
+        "carry them", [] {
         auto state = Model(); state.overlay = true; state.readFrom -= kHistoryWeekMs;
         AllLanes(state, true); AllLanes(state);
+        for (auto view : {HistoryView::ExtraUsage, HistoryView::AllMeters}) {
+            state.view = view;
+            auto built = Build(state);
+            CHECK(!Meters(built, 0).contains(6)); CHECK(built.noReadingAccounts.empty());
+            const auto& budget = Series(built, 0, 3);
+            CHECK(budget.plotted && budget.spentTitle == L"account-100 · Extra spending (USD)");
+            CHECK(budget.current.latestSpent == 15.5 && budget.current.peakSpent == 15.5);
+            CHECK(budget.previous.latestSpent == 15.5 && budget.previous.peakSpent == 15.5);
+            // Credits carry none.
+            CHECK(Series(built, 1, 7).plotted && Series(built, 1, 7).spentTitle.empty() &&
+                  Series(built, 1, 7).current.latestSpent == -1 && Series(built, 1, 7).current.peakSpent == -1);
+        }
+        // Another percentage with dollars in its reading carries none.
+        CHECK(Series(Build(state), 0, 1).current.latestSpent == -1 && Series(Build(state), 0, 1).current.peakSpent == -1);
+        // A later, lower reading: the peak keeps its own dollars.
+        AddRow(state, 0, state.from + 121000, {{3, 30}, {6, 9}});
+        auto budget = Series(Build(state), 0, 3);
+        CHECK(budget.current.latest == 30 && budget.current.latestSpent == 9);
+        CHECK(budget.current.peak == 45 && budget.current.peakSpent == 15.5);
+        // A percentage without dollars carries none, and makes no series for the others.
+        AddRow(state, 0, state.from + 181000, {{3, 50}});
+        auto built = Build(state);
+        CHECK(Series(built, 0, 3).current.latestSpent == -1 && Series(built, 0, 3).current.peakSpent == -1);
+        CHECK(!Meters(built, 0).contains(6));
+    });
+
+    for (bool alone : {false, true}) Run(std::string("dollars without a budget percentage keep a series, details-only "
+            "outside All meters/alone=") + (alone ? "1" : "0"), [=] {
+        // Dollars alone before both periods, at their end and in a failed reading never count; one
+        // in the previous period does.
+        auto state = Model({1}); state.overlay = true; state.readFrom -= kHistoryWeekMs;
+        AddRow(state, 0, state.readFrom - 1, {{6, 3}});
+        if (alone) AddRow(state, 0, state.readFrom + 1000, {{6, 30}});
+        AllLanes(state);
+        AddRow(state, 0, state.from + 121000, {{6, 5}}).failed = 1;
+        AddRow(state, 0, state.to, {{6, 4}});
         state.view = HistoryView::ExtraUsage;
         auto built = Build(state);
-        CHECK(built.series.size() == 3); CHECK(built.noReadingAccounts.empty());
+        CHECK(Meters(built) == (alone ? std::set<int>{3, 6} : std::set<int>{3}));
+        CHECK(Series(built, 0, 3).plotted && Series(built, 0, 3).current.latestSpent == 15.5);
+        // With a series of their own, the budget doesn't name them.
+        CHECK(Series(built, 0, 3).spentTitle == (alone ? L"" : L"account-100 · Extra spending (USD)"));
+        if (!alone) return;
+        // The series holds every dollar reading of both periods.
         const auto usd = Series(built, 0, 6);
-        CHECK(!usd.plotted); CHECK(usd.current.latest == 15.5); CHECK(usd.current.peak == 15.5);
-        CHECK(usd.previous.hasValue);
-        CHECK(Series(built, 0, 3).plotted && Series(built, 1, 7).plotted);
-        state.selected = 0; state.view = HistoryView::AllMeters;
-        built = Build(state);
-        CHECK(Series(built, 0, 6).plotted);
-        state.view = HistoryView::ExtraUsage;
-        built = Build(state);
-        CHECK(!Series(built, 0, 6).plotted);
+        CHECK(!usd.plotted && usd.previous.latest == 30 && usd.current.latest == 15.5 && usd.current.peak == 15.5);
+        state.view = HistoryView::AllMeters;
+        CHECK(Series(Build(state), 0, 6).plotted);
+        // Its period out of the query: the budget's again.
+        state.overlay = false; state.readFrom = state.from;
+        CHECK(!Meters(Build(state)).contains(6));
     });
 
     for (bool previous : {false, true}) Run(std::string("USD-only account not empty/") + (previous ? "previous" : "current"), [=] {
@@ -316,6 +361,7 @@
     });
     Run("remaining mode: titles name percentages left; legends, dollars, credits and statistics unchanged", [] {
         auto state = Model(); AllLanes(state);
+        AddRow(state, 0, state.from + 121000, {{6, 16}});
         state.view = HistoryView::AllMeters;
         auto used = Build(state);
         CHECK(Series(used, 0, 3).hoverTitle == L"account-100 · Extra budget used (%)");
@@ -527,7 +573,7 @@
     Run("cancellation stops series building and account collection", [] {
         auto always = [] { return true; };
         auto state = Model({1, 2}); AllLanes(state); state.view = HistoryView::AllMeters;
-        CHECK(Build(state).series.size() == 8);
+        CHECK(Build(state).series.size() == 7);
         auto built = HistoryBuildSeries(state.snapshot.samples, state.accounts, state, always);
         CHECK(built.series.empty()); CHECK(built.noReadingAccounts.empty());
         // Cancelled while the first account is built: the second is never visited.

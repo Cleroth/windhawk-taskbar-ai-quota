@@ -37,15 +37,19 @@ state and storage errors stay visible in the main window.
   - **Extra usage** plots Anthropic extra-usage budget used (%), GitHub Copilot AI credits
     used (%) and OpenCode Go's monthly used (%) (left, in the Remaining bar mode) on the left
     axis and OpenAI credits remaining on the right. OpenCode Go's monthly line is its plan's
-    included monthly allowance, not OpenCode's separately billed Extra Usage. USD spending
-    appears in details, not on this graph. GitHub Copilot records only
+    included monthly allowance, not OpenCode's separately billed Extra Usage. Anthropic's
+    budget used is its dollars spent over the monthly limit, so the dollars have no line of
+    their own: the budget's card names them under its value and with its peak, and pointing at
+    its line adds their row to the readout. Extra usage without a limit has no percentage: its
+    dollars appear in details, not on this graph. GitHub Copilot records only
     this percentage, so its accounts appear in Extra usage and All meters only; its pooled
     credits and additional usage are not recorded. In the sidebar, a Copilot account shows its
     latest AI credits used (%) where other accounts show their weekly one.
 - Selecting one account defaults to **All meters**, with the same three groups also available.
   All-account and single-account modes remember their view selections separately until the window
   closes. **All meters** includes weeklies hidden on the taskbar and plots Anthropic USD
-  spending. Percentages, USD, and credits use separately labeled axes.
+  spending recorded without a limit (a range holding readings with and without one shows both
+  lines). Percentages, USD, and credits use separately labeled axes.
 - A compact legend wraps above the graph; line names use the account label without its provider
   prefix. Hover an entry to emphasize its matching line.
   Hover the graph to identify all nearby or coincident lines by name, with recorded sample
@@ -73,8 +77,9 @@ state and storage errors stay visible in the main window.
   readouts and cards show quota left (100% minus used, below 0% past the limit, as Used mode
   goes above 100%): lines fall as usage rises, the red-threshold band sits at the bottom, and
   cards give the lowest share left and the estimated time at or below what the threshold leaves.
-  The sidebar's current values stop at 0%, like the taskbar. Dollar spending and credits keep
-  their recorded values, and the CSV always holds the recorded values.
+  The sidebar's current values stop at 0%, like the taskbar. Dollar spending (a budget's dollars
+  too: the ones spent, never the ones left) and credits keep their recorded values, and the CSV
+  always holds the recorded values.
 - OpenAI credits are not dollars or a spending ledger; the user-set credits ceiling is not
   stored as historical usage. View selection does not change the journal or CSV contents.
 - **Export CSV...** exports all meters for the selected account or all accounts in the selected

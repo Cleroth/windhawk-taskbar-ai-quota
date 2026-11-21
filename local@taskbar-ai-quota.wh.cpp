@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.23.1
+// @version         2.24.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -899,16 +899,19 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"Prozentwerte verwenden die linke Achse; das schattierte Band markiert Ihren roten Schwellenwert. Im Balkenmodus "
      L"„Verbleibend“ (Einstellungen > Darstellung) zeigen sie, was übrig ist: Die Linien fallen also mit steigender "
      L"Nutzung, gehen nach dem Limit unter 0% und das Band liegt unten. „Zusatznutzung“ zeigt das verbrauchte Budget "
      L"von Anthropic, die verbrauchten AI Credits von GitHub Copilot und das verbrauchte Monatskontingent von OpenCode "
      L"Go (%) (links, im Modus „Verbleibend“ den Rest) sowie die verbleibenden Credits von OpenAI, die mit steigender "
-     L"Nutzung fallen, auf einer eigenen Achse. Dollar-Ausgaben erscheinen auf den Karten; „Alle Messgrößen“ zeichnet "
-     L"sie zusätzlich auf einer eigenen Achse. Konten ohne Messwerte im Zeitraum werden unter „Keine Messwerte im "
-     L"Zeitraum“ aufgeführt."},
+     L"Nutzung fallen, auf einer eigenen Achse. Dollar-Ausgaben erscheinen bei den Messwerten eines Anthropic-Budgets, "
+     L"auf dessen Karte und beim Zeigen auf dessen Linie. Ohne Monatslimit gibt es keine Budgetlinie: Die "
+     L"Dollar-Ausgaben erhalten eine eigene Karte, und „Alle Messgrößen“ zeichnet sie auf einer eigenen Achse. Konten "
+     L"ohne Messwerte im Zeitraum werden unter „Keine Messwerte im Zeitraum“ aufgeführt."},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -1522,6 +1525,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"history-card", L"Peak {reading}", L"Höchstwert {reading}"},
     {L"history-card", L"Previous: {line}", L"Vorwoche: {line}"},
     {L"history-card", L"now", L"jetzt"},
+    {L"history-card", L"{amount} spent", L"{amount} ausgegeben"},
     {L"history-card", L"{title} — details only", L"{title} – nur Details"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -1548,6 +1552,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"history-range", L"7d", L"7 T"},
     {L"history-range", L"90d", L"90 T"},
     {L"history-range", L"All", L"Alles"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · {amount} ausgegeben · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter} übrig (%)"},
@@ -2201,15 +2207,19 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"Los porcentajes usan el eje izquierdo; la franja sombreada marca tu umbral rojo. En el modo de barra Restante "
      L"(Configuración > Visualización) muestran lo que queda, así que las líneas bajan a medida que sube el uso, por "
      L"debajo del 0% al superar el límite, y la franja queda abajo. Uso adicional muestra el presupuesto usado de "
      L"Anthropic, los créditos de IA usados de GitHub Copilot y la asignación mensual usada de OpenCode Go (%) (lo "
      L"que queda, en modo Restante), y los créditos restantes de OpenAI, que bajan a medida que sube el uso, en su "
-     L"propio eje. El gasto en dólares aparece en las tarjetas; Todas las métricas también lo representa en su "
-     L"propio eje. Las cuentas sin lecturas en el intervalo aparecen en la tarjeta Sin lecturas en el intervalo."},
+     L"propio eje. El gasto en dólares aparece junto a las lecturas del presupuesto de Anthropic, en su tarjeta y al "
+     L"señalar su línea. Sin límite mensual no hay línea de presupuesto: el gasto en dólares tiene su propia tarjeta "
+     L"y Todas las métricas lo representa en su propio eje. Las cuentas sin lecturas en el intervalo aparecen en la "
+     L"tarjeta Sin lecturas en el intervalo."},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -2816,6 +2826,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"history-card", L"Peak {reading}", L"Máximo {reading}"},
     {L"history-card", L"Previous: {line}", L"Anterior: {line}"},
     {L"history-card", L"now", L"ahora"},
+    {L"history-card", L"{amount} spent", L"{amount} gastados"},
     {L"history-card", L"{title} — details only", L"{title} — solo detalles"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -2843,6 +2854,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"history-range", L"7d", L"7\u00A0d"},
     {L"history-range", L"90d", L"90\u00A0d"},
     {L"history-range", L"All", L"Todo"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · {amount} gastados · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter} (% restante)"},
@@ -3509,16 +3522,19 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"Les pourcentages utilisent l’axe de gauche\u202F; la bande ombrée marque votre seuil rouge. En mode de barre Restant "
      L"(Paramètres > Affichage), ils indiquent ce qui reste\u202F: les lignes descendent quand l’utilisation augmente, "
      L"passent sous 0% au-delà de la limite, et la bande se place en bas. La vue Supplément affiche le budget "
      L"Anthropic utilisé, les crédits IA GitHub Copilot utilisés et le quota mensuel OpenCode Go utilisé (%) (ce qui "
      L"reste, en mode Restant), ainsi que les crédits OpenAI restants, qui baissent quand l’utilisation augmente, sur "
-     L"leur propre axe. Les dépenses en dollars figurent sur les cartes\u202F; la vue Tous les indicateurs les trace aussi "
-     L"sur leur propre axe. Les comptes sans relevé sur la période figurent dans la carte Aucun relevé sur la "
-     L"période."},
+     L"leur propre axe. Les dépenses en dollars accompagnent les relevés du budget Anthropic, sur sa carte et au survol "
+     L"de sa ligne. Sans limite mensuelle, il n’y a pas de ligne de budget\u202F: les dépenses en dollars ont leur propre "
+     L"carte, et la vue Tous les indicateurs les trace sur leur propre axe. Les comptes sans relevé sur la période "
+     L"figurent dans la carte Aucun relevé sur la période."},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -4134,6 +4150,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"history-card", L"Peak {reading}", L"Pic {reading}"},
     {L"history-card", L"Previous: {line}", L"Précédent\u202F: {line}"},
     {L"history-card", L"now", L"maintenant"},
+    {L"history-card", L"{amount} spent", L"{amount} dépensés"},
     {L"history-card", L"{title} — details only", L"{title} — détails uniquement"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -4161,6 +4178,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"history-range", L"7d", L"7\u00A0j"},
     {L"history-range", L"90d", L"90\u00A0j"},
     {L"history-range", L"All", L"Tout"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · {amount} dépensés · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter} (% restant)"},
@@ -4757,12 +4776,15 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"パーセントは左の軸を使い、網掛けの帯は赤のしきい値を示します。［残量］バー モード (［設定］>［表示］) では残りの分を表示するため、使用量が増えると線は下がり、上限を超えると 0% "
      L"を下回ります。帯は下端に表示されます。［追加使用量］には、Anthropic の予算、GitHub Copilot の AI クレジット、OpenCode Go の月間割り当ての使用量 (%) "
      L"(［残量］モードでは残り) と、OpenAI の残りクレジットが表示されます。OpenAI "
-     L"のクレジットは使用量が増えると下がり、専用の軸を使います。ドルでの支出はカードに表示され、［全メーター］では専用の軸にもプロットされます。期間内に測定値がないアカウントは、［期間内の測定値なし］に表示されます。"},
+     L"のクレジットは使用量が増えると下がり、専用の軸を使います。ドルでの支出は Anthropic "
+     L"の予算の測定値と一緒に、そのカードと、線をポイントしたときに表示されます。月間上限がない場合は予算の線がないため、ドルでの支出は専用のカードに表示され、［全メーター］では専用の軸にプロットされます。期間内に測定値がないアカウントは、［期間内の測定値なし］に表示されます。"},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -5266,6 +5288,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"history-card", L"Peak {reading}", L"ピーク {reading}"},
     {L"history-card", L"Previous: {line}", L"前週: {line}"},
     {L"history-card", L"now", L"現在"},
+    {L"history-card", L"{amount} spent", L"支出 {amount}"},
     {L"history-card", L"{title} — details only", L"{title} — 詳細のみ"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -5291,6 +5314,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"history-range", L"7d", L"7日"},
     {L"history-range", L"90d", L"90日"},
     {L"history-range", L"All", L"全期間"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · 支出 {amount} · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter} の残量 (%)"},
@@ -5921,15 +5946,19 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"As porcentagens usam o eixo esquerdo; a faixa sombreada marca o seu limite vermelho. No modo de barra "
      L"Restante (Configurações > Exibição), elas mostram o que resta, então as linhas descem conforme o uso aumenta, "
      L"ficando abaixo de 0% depois do limite, e a faixa fica embaixo. Uso adicional mostra o orçamento usado da "
      L"Anthropic, os créditos de IA usados do GitHub Copilot e a franquia mensal usada do OpenCode Go (%) (o "
      L"restante, no modo Restante) e, em um eixo próprio, os créditos restantes da OpenAI, que caem conforme o uso "
-     L"aumenta. Os gastos em dólares aparecem nos cartões; Todos os medidores também os traça em um eixo próprio. As "
-     L"contas sem leituras no período aparecem em Sem leituras no período."},
+     L"aumenta. Os gastos em dólares aparecem junto às leituras do orçamento da Anthropic, no cartão dele e ao "
+     L"apontar para a linha dele. Sem limite mensal não há linha de orçamento: os gastos em dólares ganham um cartão "
+     L"próprio, e Todos os medidores os traça em um eixo próprio. As contas sem leituras no período aparecem em Sem "
+     L"leituras no período."},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -6523,6 +6552,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"history-card", L"Peak {reading}", L"Pico {reading}"},
     {L"history-card", L"Previous: {line}", L"Anterior: {line}"},
     {L"history-card", L"now", L"agora"},
+    {L"history-card", L"{amount} spent", L"{amount} gastos"},
     {L"history-card", L"{title} — details only", L"{title} — só detalhes"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -6550,6 +6580,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"history-range", L"7d", L"7\u00A0d"},
     {L"history-range", L"90d", L"90\u00A0d"},
     {L"history-range", L"All", L"Tudo"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · {amount} gastos · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter}: restante (%)"},
@@ -7203,15 +7235,19 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"Проценты откладываются по левой оси; затенённая зона отмечает ваш красный порог. В режиме полос «Осталось» "
      L"(Параметры > Отображение) они показывают остаток, поэтому линии опускаются по мере роста использования, уходя "
      L"ниже 0% после превышения лимита, а зона располагается внизу. Вид «Доп. использование» показывает использованный "
      L"бюджет Anthropic, использованные ИИ-кредиты GitHub Copilot и использованный месячный лимит OpenCode Go (%) (в "
      L"режиме «Осталось» — их остаток), а также, на отдельной оси, оставшиеся кредиты OpenAI, которые уменьшаются по "
-     L"мере использования. Расходы в долларах показываются на карточках; вид «Все показатели» также строит их на "
-     L"отдельной оси. Аккаунты без замеров за выбранный период перечислены в карточке «Нет замеров за период»."},
+     L"мере использования. Расходы в долларах показываются вместе с замерами бюджета Anthropic: на его карточке и при "
+     L"наведении на его линию. Без месячного лимита линии бюджета нет: расходы в долларах получают отдельную карточку, "
+     L"а вид «Все показатели» строит их на отдельной оси. Аккаунты без замеров за выбранный период перечислены в "
+     L"карточке «Нет замеров за период»."},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -7799,6 +7835,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"history-card", L"Peak {reading}", L"Пик {reading}"},
     {L"history-card", L"Previous: {line}", L"Прошлая: {line}"},
     {L"history-card", L"now", L"сейчас"},
+    {L"history-card", L"{amount} spent", L"Потрачено {amount}"},
     {L"history-card", L"{title} — details only", L"{title} — только сведения"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -7826,6 +7863,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"history-range", L"7d", L"7\u00A0д"},
     {L"history-range", L"90d", L"90\u00A0д"},
     {L"history-range", L"All", L"Всё"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · потрачено {amount} · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter}, осталось (%)"},
@@ -8409,11 +8448,14 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"百分比使用左侧坐标轴；阴影带标示你的红色阈值。在“剩余量”条形模式下（“设置 > 显示”），百分比显示剩余部分，因此线条随用量上升而下降，超过上限后低于 0%，阴影带则位于底部。“额外用量”显示 Anthropic "
      L"已用预算、GitHub Copilot 已用 AI 积分和 OpenCode Go 已用月度额度（%）（“剩余量”模式下为剩余），以及在单独坐标轴上显示的 OpenAI "
-     L"剩余积分（随用量上升而下降）。美元花费显示在卡片上；“全部指标”还会在单独的坐标轴上绘制它。范围内没有读数的账户会列在“范围内无读数”下。"},
+     L"剩余积分（随用量上升而下降）。美元花费随 Anthropic "
+     L"预算的读数一起显示：在其卡片上，以及指向其线条时。没有月度上限时就没有预算线条：美元花费会有单独的卡片，“全部指标”会在单独的坐标轴上绘制它。范围内没有读数的账户会列在“范围内无读数”下。"},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -8902,6 +8944,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"history-card", L"Peak {reading}", L"峰值 {reading}"},
     {L"history-card", L"Previous: {line}", L"前一周：{line}"},
     {L"history-card", L"now", L"现在"},
+    {L"history-card", L"{amount} spent", L"已花费 {amount}"},
     {L"history-card", L"{title} — details only", L"{title} — 仅详情"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -8927,6 +8970,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"history-range", L"7d", L"7天"},
     {L"history-range", L"90d", L"90天"},
     {L"history-range", L"All", L"全部"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · 已花费 {amount} · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter} 剩余（%）"},
@@ -40291,12 +40336,19 @@ static constexpr COLORREF kHistoryColors[] = {
     RGB(115, 45, 200), RGB(0, 140, 170), RGB(35, 35, 35), RGB(220, 25, 35),
 };
 
+// The dollars recorded with a reading of `meter`, -1 without: Anthropic's extra usage spending
+// (meter 6) with its budget percentage (meter 3), the same spending over the monthly limit.
+static double HistorySpentWith(const HistorySample& sample, int meter) {
+    return meter == 3 && HistoryHasValue(sample, 6) ? sample.meters[6].value : -1;
+}
+
 struct HistoryStatistics {
     bool hasValue = false;
     double peak = 0;
     ULONGLONG peakTime = 0;
     double latest = 0;
     ULONGLONG latestTime = 0;
+    double peakSpent = -1, latestSpent = -1;  // HistorySpentWith those readings
     double coverageMs = 0;
     double nearLimitMs = 0;
     size_t validSamples = 0;
@@ -40329,6 +40381,8 @@ struct HistorySeries {
     int meter = 0;
     // Its short name (without the account in one account's view) and full title (with it)
     std::wstring legendTitle, hoverTitle;
+    // An extra budget whose dollars have no series: their short name; else empty
+    std::wstring spentTitle;
     COLORREF color = 0;
     int stroke = 3;  // Logical pixels; scoped quotas use 2, never thin 1px dashes.
     bool plotted = true;
@@ -40440,11 +40494,13 @@ static HistoryStatistics HistoryAnalyzeRows(const std::vector<HistorySample>& sa
             double value = sample.meters[meter].value;
             result.latest = value;
             result.latestTime = sample.timeMs;
+            result.latestSpent = HistorySpentWith(sample, meter);
             ++result.validSamples;
             if (!result.hasValue || value > result.peak) {
                 result.hasValue = true;
                 result.peak = value;
                 result.peakTime = sample.timeMs;
+                result.peakSpent = result.latestSpent;
             }
             if (previous && HistoryConnection(*previous, sample, meter) == HistoryBreak::None) {
                 double elapsed = double(sample.timeMs - previous->timeMs);
@@ -40473,7 +40529,9 @@ static HistoryStatistics HistoryAnalyzeRows(const std::vector<HistorySample>& sa
 
 // Series of the selected account (or every account) in the query's view: one per meter with
 // readings in either period, in account then meter order. An account with none is listed
-// without readings.
+// without readings. Dollars recorded with a budget percentage are that line's (HistorySpentWith,
+// named by its spentTitle): they get a series only when a reading in either period has none
+// (extra usage without a limit).
 static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& samples,
                                            const std::vector<HistoryUiAccount>& accounts,
                                            const HistorySeriesQuery& query,
@@ -40506,10 +40564,20 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
             if (!account.showFableWeekly) meters &= ~(1U << 2);
         }
         if (!meters) continue;
+        // Whether its dollars keep a series: some reading in either period has no budget percentage.
+        bool spentAlone = false;
+        if (meters & (1U << 6)) {
+            for (size_t row : account.rows) {
+                if (spentAlone || cancelled()) break;
+                const auto& sample = samples[row];
+                spentAlone = sample.timeMs >= query.readFrom && sample.timeMs < query.to &&
+                             HistoryHasValue(sample, 6) && !HistoryHasValue(sample, 3);
+            }
+        }
         size_t firstSeries = result.series.size();
         for (int meter = 0; meter < int(kHistoryMeterCount); ++meter) {
             if (cancelled()) break;
-            if (!(meters & (1U << meter))) continue;
+            if (!(meters & (1U << meter)) || (meter == 6 && !spentAlone)) continue;
             HistorySeries series;
             series.account = i;
             series.meter = meter;
@@ -40599,6 +40667,10 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                                 {{L"account", account.label}, {L"meter", name}});
             };
             series.legendTitle = query.selected < 0 ? titled(label) : label;
+            if (meter == 3 && (meters & (1U << 6)) && !spentAlone) {
+                std::wstring spent = I18nText(locale, TrCtx(L"history-meter", L"Extra spending (USD)"));
+                series.spentTitle = query.selected < 0 ? titled(spent) : spent;
+            }
             series.hoverTitle =
                 titled(meter >= 6 ? label :
                                     I18nText(locale, query.remaining ? TrCtx(L"history-series", L"{meter} left (%)") :
@@ -40797,7 +40869,8 @@ struct HistoryUiViewAccount {
 
 // A summary card (approved Q10 a): a series' chip name and line, a headline with the current
 // period's latest value ("now" when it is the account's latest fresh poll, else its time), then
-// its statistics lines. Details-only dollar spending has no line.
+// the dollars recorded with that value (an extra budget's without a series for them) and its
+// statistics lines. Details-only dollar spending has no line.
 struct HistoryUiCard {
     std::wstring title;
     std::wstring status;        // After the title, muted: the account's recording status
@@ -40818,13 +40891,14 @@ struct HistoryUiNoReadings {
 // A plotted series as the chart, its legend chip and the readout show it (approved q8a-filter):
 // the chip's item id (per history ID and meter, stable for the session), the chip's name (the
 // readout's too) and the full title, the series' color and width, the range of its readings in
-// both periods (with 0), and whether the legend hides it.
+// both periods (with 0), and whether the legend hides it. An extra budget whose dollars have no
+// line names them for their readout rows (HistorySeries::spentTitle).
 struct HistoryUiLine {
     uint32_t chip = 0;
     uint64_t historyId = 0;
     int meter = 0;
     size_t series = 0, account = 0;  // Its series (and card) in the set; its collected account
-    std::wstring name, title;
+    std::wstring name, title, spentName;
     COLORREF color = 0;
     int stroke = 3;
     double low = 0, high = 0;
@@ -41054,7 +41128,9 @@ static std::wstring HistoryUiValue(const I18nLocale& locale, int meter, double v
 // accounts without readings, from the view's accounts (parallel to the set's), selection,
 // comparison, bar mode, consent and language: every peak and its time, coverage with its share, time at or
 // above the red threshold the set was analyzed with for percentages, dollar spending's last and
-// peak readings, and an account's recording status once (in All accounts, on its first card).
+// peak readings, and an account's recording status once (in All accounts, on its first card). An
+// extra budget whose dollars have no series (HistorySeries::spentTitle) names them, the ones
+// spent in either bar mode, under its headline and with its peak (as spent beside a share left).
 // The Remaining bar mode shows percentages left: the peak is the lowest share left, the time at
 // or below what the threshold leaves.
 static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, ULONGLONG from, ULONGLONG to,
@@ -41085,9 +41161,15 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
         auto shown = [&](double value) {
             return HistoryUiValue(locale, series.meter, HistoryUiShown(series.meter, value, left), 0);
         };
-        auto reading = [&](double value, ULONGLONG time) {
-            return I18nText(locale, TrCtx(L"history-reading", L"{value} \u00B7 {time}"),
-                            {{L"value", shown(value)}, {L"time", HistoryUiTime(locale, time, now, localTime)}});
+        auto reading = [&](double value, ULONGLONG time, double spent) {
+            std::wstring text = shown(value), when = HistoryUiTime(locale, time, now, localTime);
+            if (series.spentTitle.empty() || spent < 0) {
+                return I18nText(locale, TrCtx(L"history-reading", L"{value} \u00B7 {time}"),
+                                {{L"value", text}, {L"time", when}});
+            }
+            return I18nText(locale, left ? TrCtx(L"history-reading", L"{value} \u00B7 {amount} spent \u00B7 {time}") :
+                                           TrCtx(L"history-reading", L"{value} \u00B7 {amount} \u00B7 {time}"),
+                            {{L"value", text}, {L"amount", HistoryUiValue(locale, 6, spent, 0)}, {L"time", when}});
         };
         auto peak = [&](const std::wstring& text) {
             return I18nText(locale, left ? TrCtx(L"history-card", L"Lowest {reading}") :
@@ -41100,6 +41182,10 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
             bool latestPoll = !account.stale && account.lastPollMs && current.latestTime >= account.lastPollMs;
             card.when = latestPoll ? I18nText(locale, TrCtx(L"history-card", L"now")) :
                                      HistoryUiTime(locale, current.latestTime, now, localTime);
+            if (!series.spentTitle.empty() && current.latestSpent >= 0) {
+                card.lines.push_back(I18nText(locale, TrCtx(L"history-card", L"{amount} spent"),
+                                              {{L"amount", HistoryUiValue(locale, 6, current.latestSpent, 0)}}));
+            }
         }
         // Per period (comparing: current, then previous, each first line naming it). The headline
         // holds the current period's last dollar reading.
@@ -41121,9 +41207,9 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
             }
             if (!series.plotted && period) {
                 line(I18nText(locale, TrCtx(L"history-card", L"Last recorded spend: {reading}"),
-                              {{L"reading", reading(stats.latest, stats.latestTime)}}));
+                              {{L"reading", reading(stats.latest, stats.latestTime, stats.latestSpent)}}));
             }
-            line(peak(reading(stats.peak, stats.peakTime)));
+            line(peak(reading(stats.peak, stats.peakTime, stats.peakSpent)));
             if (!series.plotted) continue;
             line(I18nText(locale, TrCtx(L"history-card", L"Coverage {hours} ({percent}%)"),
                           {{L"hours", HistoryUiHours(locale, stats.coverageMs)},
@@ -41567,7 +41653,8 @@ static UiReadoutRow HistoryChartRow(const I18nLocale& locale, std::wstring name,
 
 // The readout of picked points in the locale's language: one row each, in their order, keyed by
 // the recorded samples they name, the language and the decimal separator their values show (none:
-// key 0). Its overflow hint names what shows the rest.
+// key 0). An extra budget's point whose dollars have no line (HistoryUiLine::spentName) gets a
+// second row for them, in the line's swatch. Its overflow hint names what shows the rest.
 static UiTooltipContent HistoryChartReadout(const I18nLocale& locale, const HistoryChart& c,
                                             const std::vector<HistoryChartHit>& hits, const UiPalette& p,
                                             bool oneAccount, ULONGLONG now, const HistoryUiLocalTime& localTime) {
@@ -41587,9 +41674,15 @@ static UiTooltipContent HistoryChartReadout(const I18nLocale& locale, const Hist
         mix(line.chip);
         mix(uint64_t(hit.period));
         mix(point.sourceRow);
-        content.rows.push_back(HistoryChartRow(locale, line.name, HistoryChartColor(line, p), line.stroke, line.meter,
-                                               hit.period, HistoryUiShown(line.meter, point.value, c.remaining),
-                                               c.snapshot->samples[point.sourceRow].timeMs, now, localTime));
+        const HistorySample& sample = c.snapshot->samples[point.sourceRow];
+        D2D1_COLOR_F color = HistoryChartColor(line, p);
+        content.rows.push_back(HistoryChartRow(locale, line.name, color, line.stroke, line.meter, hit.period,
+                                               HistoryUiShown(line.meter, point.value, c.remaining), sample.timeMs, now,
+                                               localTime));
+        if (double spent = HistorySpentWith(sample, line.meter); spent >= 0 && !line.spentName.empty()) {
+            content.rows.push_back(HistoryChartRow(locale, line.spentName, color, line.stroke, 6, hit.period, spent,
+                                                   sample.timeMs, now, localTime));
+        }
     }
     if (content.rows.empty()) return {};
     content.key = key ? key : 1;
@@ -42393,9 +42486,10 @@ struct HistoryController {
                 L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the "
                 L"limit, and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI "
                 L"credits used and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI "
-                L"credits remaining, which fall as usage rises, on their own axis. Dollar spending shows on the "
-                L"cards; All meters also plots it on its own axis. Accounts without readings in the range are listed "
-                L"under No readings.")},
+                L"credits remaining, which fall as usage rises, on their own axis. Dollars spent show with an "
+                L"Anthropic budget's readings, on its card and when pointing at its line. Without a monthly limit "
+                L"there is no budget line: the dollars get their own card, and All meters plots them on their own "
+                L"axis. Accounts without readings in the range are listed under No readings.")},
             {TrCtx(L"history-about", L"Lines and markers"),
              Tr(L"All accounts gives each account a color: primary quotas are thicker, scoped quotas thinner and "
                 L"tinted. One account gives each meter its own color. Solid lines: current. Dashed lines: previous "
@@ -42756,6 +42850,7 @@ struct HistoryController {
                 shown.account = line.account;
                 shown.name = line.legendTitle;
                 shown.title = line.hoverTitle;
+                shown.spentName = line.spentTitle;
                 shown.color = line.color;
                 shown.stroke = line.stroke;
                 shown.low = line.low;

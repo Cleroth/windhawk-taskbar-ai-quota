@@ -89,9 +89,12 @@ history** or **Delete history...** removes that account's.
   compact status, paused/recording-off only once per account; repeat with readings missing in
   one or both comparison periods.
 - Extra usage: a left percentage axis for Anthropic budget used, a right credits axis for OpenAI
-  balances, USD spending in details only. A USD-only Anthropic account shows spending details,
-  not a no-data status, and its single-account All meters view keeps the dollar graph. No
-  provider needs more than two axes in All meters.
+  balances. An Anthropic account with a spending limit has one budget line and card in Extra usage
+  and All meters, no dollar line or USD axis: the card names the dollars spent under its value
+  and with its peak, and pointing at the line adds a dollar row to the readout. A USD-only
+  Anthropic account (no limit) shows spending details, not a no-data status, and its
+  single-account All meters view keeps the dollar graph. No provider needs more than two axes in
+  All meters.
 - Switching groups changes neither recorded history nor CSV meters: exports of the same account
   scope and range from different groups hold the same meters.
 

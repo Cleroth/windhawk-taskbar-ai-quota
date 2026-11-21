@@ -336,16 +336,19 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"Prozentwerte verwenden die linke Achse; das schattierte Band markiert Ihren roten Schwellenwert. Im Balkenmodus "
      L"„Verbleibend“ (Einstellungen > Darstellung) zeigen sie, was übrig ist: Die Linien fallen also mit steigender "
      L"Nutzung, gehen nach dem Limit unter 0% und das Band liegt unten. „Zusatznutzung“ zeigt das verbrauchte Budget "
      L"von Anthropic, die verbrauchten AI Credits von GitHub Copilot und das verbrauchte Monatskontingent von OpenCode "
      L"Go (%) (links, im Modus „Verbleibend“ den Rest) sowie die verbleibenden Credits von OpenAI, die mit steigender "
-     L"Nutzung fallen, auf einer eigenen Achse. Dollar-Ausgaben erscheinen auf den Karten; „Alle Messgrößen“ zeichnet "
-     L"sie zusätzlich auf einer eigenen Achse. Konten ohne Messwerte im Zeitraum werden unter „Keine Messwerte im "
-     L"Zeitraum“ aufgeführt."},
+     L"Nutzung fallen, auf einer eigenen Achse. Dollar-Ausgaben erscheinen bei den Messwerten eines Anthropic-Budgets, "
+     L"auf dessen Karte und beim Zeigen auf dessen Linie. Ohne Monatslimit gibt es keine Budgetlinie: Die "
+     L"Dollar-Ausgaben erhalten eine eigene Karte, und „Alle Messgrößen“ zeichnet sie auf einer eigenen Achse. Konten "
+     L"ohne Messwerte im Zeitraum werden unter „Keine Messwerte im Zeitraum“ aufgeführt."},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -959,6 +962,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"history-card", L"Peak {reading}", L"Höchstwert {reading}"},
     {L"history-card", L"Previous: {line}", L"Vorwoche: {line}"},
     {L"history-card", L"now", L"jetzt"},
+    {L"history-card", L"{amount} spent", L"{amount} ausgegeben"},
     {L"history-card", L"{title} — details only", L"{title} – nur Details"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -985,6 +989,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"history-range", L"7d", L"7 T"},
     {L"history-range", L"90d", L"90 T"},
     {L"history-range", L"All", L"Alles"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · {amount} ausgegeben · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter} übrig (%)"},

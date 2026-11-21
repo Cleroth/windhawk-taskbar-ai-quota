@@ -30,7 +30,8 @@ struct HistoryUiViewAccount {
 
 // A summary card (approved Q10 a): a series' chip name and line, a headline with the current
 // period's latest value ("now" when it is the account's latest fresh poll, else its time), then
-// its statistics lines. Details-only dollar spending has no line.
+// the dollars recorded with that value (an extra budget's without a series for them) and its
+// statistics lines. Details-only dollar spending has no line.
 struct HistoryUiCard {
     std::wstring title;
     std::wstring status;        // After the title, muted: the account's recording status
@@ -51,13 +52,14 @@ struct HistoryUiNoReadings {
 // A plotted series as the chart, its legend chip and the readout show it (approved q8a-filter):
 // the chip's item id (per history ID and meter, stable for the session), the chip's name (the
 // readout's too) and the full title, the series' color and width, the range of its readings in
-// both periods (with 0), and whether the legend hides it.
+// both periods (with 0), and whether the legend hides it. An extra budget whose dollars have no
+// line names them for their readout rows (HistorySeries::spentTitle).
 struct HistoryUiLine {
     uint32_t chip = 0;
     uint64_t historyId = 0;
     int meter = 0;
     size_t series = 0, account = 0;  // Its series (and card) in the set; its collected account
-    std::wstring name, title;
+    std::wstring name, title, spentName;
     COLORREF color = 0;
     int stroke = 3;
     double low = 0, high = 0;
@@ -287,7 +289,9 @@ static std::wstring HistoryUiValue(const I18nLocale& locale, int meter, double v
 // accounts without readings, from the view's accounts (parallel to the set's), selection,
 // comparison, bar mode, consent and language: every peak and its time, coverage with its share, time at or
 // above the red threshold the set was analyzed with for percentages, dollar spending's last and
-// peak readings, and an account's recording status once (in All accounts, on its first card).
+// peak readings, and an account's recording status once (in All accounts, on its first card). An
+// extra budget whose dollars have no series (HistorySeries::spentTitle) names them, the ones
+// spent in either bar mode, under its headline and with its peak (as spent beside a share left).
 // The Remaining bar mode shows percentages left: the peak is the lowest share left, the time at
 // or below what the threshold leaves.
 static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, ULONGLONG from, ULONGLONG to,
@@ -318,9 +322,15 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
         auto shown = [&](double value) {
             return HistoryUiValue(locale, series.meter, HistoryUiShown(series.meter, value, left), 0);
         };
-        auto reading = [&](double value, ULONGLONG time) {
-            return I18nText(locale, TrCtx(L"history-reading", L"{value} \u00B7 {time}"),
-                            {{L"value", shown(value)}, {L"time", HistoryUiTime(locale, time, now, localTime)}});
+        auto reading = [&](double value, ULONGLONG time, double spent) {
+            std::wstring text = shown(value), when = HistoryUiTime(locale, time, now, localTime);
+            if (series.spentTitle.empty() || spent < 0) {
+                return I18nText(locale, TrCtx(L"history-reading", L"{value} \u00B7 {time}"),
+                                {{L"value", text}, {L"time", when}});
+            }
+            return I18nText(locale, left ? TrCtx(L"history-reading", L"{value} \u00B7 {amount} spent \u00B7 {time}") :
+                                           TrCtx(L"history-reading", L"{value} \u00B7 {amount} \u00B7 {time}"),
+                            {{L"value", text}, {L"amount", HistoryUiValue(locale, 6, spent, 0)}, {L"time", when}});
         };
         auto peak = [&](const std::wstring& text) {
             return I18nText(locale, left ? TrCtx(L"history-card", L"Lowest {reading}") :
@@ -333,6 +343,10 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
             bool latestPoll = !account.stale && account.lastPollMs && current.latestTime >= account.lastPollMs;
             card.when = latestPoll ? I18nText(locale, TrCtx(L"history-card", L"now")) :
                                      HistoryUiTime(locale, current.latestTime, now, localTime);
+            if (!series.spentTitle.empty() && current.latestSpent >= 0) {
+                card.lines.push_back(I18nText(locale, TrCtx(L"history-card", L"{amount} spent"),
+                                              {{L"amount", HistoryUiValue(locale, 6, current.latestSpent, 0)}}));
+            }
         }
         // Per period (comparing: current, then previous, each first line naming it). The headline
         // holds the current period's last dollar reading.
@@ -354,9 +368,9 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
             }
             if (!series.plotted && period) {
                 line(I18nText(locale, TrCtx(L"history-card", L"Last recorded spend: {reading}"),
-                              {{L"reading", reading(stats.latest, stats.latestTime)}}));
+                              {{L"reading", reading(stats.latest, stats.latestTime, stats.latestSpent)}}));
             }
-            line(peak(reading(stats.peak, stats.peakTime)));
+            line(peak(reading(stats.peak, stats.peakTime, stats.peakSpent)));
             if (!series.plotted) continue;
             line(I18nText(locale, TrCtx(L"history-card", L"Coverage {hours} ({percent}%)"),
                           {{L"hours", HistoryUiHours(locale, stats.coverageMs)},

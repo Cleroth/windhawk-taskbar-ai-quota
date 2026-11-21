@@ -252,11 +252,14 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"百分比使用左侧坐标轴；阴影带标示你的红色阈值。在“剩余量”条形模式下（“设置 > 显示”），百分比显示剩余部分，因此线条随用量上升而下降，超过上限后低于 0%，阴影带则位于底部。“额外用量”显示 Anthropic "
      L"已用预算、GitHub Copilot 已用 AI 积分和 OpenCode Go 已用月度额度（%）（“剩余量”模式下为剩余），以及在单独坐标轴上显示的 OpenAI "
-     L"剩余积分（随用量上升而下降）。美元花费显示在卡片上；“全部指标”还会在单独的坐标轴上绘制它。范围内没有读数的账户会列在“范围内无读数”下。"},
+     L"剩余积分（随用量上升而下降）。美元花费随 Anthropic "
+     L"预算的读数一起显示：在其卡片上，以及指向其线条时。没有月度上限时就没有预算线条：美元花费会有单独的卡片，“全部指标”会在单独的坐标轴上绘制它。范围内没有读数的账户会列在“范围内无读数”下。"},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -745,6 +748,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"history-card", L"Peak {reading}", L"峰值 {reading}"},
     {L"history-card", L"Previous: {line}", L"前一周：{line}"},
     {L"history-card", L"now", L"现在"},
+    {L"history-card", L"{amount} spent", L"已花费 {amount}"},
     {L"history-card", L"{title} — details only", L"{title} — 仅详情"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -770,6 +774,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"history-range", L"7d", L"7天"},
     {L"history-range", L"90d", L"90天"},
     {L"history-range", L"All", L"全部"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · 已花费 {amount} · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter} 剩余（%）"},
