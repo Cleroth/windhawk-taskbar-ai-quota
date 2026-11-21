@@ -1,8 +1,8 @@
 // Native-host probe driver (hand-written, not production code). Loads the probe DLL built from
 // the extracted toolkit host, opens its window on the DLL's worker thread, closes it from this
 // thread, joins and unloads, repeatedly; then failed creation, a conflicting class, render-target
-// loss, window icons across DPI changes and theme notifications (handle counts read on the
-// window thread once it settles) and an unload close during a message box. Windows are
+// loss, window icon replacement and destruction across DPI changes, theme notifications and
+// close, and an unload close during a message box. Windows are
 // off-screen and never activated; the message box shows briefly. The dropdown popup, text box,
 // segmented control, key forwarding, activation request, navigation pane, chart and tooltip
 // cases each run on a new hidden desktop this probe creates and never switches to, so their
@@ -455,8 +455,8 @@ int wmain(int argc, wchar_t** argv) {
         setMinSize(0, 0);
     });
 
-    Run("window icons: both sizes at the window's DPI, redrawn on DPI changes and theme notifications without "
-        "handle growth (read on the window thread once it settles), destroyed after close", [&] {
+    Run("window icons: both sizes at the window's DPI, replaced and destroyed on each DPI and theme change; "
+        "the final pair is destroyed after close", [&] {
         Probe probe;
         HWND hwnd = probe.Open();
         auto iconOf = [&](WPARAM type) {
@@ -464,10 +464,10 @@ int wmain(int argc, wchar_t** argv) {
             CHECK(SendMessageTimeoutW(hwnd, WM_GETICON, type, 0, SMTO_BLOCK, kTimeout, &answer));
             return reinterpret_cast<HICON>(answer);
         };
-        // An icon's width; 0 once it is destroyed.
+        // A valid icon with no color bitmap has width 0; a destroyed handle fails GetIconInfo.
         auto width = [](HICON icon) {
             ICONINFO info{};
-            if (!icon || !GetIconInfo(icon, &info)) return 0;
+            if (!GetIconInfo(icon, &info)) return -1;
             BITMAP bitmap{};
             GetObjectW(info.hbmColor, sizeof(bitmap), &bitmap);
             if (info.hbmColor) DeleteObject(info.hbmColor);
@@ -475,11 +475,18 @@ int wmain(int argc, wchar_t** argv) {
             return int(bitmap.bmWidth);
         };
         UINT dpi = GetDpiForWindow(hwnd);
-        HICON last[2] = {iconOf(ICON_SMALL), iconOf(ICON_BIG)};
-        CHECK(width(last[0]) == GetSystemMetricsForDpi(SM_CXSMICON, dpi));
-        CHECK(width(last[1]) == GetSystemMetricsForDpi(SM_CXICON, dpi));
-        // Object counts: USER and GDI read by this thread, and on the window thread once its
-        // pending messages and paints are handled (`settled`) or as it is (`now`).
+        HICON last[2]{};
+        auto checkIcons = [&] {
+            for (int type : {ICON_SMALL, ICON_BIG}) {
+                HICON icon = iconOf(type);
+                CHECK(width(icon) == GetSystemMetricsForDpi(type == ICON_SMALL ? SM_CXSMICON : SM_CXICON, dpi));
+                if (last[type]) CHECK(width(last[type]) == -1);
+                last[type] = icon;
+            }
+        };
+        checkIcons();
+        // Process-wide diagnostics, not icon lifetime checks: text-input services can create
+        // unrelated USER/GDI objects even while the window is idle.
         struct Counts {
             int user, gdi;
             bool operator==(const Counts&) const = default;
@@ -491,12 +498,13 @@ int wmain(int argc, wchar_t** argv) {
             int packed = probe.Call(kHandles, settled);
             return Counts{packed >> 16, packed & 0xFFFF};
         };
-        auto inventory = [&] {
+        auto inventory = [&](const char* phase) {
             auto list = reinterpret_cast<int (*)(wchar_t*, int)>(GetProcAddress(probe.module, "ProbeWindowInventory"));
             wchar_t buffer[2048] = {};
             int windows = list ? list(buffer, 2048) : -1;
-            std::printf("WINDOW inventory (%d): %ls\n", windows, buffer);
+            std::printf("WINDOW inventory %s (%d): %ls\n", phase, windows, buffer);
         };
+        inventory("before DPI changes");
         Counts warm{};
         int steps = 0;
         auto step = [&](const char* phase, int change, Counts settled, Counts driver, Counts unsettled) {
@@ -506,39 +514,35 @@ int wmain(int argc, wchar_t** argv) {
             if (steps++ && warm.user && !(settled == warm)) {
                 std::printf("ANOMALY icons %d %s settled %+d USER %+d GDI\n", change, phase, settled.user - warm.user,
                             settled.gdi - warm.gdi);
-                inventory();
+                inventory(phase);
             }
         };
         // DPI changes as the system reports them (made-up DPIs, the window's rectangle kept): new
         // icons at the new sizes replace the old, which are destroyed; repeated, no handles stay.
         for (int change = 0; change < 6; change++) {
-            UINT next = change % 2 ? 192 : 144;
+            dpi = change % 2 ? 192 : 144;
             step("before", change, there(true), here(), there(false));
             RECT rect{};
             GetWindowRect(hwnd, &rect);
             DWORD_PTR answer = 0;
-            CHECK(SendMessageTimeoutW(hwnd, WM_DPICHANGED, MAKEWPARAM(next, next), LPARAM(&rect), SMTO_BLOCK,
+            CHECK(SendMessageTimeoutW(hwnd, WM_DPICHANGED, MAKEWPARAM(dpi, dpi), LPARAM(&rect), SMTO_BLOCK,
                                       kTimeout, &answer));
             Counts driver = here(), unsettled = there(false);
             step("dpi", change, there(true), driver, unsettled);
             probe.Call(kPaintMain);
-            HICON now[2] = {iconOf(ICON_SMALL), iconOf(ICON_BIG)};
+            checkIcons();
             driver = here();
             unsettled = there(false);
             Counts settled = there(true);
             step("icons", change, settled, driver, unsettled);
-            CHECK(width(now[0]) == GetSystemMetricsForDpi(SM_CXSMICON, next));
-            CHECK(width(now[1]) == GetSystemMetricsForDpi(SM_CXICON, next));
-            CHECK(!width(last[0]) && !width(last[1]));
-            last[0] = now[0];
-            last[1] = now[1];
             if (change == 1) warm = settled;
         }
         Counts end = there(true);
+        inventory("before theme notifications");
         // Theme notifications to this window only (posted, or the color-set change sent from a
         // helper thread: it carries a string), read meanwhile on this thread: what a read off
         // the window thread can catch mid-redraw, and what stays once it is handled.
-        Counts widest = end;
+        Counts widest = end, themed = end;
         for (int i = 0; i < 24; i++) {
             HANDLE sender = nullptr;
             if (i % 3 == 2) {
@@ -550,7 +554,7 @@ int wmain(int argc, wchar_t** argv) {
                 }, hwnd, 0, nullptr);
                 CHECK(sender);
             } else {
-                PostMessageW(hwnd, i % 3 ? WM_THEMECHANGED : WM_SYSCOLORCHANGE, 0, 0);
+                CHECK(PostMessageW(hwnd, i % 3 ? WM_THEMECHANGED : WM_SYSCOLORCHANGE, 0, 0));
             }
             for (DWORD start = GetTickCount(); GetTickCount() - start < 30;) {
                 Counts c = here();
@@ -560,20 +564,21 @@ int wmain(int argc, wchar_t** argv) {
                 CHECK(WaitForSingleObject(sender, kTimeout) == WAIT_OBJECT_0);
                 CloseHandle(sender);
             }
+            themed = there(true);  // Dispatch any posted notification before inspecting its pair.
+            checkIcons();
         }
-        Counts themed = there(true);
+        inventory("after theme notifications");
         std::printf("NOTE theme notifications handled by the window: %d of 24 sent (more: the system's)\n",
                     probe.count(kThemeMessages));
         std::printf("HANDLES icons settled user %d -> %d -> %d after themes; gdi %d -> %d -> %d after themes; "
                     "during themes this thread read up to %+d USER %+d GDI\n",
                     warm.user, end.user, themed.user, warm.gdi, end.gdi, themed.gdi, widest.user - end.user,
                     widest.gdi - end.gdi);
-        CHECK(warm == end && end == themed);
-        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        CHECK(PostMessageW(hwnd, WM_CLOSE, 0, 0));
         probe.Closed();
         std::printf("HANDLES icons at the main window's NCDESTROY user %d gdi %d; after join user %d gdi %d\n",
                     probe.count(kUserAtDestroyed), probe.count(kGdiAtDestroyed), here().user, here().gdi);
-        CHECK(!width(last[0]) && !width(last[1]));
+        CHECK(width(last[ICON_SMALL]) == -1 && width(last[ICON_BIG]) == -1);
     });
 
     Run("cursor rectangle: the real cursor's image around its hotspot (read on this thread's desktop); its "

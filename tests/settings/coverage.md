@@ -142,10 +142,11 @@ counts; then client creation failure, a conflicting class registration, render-t
 through the production discard path, the minimum size, window icons across DPI and theme changes,
 and an unload close during a message box.
 
-- Handle counts are process-wide: a window case reads them on the window thread once its pending
-  messages and paints are handled (`kHandles`), never from the driver while the window may still
-  paint. The icons case logs each step's counts (`STEP` lines; `ANOMALY` with the process's windows
-  if a settled count moves).
+- The icons case checks both icon sizes and that the previous handles are invalid after each DPI
+  change and each theme notification. After close it checks the last theme's pair. Process-wide
+  USER/GDI counts and window inventories before and after the changes are diagnostics only:
+  Windows text-input services can allocate objects unrelated to the icons. The log distinguishes
+  counts read during a redraw from those read after the window thread drains its queue.
 - On hidden desktops, one case each: the production popup, number box EDIT, slider, preview strip,
   drag handle (with the auto-scroll timer), free text box, menu button, color dialog, and unload
   with the popup open, a focused EDIT or a message box over the popup.
