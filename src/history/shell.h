@@ -17,8 +17,8 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
                                                                               nullptr;
 
     // Navigation pane (mockup .nav, .nitem): 38 DIP entries on a 41 DIP pitch, scrolling on its
-    // own. All accounts; configured accounts with their logo, label and weekly value (as their
-    // flyout's weekly row: used or remaining, in the usage color, muted while stale, a dash while
+    // own. All accounts; configured accounts with their logo, label and current percentage
+    // (used or remaining, in the usage color, muted while stale, a dash while
     // unknown); then the Removed group (mockup .ngroup: a 36 DIP header), muted and without values.
     // A label an entry cuts shows whole in its tooltip.
     frame.navPane = {0, 0, kHistoryUiNavWidth, std::max(client.height, 0.0f)};

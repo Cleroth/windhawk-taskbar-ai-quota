@@ -584,8 +584,9 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"El color de texto de la barra de tareas o el naranja de Claude. Los detalles, Cuentas y el historial de uso "
      L"usan el mismo."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
-          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
-          L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
+          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
+          L"account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode keeps your choice "
+          L"until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
@@ -593,7 +594,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"Son niveles de cuota muestreados, no tokens ni consumo diario. Elige una cuenta en la barra lateral, o Todas "
      L"las cuentas, y una vista: Corto plazo, Semanal, Uso adicional o Todas las métricas. Todas las cuentas empieza "
-     L"en Semanal, y una sola cuenta en Todas las métricas; cada una conserva su vista hasta que se cierra la "
+     L"en Semanal. Una cuenta empieza en Todas las métricas, o en Semanal si Fable es su única barra semanal. "
+     L"Cada modo conserva la vista elegida hasta que se cierra la "
      L"ventana. La ventana se abre con el Intervalo predeterminado definido en Configuración > Historial. Semanal "
      L"sigue, en cada cuenta de Anthropic, las cuotas semanales seleccionadas para la barra de tareas; las cuentas "
      L"quitadas conservan ambas semanales, y Todas las métricas incluye las semanales ocultas en la barra de tareas. "

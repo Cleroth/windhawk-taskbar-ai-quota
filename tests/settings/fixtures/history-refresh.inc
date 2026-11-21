@@ -389,10 +389,11 @@ static void RunHistoryRefreshTests() {
         AccountConfig& cc1 = ops.settings.settings.accounts[0];
         cc1.label = L"CC main";
         cc1.showBars[kWeeklyBar] = false;
-        ops.settings.polls[0].winWeek.pct = 52;
+        cc1.showBars[kFableWeeklyBar] = true;
+        ops.settings.polls[0].fableWeek.pct = 52;
         CHECK(refresh());
         CHECK(c.view.accounts[0].label == L"CC main" && c.view.accounts[0].weeklyPct == 52);
-        // Its weekly bar off: CC 1 has no Weekly line any more.
+        // Its normal weekly bar is off and it has no Fable samples in the journal.
         CHECK(c.view.lines.size() == 2 && c.view.lines[0].historyId == 0x0A && c.view.lines[1].historyId == 0xDEAD);
         CHECK(c.generation == 1 && c.samplesDirty && c.timer);
         // Recording turned off in Settings: the banner, its button and the pill, without a load.

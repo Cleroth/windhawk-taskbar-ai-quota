@@ -580,8 +580,9 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"A cor do texto da barra de tarefas, ou o laranja do Claude. Os detalhes, Contas e o histórico de uso seguem "
      L"essa escolha."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
-          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
-          L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
+          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
+          L"account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode keeps your choice "
+          L"until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
@@ -589,7 +590,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"Estes são níveis de cota amostrados, não tokens nem consumo diário. Escolha uma conta na barra lateral, ou "
      L"Todas as contas, e uma visualização: Curto prazo, Semanal, Uso adicional ou Todos os medidores. Todas as "
-     L"contas começa em Semanal, e uma conta, em Todos os medidores; cada uma mantém sua visualização até a janela "
+     L"contas começa em Semanal. Uma conta começa em Todos os medidores, ou em Semanal se Fable for sua única "
+     L"barra semanal. Cada modo mantém a visualização escolhida até a janela "
      L"fechar. A janela abre no Período padrão definido em Configurações > Histórico. Semanal segue as cotas "
      L"semanais selecionadas para a barra de tarefas em cada conta da Anthropic; as contas removidas mantêm as duas "
      L"cotas semanais, e Todos os medidores inclui as cotas semanais ocultas na barra de tarefas. As cotas Gemini, "

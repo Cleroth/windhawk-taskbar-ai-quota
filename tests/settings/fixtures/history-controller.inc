@@ -430,6 +430,43 @@ static void RunHistoryControllerTests() {
         CHECK(c.view.view == HistoryView::ShortTerm && c.accountView == HistoryView::AllMeters);
     });
 
+    Run("history controller: Fable as the only weekly bar sets the sidebar value and default account view", [] {
+        TestHistoryOps ops = TestControllerOps();
+        auto& bars = ops.settings.settings.accounts[0].showBars;
+        bars[kWeeklyBar] = false;
+        bars[kFableWeeklyBar] = true;
+        ops.settings.polls[0].fableWeek.pct = 75;
+        ops.Append(TestReading(0xC1, 1, kWeekFrom + 3 * kHourMs, {{1, 45}, {2, 73}}));
+        ops.request = 0xC1;
+        HistoryController c(ops);
+        c.Open();
+        CHECK(c.view.accounts[0].weeklyPct == 75);
+        c.Load();
+        CHECK(c.view.selected == 0 && c.view.view == HistoryView::Weekly &&
+              c.view.lines.size() == 1 && c.view.lines[0].meter == 2);
+        c.Command(HistoryUiCommand::Select, 0, 0x0A);
+        CHECK(c.view.view == HistoryView::AllMeters && c.view.accounts[1].weeklyPct == 62);
+        c.Command(HistoryUiCommand::Select, 0, 0xC1);
+        CHECK(c.view.view == HistoryView::Weekly);
+        // Both bars: normal weekly wins. Neither: keep the normal defaults.
+        bars[kWeeklyBar] = true;
+        c.Load();
+        CHECK(c.view.accounts[0].weeklyPct == 47 && c.view.view == HistoryView::AllMeters);
+        bars[kWeeklyBar] = bars[kFableWeeklyBar] = false;
+        c.Load();
+        CHECK(c.view.accounts[0].weeklyPct == 47 && c.view.view == HistoryView::AllMeters);
+        // An explicit account view survives the switch back to Fable, even without a live reading.
+        c.Command(HistoryUiCommand::View, int(HistoryView::ExtraUsage));
+        c.Command(HistoryUiCommand::Select);
+        bars[kFableWeeklyBar] = true;
+        ops.settings.polls[0].fableWeek.pct = -1;
+        ops.request = 0xC1;
+        c.Load();
+        CHECK(c.view.view == HistoryView::ExtraUsage && c.view.accounts[0].weeklyPct < 0);
+        c.Command(HistoryUiCommand::View, int(HistoryView::AllMeters));
+        CHECK(c.view.lines.size() == 2 && c.view.lines[0].meter == 1 && c.view.lines[1].meter == 2);
+    });
+
     Run("history controller: comparing loads 7 days and the week before, shows the range as 7 days "
         "(disabled), and gives the user's range back afterwards", [] {
         TestHistoryOps ops = TestControllerOps();
@@ -503,7 +540,7 @@ static void RunHistoryControllerTests() {
             c.Command(HistoryUiCommand::Menu, int(HistoryUiMenuItem::Settings));
             CHECK(ops.log.empty() && ops.request == 0x0A);
             CHECK(c.selectedId == 0xC1 && c.range == HistoryUiRange::Week && !c.compare &&
-                  c.accountView == HistoryView::AllMeters && c.view.selected == 0);
+                  !c.accountView && c.view.view == HistoryView::AllMeters && c.view.selected == 0);
         }
     });
 

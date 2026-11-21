@@ -32,8 +32,9 @@ state and storage errors stay visible in the main window.
     windows that vary within the displayed range.
   - **Weekly** includes regular weekly quotas and Antigravity Gemini, Gemini Argon and
     Claude/GPT weekly pools. Anthropic follows each account's taskbar weekly selections: normal, Fable, both,
-    or neither. **Refresh / F5** picks up changed selections. Removed accounts retain both
-    weeklies because they no longer have taskbar settings.
+    or neither. If Fable is an account's only weekly bar, its sidebar percentage shows Fable
+    instead of normal weekly. **Refresh / F5** picks up changed selections. Removed accounts
+    retain both weeklies because they no longer have taskbar settings.
   - **Extra usage** plots Anthropic extra-usage budget used (%), GitHub Copilot AI credits
     used (%) and OpenCode Go's monthly used (%) (left, in the Remaining bar mode) on the left
     axis and OpenAI credits remaining on the right. OpenCode Go's monthly line is its plan's
@@ -45,7 +46,8 @@ state and storage errors stay visible in the main window.
     this percentage, so its accounts appear in Extra usage and All meters only; its pooled
     credits and additional usage are not recorded. In the sidebar, a Copilot account shows its
     latest AI credits used (%) where other accounts show their weekly one.
-- Selecting one account defaults to **All meters**, with the same three groups also available.
+- Selecting one account defaults to **All meters**. If Fable is that account's only weekly bar,
+  it starts on **Weekly** instead.
   All-account and single-account modes remember their view selections separately until the window
   closes. **All meters** includes weeklies hidden on the taskbar and plots Anthropic USD
   spending recorded without a limit (a range holding readings with and without one shows both

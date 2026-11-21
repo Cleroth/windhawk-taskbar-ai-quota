@@ -574,8 +574,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Цвет текста панели задач или оранжевый цвет Claude. Панель сведений, раздел «Аккаунты» и история использования "
      L"следуют этому выбору."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
-          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
-          L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
+          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
+          L"account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode keeps your choice "
+          L"until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
@@ -583,7 +584,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"Здесь показаны уровни квот по замерам, а не токены или суточный расход. Выберите на боковой панели аккаунт или "
      L"«Все аккаунты», а также вид: «Краткосрочные», «Неделя», «Доп. использование» или «Все показатели». «Все "
-     L"аккаунты» открываются на виде «Неделя», отдельный аккаунт — на виде «Все показатели»; каждый сохраняет свой вид "
+     L"аккаунты» открываются на виде «Неделя», отдельный аккаунт — на виде «Все показатели» или «Неделя», если из недельных "
+     L"полос включена только Fable. Выбранный вид сохраняется в каждом режиме "
      L"до закрытия окна. Окно открывается с периодом, заданным параметром «Период по умолчанию» в разделе Параметры > "
      L"История. Вид «Неделя» следует выбору недельных квот каждого аккаунта Anthropic на панели задач; у удалённых "
      L"аккаунтов остаются обе недельные квоты, а вид «Все показатели» включает и недельные квоты, скрытые на панели "

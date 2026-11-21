@@ -441,15 +441,16 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"The taskbar’s text color, or Claude’s orange. Details, Accounts and usage history match.",
      L"任务栏文字颜色，或 Claude 的橙色。详情、“账户”和使用历史中也会保持一致。"},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
-          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
-          L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
+          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
+          L"account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode keeps your choice "
+          L"until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
           L"own line and resets; overlapping limits are never added or merged. Short-window labels use recorded "
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"这些是采样得到的配额水平，而非 token "
-     L"数或每日消耗量。在侧栏中选择一个账户或“所有账户”，再选择一个视图：“短期”、“每周”、“额外用量”或“全部指标”。“所有账户”默认显示“每周”，单个账户默认显示“全部指标”；各自保留所选视图，直到窗口关闭。窗口打开时使用“设置 "
+     L"数或每日消耗量。在侧栏中选择一个账户或“所有账户”，再选择一个视图：“短期”、“每周”、“额外用量”或“全部指标”。“所有账户”默认显示“每周”，单个账户默认显示“全部指标”，但如果该账户只启用了 Fable 每周配额条而未启用常规每周配额条，则默认显示“每周”。两种模式各自保留所选视图，直到窗口关闭。窗口打开时使用“设置 "
      L"> 历史”中设定的“默认时间范围”。“每周”遵循每个 Anthropic 账户在任务栏上的每周配额选择；已移除的账户保留两种每周配额，“全部指标”还包括在任务栏上隐藏的每周配额。Antigravity 的 "
      L"Gemini、Argon 和 Claude/GPT 配额归入对应的“短期”和“每周”视图。每个配额保留各自的线条和重置；重叠的限额绝不会相加或合并。短时段标签使用记录的时长（未知时使用当前限额）。Antigravity "
      L"显示起限制作用的配额池，这些配额池可能会变化。"},

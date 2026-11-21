@@ -22,7 +22,7 @@ struct HistoryUiViewAccount {
     bool removed = false;
     bool recordingOff = false;  // Its Record history is off
     bool paused = false;        // Hidden while hidden accounts aren't polled
-    double weeklyPct = -1;      // The latest poll's weekly (GitHub Copilot: AI credits) used %; < 0 unknown
+    double weeklyPct = -1;      // Latest weekly used % (Fable if the only weekly bar; Copilot: AI credits); < 0 unknown
     bool stale = false;         // That poll is stale: the value shows muted, cards never say "now"
     ULONGLONG lastPollMs = 0;   // The latest successful poll; 0 none
     bool operator==(const HistoryUiViewAccount&) const = default;

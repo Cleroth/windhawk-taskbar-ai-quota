@@ -223,7 +223,8 @@ struct HistoryController {
     // Selection (0: All accounts), each mode's view, the range (from the settings' default when the
     // window opens) and the week comparison (it forces 7 days; the range stays for afterwards)
     uint64_t selectedId = 0;
-    HistoryView allView = HistoryView::Weekly, accountView = HistoryView::AllMeters;
+    HistoryView allView = HistoryView::Weekly;
+    std::optional<HistoryView> accountView;  // Until explicitly chosen, follow the selected account's default.
     HistoryUiRange range = HistoryUiRange::Week;
     bool compare = false;
 
@@ -341,11 +342,13 @@ struct HistoryController {
                 selectedId = key;
                 Compose();
                 break;
-            case HistoryUiCommand::View:
-                (view.selected < 0 ? allView : accountView) =
-                    HistoryView(std::clamp(value, 0, int(HistoryView::AllMeters)));
+            case HistoryUiCommand::View: {
+                auto choice = HistoryView(std::clamp(value, 0, int(HistoryView::AllMeters)));
+                if (view.selected < 0) allView = choice;
+                else accountView = choice;
                 Compose();
                 break;
+            }
             case HistoryUiCommand::Range:
                 range = HistoryUiRange(std::clamp(value, 0, int(HistoryUiRange::All)));
                 Load();
@@ -571,7 +574,8 @@ struct HistoryController {
             {TrCtx(L"history-about", L"Reading the charts"),
              Tr(L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, "
                 L"or All accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on "
-                L"Weekly, one account on All meters; each keeps its view until the window closes. The window opens on "
+                L"Weekly. One account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode "
+                L"keeps your choice until the window closes. The window opens on "
                 L"the Default time span set in Settings > History. Weekly follows each Anthropic account's taskbar "
                 L"weekly selections; removed accounts keep both weeklies, and All meters includes weeklies hidden on "
                 L"the taskbar. Antigravity Gemini, Argon and Claude/GPT quotas share the matching short-term and "
@@ -876,6 +880,7 @@ struct HistoryController {
             MeterDisplayFor(s, v.locale, [](std::wstring_view, TileFont, double) { return 0.0; }, now, 1, 0);
         std::map<uint64_t, size_t> configured;
         for (size_t i = 0; i < s.accounts.size(); i++) configured.try_emplace(s.accounts[i].historyId, i);
+        v.view = allView;
         for (const HistoryUiAccount& a : accounts) {
             HistoryUiViewAccount& account = v.accounts.emplace_back();
             account.historyId = a.id;
@@ -885,19 +890,21 @@ struct HistoryController {
             account.removed = !a.configured;
             account.recordingOff = a.configured && !a.recording;
             account.paused = a.hidden && s.hiddenPollMinutes == kHiddenPollNever;
-            // The flyout's weekly row (GitHub Copilot's: its AI credits row): the latest poll's
-            // used % and its staleness.
+            const bool preferFable = a.configured && a.provider == 1 && !a.showWeekly && a.showFableWeekly;
             auto index = a.configured ? configured.find(a.id) : configured.end();
             if (index != configured.end() && index->second < settings.polls.size()) {
                 const AccountData& poll = settings.polls[index->second];
-                account.weeklyPct = a.provider == 4 ? poll.extraUsage.pct : poll.winWeek.pct;
+                account.weeklyPct = a.provider == 4 ? poll.extraUsage.pct :
+                                    preferFable     ? poll.fableWeek.pct : poll.winWeek.pct;
                 account.stale = AccountMeterState(display, s.barLayout, s.accounts[index->second], poll, 0, 0).stale;
                 account.lastPollMs = poll.lastSuccessMs;
             }
-            if (a.id == selectedId) v.selected = int(v.accounts.size()) - 1;
+            if (a.id == selectedId) {
+                v.selected = int(v.accounts.size()) - 1;
+                v.view = accountView.value_or(preferFable ? HistoryView::Weekly : HistoryView::AllMeters);
+            }
         }
         if (v.selected < 0) selectedId = 0;
-        v.view = v.selected < 0 ? allView : accountView;
         v.range = range;
         v.compare = compare;
         v.recordingEnabled = s.historyEnabled;
