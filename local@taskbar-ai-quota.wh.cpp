@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.24.1
+// @version         2.24.2
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -98,8 +98,8 @@ history starts when recording starts, with no backfill.
 All accounts defaults to Weekly over the past 7 days (set the time span in Settings > History);
 choose Short-term for short quotas.
 Weekly follows each Anthropic account's taskbar weekly selections. If Fable is its only weekly
-bar, the sidebar shows Fable and that account starts on Weekly. Other accounts start on All
-meters. All meters includes weeklies hidden on the taskbar.
+bar, the sidebar shows Fable and that account opens on All meters with the regular Weekly line
+turned off in the legend. Click it to show the line again.
 Percentages, USD, and credits use separate axes. Connected samples use lines only; dots keep
 isolated readings visible.
 Percentages from different accounts or overlapping windows are not added together.
@@ -1168,8 +1168,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"übernehmen sie."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
           L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
-          L"account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode keeps your choice "
-          L"until the window closes. The window opens on the Default time "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
@@ -1177,8 +1177,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"Dies sind gemessene Kontingentstände, keine Token und kein täglicher Verbrauch. Wählen Sie in der Seitenleiste "
      L"ein Konto oder „Alle Konten“ und eine Ansicht: „Kurzfristig“, „Wöchentlich“, „Zusatznutzung“ oder „Alle "
-     L"Messgrößen“. „Alle Konten“ beginnt mit „Wöchentlich“, ein einzelnes Konto mit „Alle Messgrößen“ oder mit "
-     L"„Wöchentlich“, wenn Fable sein einziger Wochenbalken ist. Für beide Modi bleibt die gewählte Ansicht erhalten, bis das Fenster geschlossen wird. Das Fenster öffnet mit dem „Standardzeitraum“ aus "
+     L"Messgrößen“. „Alle Konten“ beginnt mit „Wöchentlich“, ein einzelnes Konto mit „Alle Messgrößen“. Ist Fable der einzige "
+     L"Wochenbalken des Kontos, ist die reguläre Wochenlinie zunächst ausgeblendet. Für beide Modi bleibt die gewählte Ansicht erhalten, bis das Fenster geschlossen wird. Das Fenster öffnet mit dem „Standardzeitraum“ aus "
      L"Einstellungen > Verlauf. „Wöchentlich“ folgt der Auswahl wöchentlicher Kontingente, die jedes Anthropic-Konto "
      L"in der Taskleiste zeigt; entfernte Konten behalten beide Wochenkontingente, und „Alle Messgrößen“ enthält auch "
      L"in der Taskleiste ausgeblendete Wochenkontingente. Die Kontingente Gemini, Argon und Claude/GPT von Antigravity "
@@ -2470,8 +2470,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"usan el mismo."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
           L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
-          L"account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode keeps your choice "
-          L"until the window closes. The window opens on the Default time "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
@@ -2479,7 +2479,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"Son niveles de cuota muestreados, no tokens ni consumo diario. Elige una cuenta en la barra lateral, o Todas "
      L"las cuentas, y una vista: Corto plazo, Semanal, Uso adicional o Todas las métricas. Todas las cuentas empieza "
-     L"en Semanal. Una cuenta empieza en Todas las métricas, o en Semanal si Fable es su única barra semanal. "
+     L"en Semanal. Una cuenta empieza en Todas las métricas. Si Fable es su única barra semanal, "
+     L"la línea semanal normal está oculta al principio. "
      L"Cada modo conserva la vista elegida hasta que se cierra la "
      L"ventana. La ventana se abre con el Intervalo predeterminado definido en Configuración > Historial. Semanal "
      L"sigue, en cada cuenta de Anthropic, las cuotas semanales seleccionadas para la barra de tareas; las cuentas "
@@ -3791,8 +3792,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"d’utilisation suivent ce choix."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
           L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
-          L"account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode keeps your choice "
-          L"until the window closes. The window opens on the Default time "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
@@ -3801,7 +3802,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Ce sont des niveaux de quota échantillonnés, pas des jetons ni une consommation quotidienne. Choisissez un "
      L"compte dans la barre latérale, ou Tous les comptes, et une vue\u202F: Court terme, Hebdomadaire, Supplément ou Tous "
      L"les indicateurs. Avec Tous les comptes, la fenêtre s’ouvre sur Hebdomadaire\u202F; avec un seul compte, sur Tous les "
-     L"indicateurs, ou sur Hebdomadaire si Fable est sa seule barre hebdomadaire. Chaque mode conserve la vue "
+     L"indicateurs. Si Fable est sa seule barre hebdomadaire, la courbe hebdomadaire normale est masquée au départ. Chaque mode conserve la vue "
      L"choisie jusqu’à la fermeture de la fenêtre. La fenêtre s’ouvre sur la période définie "
      L"dans Période par défaut (Paramètres > Historique). La vue Hebdomadaire suit les quotas hebdomadaires "
      L"sélectionnés pour la barre des tâches de chaque compte Anthropic\u202F; les comptes retirés gardent les deux quotas "
@@ -4985,14 +4986,14 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"タスク バーの文字色、または Claude のオレンジ。詳細フライアウト、［アカウント］ページ、使用履歴も同じ色になります。"},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
           L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
-          L"account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode keeps your choice "
-          L"until the window closes. The window opens on the Default time "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
           L"own line and resets; overlapping limits are never added or merged. Short-window labels use recorded "
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
-     L"これはサンプリングしたクォータの水準であり、トークン数や日ごとの消費量ではありません。サイドバーでアカウントまたは［すべてのアカウント］を選択し、ビュー (［短期］、［週間］、［追加使用量］、［全メーター］) を選択してください。［すべてのアカウント］は［週間］で開きます。個々のアカウントは通常［全メーター］で開きますが、有効な週間バーが Fable だけの場合は［週間］で開きます。各モードで選んだビューはウィンドウを閉じるまで保持されます。ウィンドウは、［設定］>［履歴］で設定した［既定の期間］で開きます。［週間］は、各 Anthropic アカウントのタスク バーでの週間クォータの選択に従います。削除されたアカウントでは両方の週間クォータが残り、［全メーター］にはタスク バーで非表示の週間クォータも含まれます。Antigravity の Gemini、Argon、Claude/GPT のクォータは、対応する短期と週間のビューに表示されます。各クォータには独自の線とリセットがあり、重なり合う上限が加算や統合されることはありません。短期間のラベルには記録された期間 (不明な場合は現在の上限) を使います。Antigravity では制限となっているプールを表示し、これは変わることがあります。"},
+     L"これはサンプリングしたクォータの水準であり、トークン数や日ごとの消費量ではありません。サイドバーでアカウントまたは［すべてのアカウント］を選択し、ビュー (［短期］、［週間］、［追加使用量］、［全メーター］) を選択してください。［すべてのアカウント］は［週間］で開きます。個々のアカウントは［全メーター］で開きます。有効な週間バーが Fable だけの場合、通常の週間クォータの線は最初は非表示です。各モードで選んだビューはウィンドウを閉じるまで保持されます。ウィンドウは、［設定］>［履歴］で設定した［既定の期間］で開きます。［週間］は、各 Anthropic アカウントのタスク バーでの週間クォータの選択に従います。削除されたアカウントでは両方の週間クォータが残り、［全メーター］にはタスク バーで非表示の週間クォータも含まれます。Antigravity の Gemini、Argon、Claude/GPT のクォータは、対応する短期と週間のビューに表示されます。各クォータには独自の線とリセットがあり、重なり合う上限が加算や統合されることはありません。短期間のラベルには記録された期間 (不明な場合は現在の上限) を使います。Antigravity では制限となっているプールを表示し、これは変わることがあります。"},
     {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
           L"fills with the elapsed time.",
      L"細いキャレット、全幅の線、端の切れ込み、中央の点、または時間トラック (各バーの下で経過時間に応じて伸びる小さなバー)。"},
@@ -6211,8 +6212,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"essa escolha."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
           L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
-          L"account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode keeps your choice "
-          L"until the window closes. The window opens on the Default time "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
@@ -6220,8 +6221,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"Estes são níveis de cota amostrados, não tokens nem consumo diário. Escolha uma conta na barra lateral, ou "
      L"Todas as contas, e uma visualização: Curto prazo, Semanal, Uso adicional ou Todos os medidores. Todas as "
-     L"contas começa em Semanal. Uma conta começa em Todos os medidores, ou em Semanal se Fable for sua única "
-     L"barra semanal. Cada modo mantém a visualização escolhida até a janela "
+     L"contas começa em Semanal. Uma conta começa em Todos os medidores. Se Fable for sua única barra semanal, "
+     L"a linha semanal normal começa oculta. Cada modo mantém a visualização escolhida até a janela "
      L"fechar. A janela abre no Período padrão definido em Configurações > Histórico. Semanal segue as cotas "
      L"semanais selecionadas para a barra de tarefas em cada conta da Anthropic; as contas removidas mantêm as duas "
      L"cotas semanais, e Todos os medidores inclui as cotas semanais ocultas na barra de tarefas. As cotas Gemini, "
@@ -7496,8 +7497,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"следуют этому выбору."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
           L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
-          L"account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode keeps your choice "
-          L"until the window closes. The window opens on the Default time "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
@@ -7505,8 +7506,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"Здесь показаны уровни квот по замерам, а не токены или суточный расход. Выберите на боковой панели аккаунт или "
      L"«Все аккаунты», а также вид: «Краткосрочные», «Неделя», «Доп. использование» или «Все показатели». «Все "
-     L"аккаунты» открываются на виде «Неделя», отдельный аккаунт — на виде «Все показатели» или «Неделя», если из недельных "
-     L"полос включена только Fable. Выбранный вид сохраняется в каждом режиме "
+     L"аккаунты» открываются на виде «Неделя», отдельный аккаунт — на виде «Все показатели». Если из недельных полос включена "
+     L"только Fable, обычная недельная линия изначально скрыта. Выбранный вид сохраняется в каждом режиме "
      L"до закрытия окна. Окно открывается с периодом, заданным параметром «Период по умолчанию» в разделе Параметры > "
      L"История. Вид «Неделя» следует выбору недельных квот каждого аккаунта Anthropic на панели задач; у удалённых "
      L"аккаунтов остаются обе недельные квоты, а вид «Все показатели» включает и недельные квоты, скрытые на панели "
@@ -8649,15 +8650,15 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"任务栏文字颜色，或 Claude 的橙色。详情、“账户”和使用历史中也会保持一致。"},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
           L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
-          L"account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode keeps your choice "
-          L"until the window closes. The window opens on the Default time "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
           L"own line and resets; overlapping limits are never added or merged. Short-window labels use recorded "
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"这些是采样得到的配额水平，而非 token "
-     L"数或每日消耗量。在侧栏中选择一个账户或“所有账户”，再选择一个视图：“短期”、“每周”、“额外用量”或“全部指标”。“所有账户”默认显示“每周”，单个账户默认显示“全部指标”，但如果该账户只启用了 Fable 每周配额条而未启用常规每周配额条，则默认显示“每周”。两种模式各自保留所选视图，直到窗口关闭。窗口打开时使用“设置 "
+     L"数或每日消耗量。在侧栏中选择一个账户或“所有账户”，再选择一个视图：“短期”、“每周”、“额外用量”或“全部指标”。“所有账户”默认显示“每周”，单个账户默认显示“全部指标”。如果该账户启用的每周配额条只有 Fable，常规每周配额曲线默认隐藏。两种模式各自保留所选视图，直到窗口关闭。窗口打开时使用“设置 "
      L"> 历史”中设定的“默认时间范围”。“每周”遵循每个 Anthropic 账户在任务栏上的每周配额选择；已移除的账户保留两种每周配额，“全部指标”还包括在任务栏上隐藏的每周配额。Antigravity 的 "
      L"Gemini、Argon 和 Claude/GPT 配额归入对应的“短期”和“每周”视图。每个配额保留各自的线条和重置；重叠的限额绝不会相加或合并。短时段标签使用记录的时长（未知时使用当前限额）。Antigravity "
      L"显示起限制作用的配额池，这些配额池可能会变化。"},
@@ -42132,8 +42133,7 @@ struct HistoryController {
     // Selection (0: All accounts), each mode's view, the range (from the settings' default when the
     // window opens) and the week comparison (it forces 7 days; the range stays for afterwards)
     uint64_t selectedId = 0;
-    HistoryView allView = HistoryView::Weekly;
-    std::optional<HistoryView> accountView;  // Until explicitly chosen, follow the selected account's default.
+    HistoryView allView = HistoryView::Weekly, accountView = HistoryView::AllMeters;
     HistoryUiRange range = HistoryUiRange::Week;
     bool compare = false;
 
@@ -42156,10 +42156,10 @@ struct HistoryController {
     HistorySeriesSet series;
     HistorySeriesKey seriesKey;
 
-    // Navigation slots by history ID, for the session (never reused); the lines the legend hides
-    // for the session (history ID, meter), whatever the selection, view or range
+    // Navigation slots by history ID, for the session (never reused); explicit legend choices
+    // (history ID, meter) override the default across selections, views and ranges.
     std::map<uint64_t, uint32_t> slots;
-    std::vector<std::pair<uint64_t, int>> hidden;
+    std::map<std::pair<uint64_t, int>, bool> hiddenByChoice;
 
     // An operation's notice, and a request to focus the selected entry the window takes
     HistoryNotice notice;
@@ -42298,9 +42298,11 @@ struct HistoryController {
                 DeleteHistory(key);
                 break;
             case HistoryUiCommand::Line: {
-                auto line = std::find(hidden.begin(), hidden.end(), std::pair{key, value});
-                if (line != hidden.end()) hidden.erase(line);
-                else hidden.push_back({key, value});
+                auto line = std::find_if(view.lines.begin(), view.lines.end(), [&](const HistoryUiLine& l) {
+                    return l.historyId == key && l.meter == value;
+                });
+                if (line == view.lines.end()) break;
+                hiddenByChoice[{key, value}] = !line->hidden;
                 Compose();
                 break;
             }
@@ -42483,7 +42485,8 @@ struct HistoryController {
             {TrCtx(L"history-about", L"Reading the charts"),
              Tr(L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, "
                 L"or All accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on "
-                L"Weekly. One account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode "
+                L"Weekly. One account starts on All meters. If Fable is its only weekly bar, the regular Weekly line "
+                L"starts hidden. Each mode "
                 L"keeps your choice until the window closes. The window opens on "
                 L"the Default time span set in Settings > History. Weekly follows each Anthropic account's taskbar "
                 L"weekly selections; removed accounts keep both weeklies, and All meters includes weeklies hidden on "
@@ -42790,6 +42793,7 @@ struct HistoryController {
         std::map<uint64_t, size_t> configured;
         for (size_t i = 0; i < s.accounts.size(); i++) configured.try_emplace(s.accounts[i].historyId, i);
         v.view = allView;
+        bool hideRegularWeekly = false;
         for (const HistoryUiAccount& a : accounts) {
             HistoryUiViewAccount& account = v.accounts.emplace_back();
             account.historyId = a.id;
@@ -42810,7 +42814,8 @@ struct HistoryController {
             }
             if (a.id == selectedId) {
                 v.selected = int(v.accounts.size()) - 1;
-                v.view = accountView.value_or(preferFable ? HistoryView::Weekly : HistoryView::AllMeters);
+                v.view = accountView;
+                hideRegularWeekly = preferFable;
             }
         }
         if (v.selected < 0) selectedId = 0;
@@ -42874,8 +42879,8 @@ struct HistoryController {
                 shown.stroke = line.stroke;
                 shown.low = line.low;
                 shown.high = line.high;
-                shown.hidden = std::find(hidden.begin(), hidden.end(), std::pair{shown.historyId, shown.meter}) !=
-                               hidden.end();
+                auto choice = hiddenByChoice.find({shown.historyId, shown.meter});
+                shown.hidden = choice != hiddenByChoice.end() ? choice->second : hideRegularWeekly && line.meter == 1;
             }
         }
         bool changed = !(v == view);

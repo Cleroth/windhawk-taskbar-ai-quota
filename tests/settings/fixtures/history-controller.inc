@@ -430,31 +430,34 @@ static void RunHistoryControllerTests() {
         CHECK(c.view.view == HistoryView::ShortTerm && c.accountView == HistoryView::AllMeters);
     });
 
-    Run("history controller: Fable as the only weekly bar sets the sidebar value and default account view", [] {
+    Run("history controller: Fable as the only weekly bar hides only the regular line in the account's All meters", [] {
         TestHistoryOps ops = TestControllerOps();
         auto& bars = ops.settings.settings.accounts[0].showBars;
         bars[kWeeklyBar] = false;
         bars[kFableWeeklyBar] = true;
         ops.settings.polls[0].fableWeek.pct = 75;
-        ops.Append(TestReading(0xC1, 1, kWeekFrom + 3 * kHourMs, {{1, 45}, {2, 73}}));
+        ops.Append(TestReading(0xC1, 1, kWeekFrom + 3 * kHourMs, {{0, 10}, {1, 45}, {2, 73}, {3, 20}}));
         ops.request = 0xC1;
         HistoryController c(ops);
         c.Open();
         CHECK(c.view.accounts[0].weeklyPct == 75);
         c.Load();
-        CHECK(c.view.selected == 0 && c.view.view == HistoryView::Weekly &&
-              c.view.lines.size() == 1 && c.view.lines[0].meter == 2);
+        CHECK(c.view.selected == 0 && c.view.view == HistoryView::AllMeters && c.view.lines.size() == 4);
+        for (int meter = 0; meter < 4; meter++) {
+            CHECK(c.view.lines[meter].meter == meter && c.view.lines[meter].hidden == (meter == 1));
+        }
         c.Command(HistoryUiCommand::Select, 0, 0x0A);
-        CHECK(c.view.view == HistoryView::AllMeters && c.view.accounts[1].weeklyPct == 62);
+        CHECK(c.view.view == HistoryView::AllMeters && c.view.accounts[1].weeklyPct == 62 &&
+              c.view.lines.size() == 1 && !c.view.lines[0].hidden);
         c.Command(HistoryUiCommand::Select, 0, 0xC1);
-        CHECK(c.view.view == HistoryView::Weekly);
+        CHECK(c.view.view == HistoryView::AllMeters && c.view.lines.at(1).hidden);
         // Both bars: normal weekly wins. Neither: keep the normal defaults.
         bars[kWeeklyBar] = true;
         c.Load();
-        CHECK(c.view.accounts[0].weeklyPct == 47 && c.view.view == HistoryView::AllMeters);
+        CHECK(c.view.accounts[0].weeklyPct == 47 && !c.view.lines.at(1).hidden);
         bars[kWeeklyBar] = bars[kFableWeeklyBar] = false;
         c.Load();
-        CHECK(c.view.accounts[0].weeklyPct == 47 && c.view.view == HistoryView::AllMeters);
+        CHECK(c.view.accounts[0].weeklyPct == 47 && !c.view.lines.at(1).hidden);
         // An explicit account view survives the switch back to Fable, even without a live reading.
         c.Command(HistoryUiCommand::View, int(HistoryView::ExtraUsage));
         c.Command(HistoryUiCommand::Select);
@@ -464,7 +467,13 @@ static void RunHistoryControllerTests() {
         c.Load();
         CHECK(c.view.view == HistoryView::ExtraUsage && c.view.accounts[0].weeklyPct < 0);
         c.Command(HistoryUiCommand::View, int(HistoryView::AllMeters));
-        CHECK(c.view.lines.size() == 2 && c.view.lines[0].meter == 1 && c.view.lines[1].meter == 2);
+        CHECK(c.view.lines.size() == 4 && c.view.lines[1].hidden);
+        c.Command(HistoryUiCommand::Line, 1, 0xC1);
+        c.Command(HistoryUiCommand::Refresh);
+        CHECK(!c.view.lines.at(1).hidden);
+        c.Command(HistoryUiCommand::Select);
+        c.Command(HistoryUiCommand::Select, 0, 0xC1);
+        CHECK(!c.view.lines.at(1).hidden);
     });
 
     Run("history controller: comparing loads 7 days and the week before, shows the range as 7 days "
@@ -540,7 +549,7 @@ static void RunHistoryControllerTests() {
             c.Command(HistoryUiCommand::Menu, int(HistoryUiMenuItem::Settings));
             CHECK(ops.log.empty() && ops.request == 0x0A);
             CHECK(c.selectedId == 0xC1 && c.range == HistoryUiRange::Week && !c.compare &&
-                  !c.accountView && c.view.view == HistoryView::AllMeters && c.view.selected == 0);
+                  c.accountView == HistoryView::AllMeters && c.view.selected == 0);
         }
     });
 

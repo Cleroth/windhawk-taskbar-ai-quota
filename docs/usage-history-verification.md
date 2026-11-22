@@ -72,9 +72,9 @@ history** or **Delete history...** removes that account's.
 - Antigravity with a Gemini Argon pool: Weekly and All meters show an Argon weekly line apart
   from Gemini weekly, and CSV exports it as `argon_weekly`.
 - With the viewer closed and Fable as an Anthropic account's only weekly bar, open history from
-  that account: the chart starts on Weekly with its Fable line, and the sidebar shows its Fable
-  percentage. Other accounts still start on All meters. Choose All meters for the Fable account:
-  both recorded weeklies appear, and switching away and back keeps that choice until close.
+  that account: the chart starts on All meters with Fable and recorded extra usage visible. The
+  regular Weekly chip is off, and the sidebar shows the Fable percentage. Click the Weekly chip:
+  the regular line appears alongside Fable and stays on after F5 or switching away and back.
 - All accounts uses matching account color families in the graph and legend, with tinted scoped
   lines, 3px primary and 2px scoped lines. Single-account meter colors stay stable across groups.
 - With several legend entries, narrow the window: the legend wraps above the graph, details stay

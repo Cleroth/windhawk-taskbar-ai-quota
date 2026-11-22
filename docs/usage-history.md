@@ -47,7 +47,8 @@ state and storage errors stay visible in the main window.
     credits and additional usage are not recorded. In the sidebar, a Copilot account shows its
     latest AI credits used (%) where other accounts show their weekly one.
 - Selecting one account defaults to **All meters**. If Fable is that account's only weekly bar,
-  it starts on **Weekly** instead.
+  only the regular **Weekly** line starts turned off in the legend. Fable and extra usage stay
+  visible when recorded; click **Weekly** in the legend to show it too.
   All-account and single-account modes remember their view selections separately until the window
   closes. **All meters** includes weeklies hidden on the taskbar and plots Anthropic USD
   spending recorded without a limit (a range holding readings with and without one shows both

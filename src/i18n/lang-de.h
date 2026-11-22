@@ -604,8 +604,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"übernehmen sie."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
           L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
-          L"account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode keeps your choice "
-          L"until the window closes. The window opens on the Default time "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
@@ -613,8 +613,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"Dies sind gemessene Kontingentstände, keine Token und kein täglicher Verbrauch. Wählen Sie in der Seitenleiste "
      L"ein Konto oder „Alle Konten“ und eine Ansicht: „Kurzfristig“, „Wöchentlich“, „Zusatznutzung“ oder „Alle "
-     L"Messgrößen“. „Alle Konten“ beginnt mit „Wöchentlich“, ein einzelnes Konto mit „Alle Messgrößen“ oder mit "
-     L"„Wöchentlich“, wenn Fable sein einziger Wochenbalken ist. Für beide Modi bleibt die gewählte Ansicht erhalten, bis das Fenster geschlossen wird. Das Fenster öffnet mit dem „Standardzeitraum“ aus "
+     L"Messgrößen“. „Alle Konten“ beginnt mit „Wöchentlich“, ein einzelnes Konto mit „Alle Messgrößen“. Ist Fable der einzige "
+     L"Wochenbalken des Kontos, ist die reguläre Wochenlinie zunächst ausgeblendet. Für beide Modi bleibt die gewählte Ansicht erhalten, bis das Fenster geschlossen wird. Das Fenster öffnet mit dem „Standardzeitraum“ aus "
      L"Einstellungen > Verlauf. „Wöchentlich“ folgt der Auswahl wöchentlicher Kontingente, die jedes Anthropic-Konto "
      L"in der Taskleiste zeigt; entfernte Konten behalten beide Wochenkontingente, und „Alle Messgrößen“ enthält auch "
      L"in der Taskleiste ausgeblendete Wochenkontingente. Die Kontingente Gemini, Argon und Claude/GPT von Antigravity "

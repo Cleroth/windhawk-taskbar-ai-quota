@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.24.1
+// @version         2.24.2
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -95,8 +95,8 @@ history starts when recording starts, with no backfill.
 All accounts defaults to Weekly over the past 7 days (set the time span in Settings > History);
 choose Short-term for short quotas.
 Weekly follows each Anthropic account's taskbar weekly selections. If Fable is its only weekly
-bar, the sidebar shows Fable and that account starts on Weekly. Other accounts start on All
-meters. All meters includes weeklies hidden on the taskbar.
+bar, the sidebar shows Fable and that account opens on All meters with the regular Weekly line
+turned off in the legend. Click it to show the line again.
 Percentages, USD, and credits use separate axes. Connected samples use lines only; dots keep
 isolated readings visible.
 Percentages from different accounts or overlapping windows are not added together.

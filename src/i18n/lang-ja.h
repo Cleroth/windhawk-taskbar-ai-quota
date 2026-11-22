@@ -467,14 +467,14 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"タスク バーの文字色、または Claude のオレンジ。詳細フライアウト、［アカウント］ページ、使用履歴も同じ色になります。"},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
           L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
-          L"account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode keeps your choice "
-          L"until the window closes. The window opens on the Default time "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
           L"own line and resets; overlapping limits are never added or merged. Short-window labels use recorded "
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
-     L"これはサンプリングしたクォータの水準であり、トークン数や日ごとの消費量ではありません。サイドバーでアカウントまたは［すべてのアカウント］を選択し、ビュー (［短期］、［週間］、［追加使用量］、［全メーター］) を選択してください。［すべてのアカウント］は［週間］で開きます。個々のアカウントは通常［全メーター］で開きますが、有効な週間バーが Fable だけの場合は［週間］で開きます。各モードで選んだビューはウィンドウを閉じるまで保持されます。ウィンドウは、［設定］>［履歴］で設定した［既定の期間］で開きます。［週間］は、各 Anthropic アカウントのタスク バーでの週間クォータの選択に従います。削除されたアカウントでは両方の週間クォータが残り、［全メーター］にはタスク バーで非表示の週間クォータも含まれます。Antigravity の Gemini、Argon、Claude/GPT のクォータは、対応する短期と週間のビューに表示されます。各クォータには独自の線とリセットがあり、重なり合う上限が加算や統合されることはありません。短期間のラベルには記録された期間 (不明な場合は現在の上限) を使います。Antigravity では制限となっているプールを表示し、これは変わることがあります。"},
+     L"これはサンプリングしたクォータの水準であり、トークン数や日ごとの消費量ではありません。サイドバーでアカウントまたは［すべてのアカウント］を選択し、ビュー (［短期］、［週間］、［追加使用量］、［全メーター］) を選択してください。［すべてのアカウント］は［週間］で開きます。個々のアカウントは［全メーター］で開きます。有効な週間バーが Fable だけの場合、通常の週間クォータの線は最初は非表示です。各モードで選んだビューはウィンドウを閉じるまで保持されます。ウィンドウは、［設定］>［履歴］で設定した［既定の期間］で開きます。［週間］は、各 Anthropic アカウントのタスク バーでの週間クォータの選択に従います。削除されたアカウントでは両方の週間クォータが残り、［全メーター］にはタスク バーで非表示の週間クォータも含まれます。Antigravity の Gemini、Argon、Claude/GPT のクォータは、対応する短期と週間のビューに表示されます。各クォータには独自の線とリセットがあり、重なり合う上限が加算や統合されることはありません。短期間のラベルには記録された期間 (不明な場合は現在の上限) を使います。Antigravity では制限となっているプールを表示し、これは変わることがあります。"},
     {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
           L"fills with the elapsed time.",
      L"細いキャレット、全幅の線、端の切れ込み、中央の点、または時間トラック (各バーの下で経過時間に応じて伸びる小さなバー)。"},

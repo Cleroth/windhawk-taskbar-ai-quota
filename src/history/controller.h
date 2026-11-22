@@ -223,8 +223,7 @@ struct HistoryController {
     // Selection (0: All accounts), each mode's view, the range (from the settings' default when the
     // window opens) and the week comparison (it forces 7 days; the range stays for afterwards)
     uint64_t selectedId = 0;
-    HistoryView allView = HistoryView::Weekly;
-    std::optional<HistoryView> accountView;  // Until explicitly chosen, follow the selected account's default.
+    HistoryView allView = HistoryView::Weekly, accountView = HistoryView::AllMeters;
     HistoryUiRange range = HistoryUiRange::Week;
     bool compare = false;
 
@@ -247,10 +246,10 @@ struct HistoryController {
     HistorySeriesSet series;
     HistorySeriesKey seriesKey;
 
-    // Navigation slots by history ID, for the session (never reused); the lines the legend hides
-    // for the session (history ID, meter), whatever the selection, view or range
+    // Navigation slots by history ID, for the session (never reused); explicit legend choices
+    // (history ID, meter) override the default across selections, views and ranges.
     std::map<uint64_t, uint32_t> slots;
-    std::vector<std::pair<uint64_t, int>> hidden;
+    std::map<std::pair<uint64_t, int>, bool> hiddenByChoice;
 
     // An operation's notice, and a request to focus the selected entry the window takes
     HistoryNotice notice;
@@ -389,9 +388,11 @@ struct HistoryController {
                 DeleteHistory(key);
                 break;
             case HistoryUiCommand::Line: {
-                auto line = std::find(hidden.begin(), hidden.end(), std::pair{key, value});
-                if (line != hidden.end()) hidden.erase(line);
-                else hidden.push_back({key, value});
+                auto line = std::find_if(view.lines.begin(), view.lines.end(), [&](const HistoryUiLine& l) {
+                    return l.historyId == key && l.meter == value;
+                });
+                if (line == view.lines.end()) break;
+                hiddenByChoice[{key, value}] = !line->hidden;
                 Compose();
                 break;
             }
@@ -574,7 +575,8 @@ struct HistoryController {
             {TrCtx(L"history-about", L"Reading the charts"),
              Tr(L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, "
                 L"or All accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on "
-                L"Weekly. One account starts on All meters, or Weekly if Fable is its only weekly bar. Each mode "
+                L"Weekly. One account starts on All meters. If Fable is its only weekly bar, the regular Weekly line "
+                L"starts hidden. Each mode "
                 L"keeps your choice until the window closes. The window opens on "
                 L"the Default time span set in Settings > History. Weekly follows each Anthropic account's taskbar "
                 L"weekly selections; removed accounts keep both weeklies, and All meters includes weeklies hidden on "
@@ -881,6 +883,7 @@ struct HistoryController {
         std::map<uint64_t, size_t> configured;
         for (size_t i = 0; i < s.accounts.size(); i++) configured.try_emplace(s.accounts[i].historyId, i);
         v.view = allView;
+        bool hideRegularWeekly = false;
         for (const HistoryUiAccount& a : accounts) {
             HistoryUiViewAccount& account = v.accounts.emplace_back();
             account.historyId = a.id;
@@ -901,7 +904,8 @@ struct HistoryController {
             }
             if (a.id == selectedId) {
                 v.selected = int(v.accounts.size()) - 1;
-                v.view = accountView.value_or(preferFable ? HistoryView::Weekly : HistoryView::AllMeters);
+                v.view = accountView;
+                hideRegularWeekly = preferFable;
             }
         }
         if (v.selected < 0) selectedId = 0;
@@ -965,8 +969,8 @@ struct HistoryController {
                 shown.stroke = line.stroke;
                 shown.low = line.low;
                 shown.high = line.high;
-                shown.hidden = std::find(hidden.begin(), hidden.end(), std::pair{shown.historyId, shown.meter}) !=
-                               hidden.end();
+                auto choice = hiddenByChoice.find({shown.historyId, shown.meter});
+                shown.hidden = choice != hiddenByChoice.end() ? choice->second : hideRegularWeekly && line.meter == 1;
             }
         }
         bool changed = !(v == view);
