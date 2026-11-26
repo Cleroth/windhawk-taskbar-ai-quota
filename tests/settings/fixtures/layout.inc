@@ -2804,20 +2804,28 @@ static void RunLayoutTests() {
               !HasText(frame, L"Pixels along each bar."));
         CHECK(Control(frame, SettingsField::BarStyle).rect.bottom < vertical.rect.top &&
               vertical.rect.bottom < Control(frame, SettingsField::BarThickness, 1).rect.top);
-        // And their own percentage text, never by default: its alignment, amounts and the text
-        // size (quota keys off) disable.
+        // And their own percentage text, never by default: no alignment or amounts, nor (quota keys
+        // off) the text size; Quota keys follows it.
         const UiItem& verticalPercent = Control(frame, SettingsField::VerticalPercentTextVisibility);
         CHECK(verticalPercent.kind == UiItemKind::Dropdown && verticalPercent.text == L"Never show" &&
               verticalPercent.enabled && verticalPercent.options.size() == 3);
         CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::PercentTextVisibility)));
         CHECK(TextCount(frame, L"Percentage on each bar: never, on hover, or always; vertical bars keep their own. Wider "
                                L"than a thin bar, it overlaps the bars beside it.") == 1);
-        CHECK(!Control(frame, SettingsField::PercentTextAlignment).enabled &&
-              !Control(frame, SettingsField::ShowExtraBarAmounts).enabled &&
-              !Control(frame, SettingsField::PercentFontSize, 1).enabled);
-        CHECK(TextCount(frame, L"Show percentage text on hover or always to change this.") == 2 &&
-              TextCount(frame, L"Show percentage text or turn on Quota keys to change this.") == 1);
-        // Shown on hover there, they enable; the shared choice doesn't count.
+        CHECK(!Shown(frame, SettingsField::PercentTextAlignment) && !Shown(frame, SettingsField::ShowExtraBarAmounts) &&
+              !Shown(frame, SettingsField::PercentFontSize) && !Shown(frame, SettingsField::PercentFontSize, 1));
+        CHECK(!HasText(frame, L"Percentage alignment") && !HasText(frame, L"Amounts on extra usage and credits") &&
+              !HasText(frame, L"Bar text size"));
+        CHECK(verticalPercent.rect.bottom < Control(frame, SettingsField::ShowBarLabels).rect.top &&
+              Control(frame, SettingsField::ShowBarLabels).rect.bottom < Control(frame, SettingsField::ShowPaceTicks).rect.top);
+        // Quota keys on bring the text size back, alone.
+        view.settings.showBarLabels = true;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(Control(frame, SettingsField::PercentFontSize, 1).enabled && !Shown(frame, SettingsField::PercentTextAlignment) &&
+              !Shown(frame, SettingsField::ShowExtraBarAmounts));
+        view.settings.showBarLabels = false;
+        // Shown on hover there, all three show; the shared choice doesn't count.
         view.settings.verticalPercentTextVisibility = PercentTextVisibility::Hover;
         view.settings.percentTextVisibility = PercentTextVisibility::Never;
         frame = {};
@@ -2892,8 +2900,12 @@ static void RunLayoutTests() {
         CHECK(Control(frame, SettingsField::AccountMargin).kind == UiItemKind::NumberBox);
     });
 
-    Run("layout page: dependent rows disable with their reason; custom colors; draft text", [] {
+    Run("layout page: dependent rows show only while their setting is on, or while they hold an unsaved value; "
+        "custom colors; draft text", [] {
         UiGraphics& g = TestGraphics();
+        auto absent = [](const UiFrame& frame, std::initializer_list<std::pair<SettingsField, uint32_t>> controls) {
+            for (auto [field, part] : controls) CHECK(!UiFindItem(frame, SettingsControlId(field, part)));
+        };
         SettingsView view = TestView(SettingsUiPage::Layout);
         view.settings.labelPosition = LabelPosition::Hidden;
         view.settings.showPaceTicks = false;
@@ -2904,31 +2916,57 @@ static void RunLayoutTests() {
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, SettingsField::LabelPosition).text == L"Hidden");
-        // The logo colors stay: the flyout and the windows show the logos without an identity.
+        // Without an identity position: no label size, identity gap, logo size or badge cards. The
+        // logo colors stay, right under the position: the flyout and the windows show the logos
+        // without an identity.
         CHECK(Control(frame, SettingsField::ClaudeLogoBrand).enabled && Control(frame, SettingsField::GeminiLogoBrand).enabled &&
               Control(frame, SettingsField::ClaudeLogoBrand).text == L"Orange" &&
               Control(frame, SettingsField::GeminiLogoBrand).text == L"Taskbar text color");
-        CHECK(!Control(frame, SettingsField::LabelFontSize, 1).enabled && !Control(frame, SettingsField::LabelFontSize).enabled);
-        CHECK(!Control(frame, SettingsField::LabelGap).enabled);
-        CHECK(!Control(frame, SettingsField::LogoScale, 1).enabled && !Control(frame, SettingsField::BadgeSize).enabled &&
-              !Control(frame, SettingsField::BadgeOffsetX, 1).enabled && !Control(frame, SettingsField::BadgeOffsetY).enabled &&
-              !Control(frame, SettingsField::BadgeColor, 1).enabled && !Control(frame, SettingsField::BadgeColorCustom).enabled);
-        CHECK(HasText(frame, L"Choose an identity position to change this.") &&
-              !HasText(frame, L"Choose a label position"));
-        CHECK(!Control(frame, SettingsField::PercentFontSize, 1).enabled &&
-              !Control(frame, SettingsField::PercentTextAlignment).enabled &&
-              !Control(frame, SettingsField::ShowExtraBarAmounts).enabled);
-        CHECK(TextCount(frame, L"Show percentage text or turn on Quota keys to change this.") == 1 &&
-              TextCount(frame, L"Show percentage text on hover or always to change this.") == 2);
-        CHECK(!Control(frame, SettingsField::PaceTickStyle).enabled && !Control(frame, SettingsField::PaceTickColorCustom).enabled);
-        CHECK(HasText(frame, L"Turn on Pace markers to change this."));
-        // A custom color shows as a sixth, chosen swatch.
+        absent(frame, {{SettingsField::LabelFontSize, 0}, {SettingsField::LabelFontSize, 1}, {SettingsField::LabelGap, 0},
+                       {SettingsField::LogoScale, 0}, {SettingsField::LogoScale, 1}, {SettingsField::BadgeSize, 0},
+                       {SettingsField::BadgeSize, 1}, {SettingsField::BadgeOffsetX, 1}, {SettingsField::BadgeOffsetY, 1},
+                       {SettingsField::BadgeColor, 1}, {SettingsField::BadgeColor, 5}, {SettingsField::BadgeColorCustom, 0}});
+        CHECK(!HasText(frame, L"Label font size") && !HasText(frame, L"Identity gap") && !HasText(frame, L"Logo size") &&
+              !HasText(frame, L"Badge size") && !HasText(frame, L"Badge color") && !HasText(frame, L"Badge vertical offset"));
+        CHECK(Control(frame, SettingsField::LabelPosition).rect.bottom < Control(frame, SettingsField::ClaudeLogoBrand).rect.top &&
+              Control(frame, SettingsField::ClaudeLogoBrand).rect.bottom < Control(frame, SettingsField::GeminiLogoBrand).rect.top &&
+              Control(frame, SettingsField::GeminiLogoBrand).rect.bottom <
+                  Control(frame, SettingsField::PercentTextVisibility).rect.top);
+        // Percentage text never, quota keys off: no alignment, amounts or text size.
+        absent(frame, {{SettingsField::PercentTextAlignment, 0}, {SettingsField::ShowExtraBarAmounts, 0},
+                       {SettingsField::PercentFontSize, 0}, {SettingsField::PercentFontSize, 1}});
+        CHECK(Control(frame, SettingsField::PercentTextVisibility).rect.bottom < Control(frame, SettingsField::ShowBarLabels).rect.top &&
+              Control(frame, SettingsField::ShowBarLabels).rect.bottom < Control(frame, SettingsField::ShowPaceTicks).rect.top);
+        // Markers off: no style or color, the spacing cards after the switch.
+        absent(frame, {{SettingsField::PaceTickStyle, 0}, {SettingsField::PaceTickColor, 1}, {SettingsField::PaceTickColor, 6},
+                       {SettingsField::PaceTickColorCustom, 0}});
+        CHECK(!HasText(frame, L"Marker style") && !HasText(frame, L"Marker color") &&
+              Control(frame, SettingsField::ShowPaceTicks).rect.bottom < Control(frame, SettingsField::AccountMargin).rect.top);
+        // No explanation stands in for them.
+        CHECK(!HasText(frame, L"to change this"));
+
+        // A hidden row whose value couldn't be saved stays, with its error; its neighbors stay hidden.
+        view.drafts.push_back({0, SettingsField::LabelGap, 1, true, L"9", 9, true, true, SettingsDraftError::SaveFailed});
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(Control(frame, SettingsField::LabelGap).enabled && Control(frame, SettingsField::LabelGap).text == L"9" &&
+              TextCount(frame, L"This change couldn't be saved.") == 1);
+        CHECK(Control(frame, SettingsField::LabelPosition).rect.bottom < Control(frame, SettingsField::LabelGap).rect.top &&
+              Control(frame, SettingsField::LabelGap).rect.bottom < Control(frame, SettingsField::ClaudeLogoBrand).rect.top);
+        absent(frame, {{SettingsField::LabelFontSize, 1}, {SettingsField::LogoScale, 1}, {SettingsField::BadgeSize, 1}});
+        view.drafts.clear();
+
+        // With a position and the markers on, a custom color shows as a sixth, chosen swatch.
+        view.settings.labelPosition = LabelPosition::Top;
+        view.settings.showPaceTicks = true;
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         const UiItem& custom = Control(frame, SettingsField::PaceTickColor, 6);
-        CHECK(custom.selected && !custom.enabled && custom.action.value == 0x123456);
+        CHECK(custom.selected && custom.enabled && custom.action.value == 0x123456);
         CHECK(!Control(frame, SettingsField::PaceTickColor, 1).selected);
         // And a custom badge color as a fifth.
         const UiItem& customBadge = Control(frame, SettingsField::BadgeColor, 5);
-        CHECK(customBadge.selected && customBadge.action.value == 0x654321);
+        CHECK(customBadge.selected && customBadge.enabled && customBadge.action.value == 0x654321);
         CHECK(!Control(frame, SettingsField::BadgeColor, 1).selected);
 
         // A slider's box shows its draft's text and error; the slider the last valid value.
@@ -3123,11 +3161,12 @@ static void RunLayoutTests() {
         absent(frame, {{SettingsField::PaceTickStyle, 0}});
         CHECK(HasText(frame, L"A diagonal marks even use of the quota across its window, to compare with its usage.") &&
               !HasText(frame, L"Ticks mark how much"));
-        // Markers off: the color waits for them.
+        // Markers off: no color either.
         view.settings.showPaceTicks = false;
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-        CHECK(!Control(frame, SettingsField::PaceTickColor, 1).enabled && HasText(frame, L"Turn on Pace markers to change this."));
+        absent(frame, {{SettingsField::PaceTickColor, 1}, {SettingsField::PaceTickColorCustom, 0}});
+        CHECK(Control(frame, SettingsField::ShowPaceTicks).rect.bottom < Control(frame, SettingsField::AccountMargin).rect.top);
         // A chosen width, height and text size on the sliders and in their boxes; a chosen corner;
         // the cues flipped.
         view.settings.showPaceTicks = true;
@@ -3205,13 +3244,12 @@ static void RunLayoutTests() {
         }
     });
 
-    Run("layout page: Reset countdown on headline tiles disables the bar cards with its reason", [] {
+    Run("layout page: Reset countdown on headline tiles hides the bar cards", [] {
         UiGraphics& g = TestGraphics();
         SettingsView view = TestView(SettingsUiPage::Layout);
         view.settings.barLayout = BarLayout::LogoHeadline;
         UiFrame frame;
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-        const PCWSTR reason = L"Turn off Reset countdown to change this.";
         // Off: a toggle after the number size, before the bars' cards, all enabled.
         const UiItem& toggle = Control(frame, SettingsField::HeadlineCountdown);
         CHECK(toggle.kind == UiItemKind::Toggle && !toggle.selected && toggle.enabled && toggle.action.value == 1);
@@ -3224,9 +3262,8 @@ static void RunLayoutTests() {
                                    std::pair{SettingsField::HeadlineBarThickness, 1u}, std::pair{SettingsField::BarGap, 0u}}) {
             CHECK(Control(frame, field, part).enabled);
         }
-        CHECK(!HasText(frame, reason));
-        // On: the bars' length, thickness and gap disabled with the reason; the number size, the
-        // toggle and the identity cards stay.
+        // On: no bar length, thickness or gap, the identity's card right after the toggle; the
+        // number size, the toggle and the identity cards stay.
         view.settings.headlineCountdown = true;
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
@@ -3235,17 +3272,18 @@ static void RunLayoutTests() {
         for (auto [field, part] : {std::pair{SettingsField::HeadlineBarLength, 0u}, std::pair{SettingsField::HeadlineBarLength, 1u},
                                    std::pair{SettingsField::HeadlineBarThickness, 0u},
                                    std::pair{SettingsField::HeadlineBarThickness, 1u}, std::pair{SettingsField::BarGap, 0u}}) {
-            CHECK(!Control(frame, field, part).enabled);
+            CHECK(!Shown(frame, field, part));
         }
-        CHECK(HasText(frame, reason));
+        CHECK(!HasText(frame, L"Bar length") && !HasText(frame, L"Bar thickness") && !HasText(frame, L"Bar gap"));
+        CHECK(Control(frame, SettingsField::HeadlineCountdown).rect.bottom < Control(frame, SettingsField::BarLayout, 10).rect.top);
         CHECK(Control(frame, SettingsField::HeadlineFontSize, 1).enabled && Control(frame, SettingsField::LogoScale, 1).enabled &&
               Control(frame, SettingsField::AccountMargin).enabled);
-        // Other tile styles have no countdown card, whatever the setting.
+        // Other tile styles have no countdown card, and keep their own bar gap, whatever the setting.
         for (BarLayout layout : {BarLayout::Stacked, BarLayout::SegmentedRing, BarLayout::Gauge}) {
             view.settings.barLayout = layout;
             frame = {};
             SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-            CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::HeadlineCountdown)) && !HasText(frame, reason));
+            CHECK(!UiFindItem(frame, SettingsControlId(SettingsField::HeadlineCountdown)));
             if (layout == BarLayout::Stacked) CHECK(Control(frame, SettingsField::BarGap).enabled);
         }
     });
@@ -3264,11 +3302,11 @@ static void RunLayoutTests() {
                   style.options[4].value == int(PaceTickStyle::TimeTrack));
             CHECK(HasText(frame, L"centered dot, or a time track: a small bar under each bar that fills with the "
                                  L"elapsed time."));
-            // Off: disabled with the markers' reason.
+            // Markers off: no marker style.
             view.settings.showPaceTicks = false;
             frame = {};
             SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-            CHECK(!Control(frame, SettingsField::PaceTickStyle).enabled && HasText(frame, L"Turn on Pace markers to change this."));
+            CHECK(!Shown(frame, SettingsField::PaceTickStyle) && !HasText(frame, L"Marker style"));
         }
         // Chosen through the controller: committed, and the preview draws rails instead of carets.
         TestStore store;

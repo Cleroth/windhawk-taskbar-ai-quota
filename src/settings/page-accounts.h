@@ -534,17 +534,15 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                               std::move(options), true,
                               command(SettingsField::AccountTileIdentity, int(account.tileIdentity)));
             }
-            {
-                // Its placeholder is what the tile shows without it: the label without spaces.
-                bool used = account.tileIdentity == TileIdentity::Text;
-                const SettingsDraft* draft = draftOf(SettingsField::AccountTileText);
+            // Short text, while Identity is Label or its box holds text being edited or unsaved. Its
+            // placeholder is what the tile shows without it: the label without spaces.
+            if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileText);
+                draft || account.tileIdentity == TileIdentity::Text) {
                 UiCardSpec spec;
                 spec.title = I18nText(locale, Tr(L"Short text"));
                 spec.description = {{I18nText(locale, Tr(L"The Label identity on tiles, up to 4 characters. Empty uses "
                                                          L"the label without spaces."))}};
                 spec.trailing = {96, 32};
-                spec.enabled = used;
-                if (!used) spec.reason = I18nText(locale, Tr(L"Used on tiles when Identity is Label."));
                 if (draft) spec.error = SettingsDraftErrorText(locale, *draft);
                 UiCardLayout layout = row(spec);
                 UiItem box;
@@ -557,7 +555,6 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                              [](wchar_t ch) { return !iswspace(ch); });
                 box.runs.push_back({std::move(placeholder)});
                 box.maximum = kSettingsTileTextLimit;
-                box.enabled = used;
                 box.action = command(SettingsField::AccountTileText);
                 push(box);
             }

@@ -301,8 +301,8 @@ struct SettingsUiClient final : UiHostClient {
             case UiActionKind::Command:
                 switch (field) {
                     case SettingsField::PollMinutes:
-                        // The interval dropdown: a preset, or 0 for Custom, which only enables
-                        // the custom box and moves focus there.
+                        // The interval dropdown: a preset, or 0 for Custom, which only shows the
+                        // custom box and moves focus there.
                         if (!action.value) {
                             pollCustom = true;
                             UiHostRequestRebuild(host, false);
@@ -315,7 +315,7 @@ struct SettingsUiClient final : UiHostClient {
                         break;
                     case SettingsField::HiddenPolling: {
                         // The hidden accounts dropdown: not polled, as shown ones, an interval, or
-                        // Custom, which drops a failed choice, enables the custom box and moves
+                        // Custom, which drops a failed choice, shows the custom box and moves
                         // focus there; without an interval yet, it starts at the default one. A
                         // commit drops the custom box's draft (settings/edits.h).
                         bool interval = edits.baseline.settings.hiddenPollMinutes > 0;
@@ -335,7 +335,7 @@ struct SettingsUiClient final : UiHostClient {
                     }
                     case SettingsField::KeepHistory: {
                         // The retention dropdown: days, 0 for Forever, or -1 for Custom, which
-                        // drops a failed choice, enables the custom box and moves focus there.
+                        // drops a failed choice, shows the custom box and moves focus there.
                         // Leaving the committed Forever asks first (pruning is shared and final);
                         // Custom then starts at the most days. A commit drops the custom box's
                         // draft (settings/edits.h).

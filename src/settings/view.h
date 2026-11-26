@@ -54,6 +54,12 @@ static const SettingsDraft* SettingsViewDraft(const SettingsView& view, Settings
     return nullptr;
 }
 
+// A setting another one turns off shows only while that one is on, or while it holds a value
+// being edited or one that couldn't be saved.
+static bool SettingsDependentShown(const SettingsView& view, bool on, SettingsField field) {
+    return on || SettingsViewDraft(view, field);
+}
+
 static UiAction SettingsCommand(SettingsField field, int value = 0) {
     return {UiActionKind::Command, value, {}, uint32_t(field)};
 }

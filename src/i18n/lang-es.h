@@ -99,11 +99,6 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Chart width", L"Ancho del gráfico"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Gráficos, estadísticas y exportación CSV a partir de muestras locales, también con el registro desactivado."},
-    {L"", L"Choose Custom in Cloud poll interval to edit.",
-     L"Elige Personalizado en Intervalo de consulta en la nube para editarlo."},
-    {L"", L"Choose Custom in Hidden accounts to edit.", L"Elige Personalizado en Cuentas ocultas para editarlo."},
-    {L"", L"Choose Custom in Keep history to edit.", L"Elige Personalizado en Conservar historial para editarlo."},
-    {L"", L"Choose an identity position to change this.", L"Elige dónde se muestra la identidad para cambiar esto."},
     {L"", L"Claude logo", L"Logotipo de Claude"},
     {L"", L"Cloud poll interval", L"Intervalo de consulta en la nube"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -479,10 +474,6 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Short text", L"Texto corto"},
     {L"", L"Show details on hover", L"Mostrar detalles al pasar el puntero"},
     {L"", L"Show on", L"Mostrar en"},
-    {L"", L"Show percentage text on hover or always to change this.",
-     L"Elige Al pasar el puntero o Siempre en Texto de porcentaje para cambiar esto."},
-    {L"", L"Show percentage text or turn on Quota keys to change this.",
-     L"Muestra el texto de porcentaje o activa Claves de cuota para cambiar esto."},
     {L"", L"Show provider outages", L"Mostrar interrupciones del proveedor"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -646,10 +637,6 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"pull requests.",
      L"Las traducciones son automáticas. Puedes enviar correcciones como <link id=\"issues\">incidencias en "
      L"GitHub</link> o pull requests."},
-    {L"", L"Turn off Reset countdown to change this.", L"Desactiva Cuenta atrás de reinicio para cambiar esto."},
-    {L"", L"Turn on Pace markers to change this.", L"Activa Marcadores de ritmo para cambiar esto."},
-    {L"", L"Turn on Record usage history to change this.", L"Activa Registrar historial de uso para cambiar esto."},
-    {L"", L"Turn on Work days only to change this.", L"Activa Solo días laborables para cambiar esto."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Las cuotas no disponibles se ocultan automáticamente. Al menos una queda seleccionada."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -672,7 +659,6 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"Usado se llena a medida que se consume la cuota; Restante se llena con lo que queda. Los colores siempre "
      L"siguen el uso."},
-    {L"", L"Used on tiles when Identity is Label.", L"Se usa en los mosaicos cuando Identidad es Etiqueta."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod",
      L"Versión {version}  ·  por Cleroth  ·  mod de Windhawk"},
     {L"", L"Vertical bar length", L"Longitud de barra vertical"},

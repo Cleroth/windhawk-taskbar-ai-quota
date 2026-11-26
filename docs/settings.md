@@ -10,6 +10,10 @@ value that can't be saved stays in its box with the error, and closing the windo
 before discarding it. Layout, Display, Behavior, and History each have a reset that restores that
 page's defaults without touching accounts or sign-ins.
 
+A setting that another one turns off is hidden until that one turns it on: the pace markers' style
+and color show while pace markers are on, a custom interval's box while **Custom** is chosen. It
+keeps its value while hidden, and stays in view while its box holds a value that couldn't be saved.
+
 ## Accounts
 
 **Add account** (Anthropic, OpenAI, Google Antigravity, GitHub Copilot, or OpenCode Go); drag a
@@ -59,7 +63,7 @@ With a live preview of the taskbar:
   arc around its number), clock pies (a pie per quota with an elapsed-time hand), rounded square
   (segmented-ring arcs along a rounded square around the identity), headline %, or quota matrix
   (each quota's key and percentage in up to two rows and columns); settings the chosen style
-  ignores are hidden or disabled with the reason
+  ignores are hidden
 - position on the taskbar: before the notification icons (default), before network and volume,
   before or after the clock, or after Show desktop (the far right); or, experimental, **Left
   side** (the taskbar's left edge, after any space another mod such as Taskbar System Info keeps
@@ -207,9 +211,10 @@ With the same preview:
 ## History
 
 Record usage history (on by default, per Windows user, with its live status), how long to keep it
-(30 days, 90 days, 1 year, **Forever** by default, or a custom 1 to 3650 days), **Open usage
-history**, the time span the usage history window opens on (24 hours, **7 days** by default, 30
-days, 90 days, or All retained), and the storage folder. Details: [usage history](usage-history.md).
+(30 days, 90 days, 1 year, **Forever** by default, or a custom 1 to 3650 days; shown while
+recording is on, and applied to saved history either way), **Open usage history**, the time span
+the usage history window opens on (24 hours, **7 days** by default, 30 days, 90 days, or All
+retained), and the storage folder. Details: [usage history](usage-history.md).
 
 ## About
 

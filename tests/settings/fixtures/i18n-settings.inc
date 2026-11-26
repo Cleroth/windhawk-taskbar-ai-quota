@@ -199,12 +199,16 @@ static void RunI18nSettingsTests() {
         }
         CHECK((sections == std::vector<std::wstring>{L"Sprache", L"Taskleiste", L"Details", L"Tempo und Prognose",
                                                      L"Aktualisierungen", L"Warnungen"}));
-        // Work days: the week from Monday, and the days' reason while the switch is off.
-        CHECK((TestOptionTexts(Control(frame, SettingsField::FirstWorkDay)) ==
+        // The cards another setting shows: with work days on and Custom chosen for both intervals.
+        UiFrame all = TestBehaviorFrame(TestLocale(L"de"), L"de", [](SettingsView& view) {
+            view.settings.workDays = true;
+            view.pollCustom = view.hiddenPollCustom = true;
+        });
+        // Work days: the week from Monday.
+        CHECK((TestOptionTexts(Control(all, SettingsField::FirstWorkDay)) ==
                std::vector<std::wstring>{L"Montag", L"Dienstag", L"Mittwoch", L"Donnerstag", L"Freitag", L"Samstag",
                                          L"Sonntag"}));
-        CHECK(Control(frame, SettingsField::LastWorkDay).text == L"Freitag" && TextCount(frame, L"Nur Arbeitstage") == 1 &&
-              HasText(frame, L"Schalten Sie \u201ENur Arbeitstage\u201C ein, um dies zu \u00E4ndern."));
+        CHECK(Control(all, SettingsField::LastWorkDay).text == L"Freitag" && TextCount(frame, L"Nur Arbeitstage") == 1);
         CHECK(Control(frame, SettingsField::Language).text == L"Automatisch (Deutsch)");
         const UiItem& showOn = Control(frame, SettingsField::ShowOn);
         CHECK((TestOptionTexts(showOn) == std::vector<std::wstring>{L"Nur Hauptbildschirm", L"Alle Bildschirme",
@@ -223,22 +227,19 @@ static void RunI18nSettingsTests() {
         CHECK((TestOptionTexts(Control(frame, kPoll, 8)) ==
                std::vector<std::wstring>{L"2 Minuten", L"5 Minuten", L"10 Minuten", L"15 Minuten", L"30 Minuten",
                                          L"60 Minuten", L"Benutzerdefiniert"}));
-        CHECK(Control(frame, kPoll, 3).runs[0].text == L"Minuten");
-        // Hidden accounts: its choices, hours from minutes, and its custom box's reason.
+        CHECK(Control(all, kPoll, 3).runs[0].text == L"Minuten" && TextCount(all, L"Benutzerdefiniertes Intervall") == 1);
+        // Hidden accounts: its choices, hours from minutes, and its custom box.
         CHECK((TestOptionTexts(Control(frame, kHidden)) ==
                std::vector<std::wstring>{L"Nicht abgefragt", L"Wie sichtbare Konten", L"30 Minuten", L"1 Stunde",
                                          L"2 Stunden", L"4 Stunden", L"12 Stunden", L"24 Stunden", L"Benutzerdefiniert"}));
-        CHECK(Control(frame, kHidden).text == L"1 Stunde" && Control(frame, kHiddenMinutes, 3).runs[0].text == L"Minuten");
+        CHECK(Control(frame, kHidden).text == L"1 Stunde" && Control(all, kHidden).text == L"Benutzerdefiniert" &&
+              Control(all, kHiddenMinutes, 3).runs[0].text == L"Minuten");
         CHECK(TextCount(frame, L"Ausgeblendete Konten") == 1 &&
-              TextCount(frame, L"Benutzerdefiniertes Intervall (ausgeblendete Konten)") == 1);
-        CHECK(HasText(frame, L"W\u00E4hlen Sie \u201EBenutzerdefiniert\u201C unter \u201EAusgeblendete Konten\u201C, um dies "
-                             L"zu bearbeiten."));
+              TextCount(all, L"Benutzerdefiniertes Intervall (ausgeblendete Konten)") == 1);
         CHECK(Control(frame, SettingsField::ShowDetailsOnHover).text == L"Ein");
         CHECK((TestOptionTexts(Control(frame, SettingsField::Notifications)) ==
                std::vector<std::wstring>{L"Aus", L"Gelb (50%)", L"Orange (75%)", L"Rot (90%)"}));
         CHECK(Control(frame, SettingsField::ResetBehavior).text == L"Zur\u00FCcksetzen");
-        CHECK(HasText(frame, L"W\u00E4hlen Sie \u201EBenutzerdefiniert\u201C unter \u201ECloud-Abfrageintervall\u201C, um "
-                             L"dies zu bearbeiten."));
         // The toggle's slot fits either state's text.
         UiToggleText states{L"Ein", L"Aus"};
         float state = std::max(UiLayoutSize(UiLayout(g, states.on, UiTextStyleFor(UiFont::Body), 1000, false)).width,
@@ -271,11 +272,15 @@ static void RunI18nSettingsTests() {
                    L"\u0414\u0440\u0443\u0433\u043E\u0439"}));
         CHECK(Control(ru, kHidden).text == L"\u0414\u0440\u0443\u0433\u043E\u0439");
         CHECK(Control(ru, kHiddenMinutes, 3).runs[0].text == L"\u043C\u0438\u043D\u0443\u0442\u044B");  // 22 минуты
-        ru = TestBehaviorFrame(TestLocale(L"ru"), L"ru", [](SettingsView& view) { view.settings.pollMinutes = 2; });
+        // Custom chosen on intervals a preset has: the boxes' units.
+        ru = TestBehaviorFrame(TestLocale(L"ru"), L"ru", [](SettingsView& view) {
+            view.settings.pollMinutes = 2;
+            view.pollCustom = view.hiddenPollCustom = true;
+        });
         CHECK(Control(ru, kPoll, 3).runs[0].text == L"\u043C\u0438\u043D\u0443\u0442\u044B");  // 2 минуты
-        CHECK(Control(ru, kHidden).text == L"1 \u0447\u0430\u0441");
         CHECK(Control(ru, kHiddenMinutes, 3).runs[0].text == L"\u043C\u0438\u043D\u0443\u0442");  // 60 минут
-        UiFrame ja = TestBehaviorFrame(TestLocale(L"ja"), L"ja");
+        CHECK(Control(TestBehaviorFrame(TestLocale(L"ru"), L"ru"), kHidden).text == L"1 \u0447\u0430\u0441");
+        UiFrame ja = TestBehaviorFrame(TestLocale(L"ja"), L"ja", [](SettingsView& view) { view.pollCustom = true; });
         CHECK(Control(ja, kPoll, 8).options[0].text == L"2 \u5206" && Control(ja, kPoll, 3).runs[0].text == L"\u5206");
         CHECK(Control(ja, kHidden).options[2].text == L"30 \u5206" && Control(ja, kHidden).text == L"1 \u6642\u9593");
         CHECK(Control(ja, SettingsField::Language).text == L"\u81EA\u52D5 (\u65E5\u672C\u8A9E)");
@@ -457,7 +462,7 @@ static void RunI18nSettingsTests() {
         CHECK(Control(frame, kRetention, 3).runs[0].text == L"\u0434\u0435\u043D\u044C");  // 21 день
         CHECK(Control(frameFor(2), kRetention, 3).runs[0].text == L"\u0434\u043D\u044F");  // 2 дня
         CHECK(Control(frameFor(5), kRetention, 3).runs[0].text == L"\u0434\u043D\u0435\u0439");  // 5 дней
-        CHECK(Control(frameFor(0), kRetention, 3).runs[0].text == L"\u0434\u043D\u0435\u0439");  // forever: 3650 дней
+        CHECK(Control(frameFor(3650), kRetention, 3).runs[0].text == L"\u0434\u043D\u0435\u0439");  // 3650 дней
         // ● Запись · Новые замеры поступают при каждом опросе.
         const UiItem* status = nullptr;
         for (const UiItem& item : frame.content) {

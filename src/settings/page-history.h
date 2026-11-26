@@ -39,8 +39,9 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
             {I18nText(locale, Tr(L"Applies to this Windows user only. Turning it off keeps saved history."))});
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::RecordHistory);
     }
-    // Retention: a preset, Forever (0) or Custom (-1) with its own number. Text typed into the
-    // custom box keeps Custom even while a partial number matches a preset.
+    // Retention, while recording is on: a preset, Forever (0) or Custom (-1), which shows a box for
+    // its own number. Text typed into the custom box keeps Custom even while a partial number
+    // matches a preset.
     auto days = [&](int count) {
         return I18nText(locale, TrCtx(L"history-span", L"{days, plural, one{# day} other{# days}}"),
                         {{L"days", count}});
@@ -56,26 +57,20 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
                               [&](const UiOption& option) { return option.value == s.historyRetentionDays; });
     const SettingsDraft* typed = SettingsViewDraft(view, SettingsField::RetentionDays);
     bool custom = s.historyRetentionDays > 0 && (view.retentionCustom || !preset || (typed && typed->text));
-    std::wstring recordingOff = I18nText(locale, Tr(L"Turn on Record usage history to change this."));
-    {
+    if (SettingsDependentShown(view, s.historyEnabled, SettingsField::KeepHistory)) {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Keep history"));
         spec.description = {{I18nText(locale, Tr(L"Shared across Windows users. Forever has no size limit, so history "
                                                  L"keeps growing on disk; Antigravity readings older than 15 days are "
                                                  L"kept about 10 minutes apart. Day limits prune hourly, with a cap of "
                                                  L"about 60 MB."))}};
-        spec.enabled = s.historyEnabled;
-        if (!s.historyEnabled) spec.reason = recordingOff;
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::KeepHistory,
                                     200, std::move(options), custom ? -1 : s.historyRetentionDays);
     }
-    {
+    if (custom && SettingsDependentShown(view, s.historyEnabled, SettingsField::RetentionDays)) {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Custom retention"));
         spec.description = {{I18nText(locale, Tr(L"1 to 3650 days."))}};
-        spec.enabled = s.historyEnabled && custom;
-        if (!s.historyEnabled) spec.reason = recordingOff;
-        else if (!custom) spec.reason = I18nText(locale, Tr(L"Choose Custom in Keep history to edit."));
         // The unit agrees with the saved retention, not text still being typed.
         y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RetentionDays,
                                   I18nText(locale, TrCtx(L"retention-unit", L"{days, plural, one{days} other{days}}"),

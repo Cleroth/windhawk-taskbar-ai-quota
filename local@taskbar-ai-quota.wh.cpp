@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.26.0
+// @version         2.27.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -668,13 +668,6 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Chart width", L"Diagrammbreite"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Diagramme, Statistiken und CSV-Export aus lokalen Messwerten, auch wenn die Aufzeichnung aus ist."},
-    {L"", L"Choose Custom in Cloud poll interval to edit.",
-     L"Wählen Sie „Benutzerdefiniert“ unter „Cloud-Abfrageintervall“, um dies zu bearbeiten."},
-    {L"", L"Choose Custom in Hidden accounts to edit.",
-     L"Wählen Sie „Benutzerdefiniert“ unter „Ausgeblendete Konten“, um dies zu bearbeiten."},
-    {L"", L"Choose Custom in Keep history to edit.",
-     L"Wählen Sie „Benutzerdefiniert“ unter „Verlauf aufbewahren“, um dies zu bearbeiten."},
-    {L"", L"Choose an identity position to change this.", L"Wählen Sie eine Identitätsposition, um dies zu ändern."},
     {L"", L"Claude logo", L"Claude-Logo"},
     {L"", L"Cloud poll interval", L"Cloud-Abfrageintervall"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -1060,10 +1053,6 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Short text", L"Kurztext"},
     {L"", L"Show details on hover", L"Details beim Daraufzeigen anzeigen"},
     {L"", L"Show on", L"Anzeigen auf"},
-    {L"", L"Show percentage text on hover or always to change this.",
-     L"Lassen Sie den Prozenttext beim Daraufzeigen oder immer anzeigen, um dies zu ändern."},
-    {L"", L"Show percentage text or turn on Quota keys to change this.",
-     L"Lassen Sie den Prozenttext anzeigen oder schalten Sie „Kontingentkürzel“ ein, um dies zu ändern."},
     {L"", L"Show provider outages", L"Anbieterausfälle anzeigen"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -1233,11 +1222,6 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"pull requests.",
      L"Die Übersetzungen sind maschinell erstellt. Korrekturen sind als <link id=\"issues\">GitHub-Issues</link> "
      L"oder Pull Requests willkommen."},
-    {L"", L"Turn off Reset countdown to change this.", L"Schalten Sie „Reset-Countdown“ aus, um dies zu ändern."},
-    {L"", L"Turn on Pace markers to change this.", L"Schalten Sie „Tempomarkierungen“ ein, um dies zu ändern."},
-    {L"", L"Turn on Record usage history to change this.",
-     L"Schalten Sie „Nutzungsverlauf aufzeichnen“ ein, um dies zu ändern."},
-    {L"", L"Turn on Work days only to change this.", L"Schalten Sie „Nur Arbeitstage“ ein, um dies zu ändern."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Nicht verfügbare Kontingente werden automatisch ausgeblendet. Mindestens eines bleibt ausgewählt."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -1260,8 +1244,6 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"„Verbraucht“ füllt sich mit dem Verbrauch des Kontingents; „Verbleibend“ füllt sich mit dem Rest. Die Farben "
      L"folgen immer der Nutzung."},
-    {L"", L"Used on tiles when Identity is Label.",
-     L"Wird auf Kacheln verwendet, wenn „Identität“ auf „Bezeichnung“ steht."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Version {version}  ·  von Cleroth  ·  Windhawk-Mod"},
     {L"", L"Vertical bar length", L"Länge vertikaler Balken"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
@@ -2014,11 +1996,6 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Chart width", L"Ancho del gráfico"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Gráficos, estadísticas y exportación CSV a partir de muestras locales, también con el registro desactivado."},
-    {L"", L"Choose Custom in Cloud poll interval to edit.",
-     L"Elige Personalizado en Intervalo de consulta en la nube para editarlo."},
-    {L"", L"Choose Custom in Hidden accounts to edit.", L"Elige Personalizado en Cuentas ocultas para editarlo."},
-    {L"", L"Choose Custom in Keep history to edit.", L"Elige Personalizado en Conservar historial para editarlo."},
-    {L"", L"Choose an identity position to change this.", L"Elige dónde se muestra la identidad para cambiar esto."},
     {L"", L"Claude logo", L"Logotipo de Claude"},
     {L"", L"Cloud poll interval", L"Intervalo de consulta en la nube"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -2394,10 +2371,6 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Short text", L"Texto corto"},
     {L"", L"Show details on hover", L"Mostrar detalles al pasar el puntero"},
     {L"", L"Show on", L"Mostrar en"},
-    {L"", L"Show percentage text on hover or always to change this.",
-     L"Elige Al pasar el puntero o Siempre en Texto de porcentaje para cambiar esto."},
-    {L"", L"Show percentage text or turn on Quota keys to change this.",
-     L"Muestra el texto de porcentaje o activa Claves de cuota para cambiar esto."},
     {L"", L"Show provider outages", L"Mostrar interrupciones del proveedor"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -2561,10 +2534,6 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"pull requests.",
      L"Las traducciones son automáticas. Puedes enviar correcciones como <link id=\"issues\">incidencias en "
      L"GitHub</link> o pull requests."},
-    {L"", L"Turn off Reset countdown to change this.", L"Desactiva Cuenta atrás de reinicio para cambiar esto."},
-    {L"", L"Turn on Pace markers to change this.", L"Activa Marcadores de ritmo para cambiar esto."},
-    {L"", L"Turn on Record usage history to change this.", L"Activa Registrar historial de uso para cambiar esto."},
-    {L"", L"Turn on Work days only to change this.", L"Activa Solo días laborables para cambiar esto."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Las cuotas no disponibles se ocultan automáticamente. Al menos una queda seleccionada."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -2587,7 +2556,6 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"Usado se llena a medida que se consume la cuota; Restante se llena con lo que queda. Los colores siempre "
      L"siguen el uso."},
-    {L"", L"Used on tiles when Identity is Label.", L"Se usa en los mosaicos cuando Identidad es Etiqueta."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod",
      L"Versión {version}  ·  por Cleroth  ·  mod de Windhawk"},
     {L"", L"Vertical bar length", L"Longitud de barra vertical"},
@@ -3350,14 +3318,6 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Graphiques, statistiques et export CSV à partir des échantillons locaux, même quand l’enregistrement est "
      L"désactivé."},
-    {L"", L"Choose Custom in Cloud poll interval to edit.",
-     L"Choisissez Personnalisé dans Intervalle d’interrogation cloud pour le modifier."},
-    {L"", L"Choose Custom in Hidden accounts to edit.",
-     L"Choisissez Personnalisé dans Comptes masqués pour le modifier."},
-    {L"", L"Choose Custom in Keep history to edit.",
-     L"Choisissez Personnalisé dans Conserver l’historique pour le modifier."},
-    {L"", L"Choose an identity position to change this.",
-     L"Choisissez une position d’identité pour modifier ce paramètre."},
     {L"", L"Claude logo", L"Logo Claude"},
     {L"", L"Cloud poll interval", L"Intervalle d’interrogation cloud"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -3740,10 +3700,6 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Short text", L"Texte court"},
     {L"", L"Show details on hover", L"Afficher les détails au survol"},
     {L"", L"Show on", L"Afficher sur"},
-    {L"", L"Show percentage text on hover or always to change this.",
-     L"Affichez le texte de pourcentage au survol ou toujours pour modifier ce paramètre."},
-    {L"", L"Show percentage text or turn on Quota keys to change this.",
-     L"Affichez le texte de pourcentage ou activez Codes de quota pour modifier ce paramètre."},
     {L"", L"Show provider outages", L"Afficher les pannes des fournisseurs"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -3910,12 +3866,6 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"pull requests.",
      L"Les traductions sont automatiques. Les corrections sont les bienvenues sous forme d’<link "
      L"id=\"issues\">issues GitHub</link> ou de pull requests."},
-    {L"", L"Turn off Reset countdown to change this.", L"Désactivez Compte à rebours pour modifier ce paramètre."},
-    {L"", L"Turn on Pace markers to change this.", L"Activez Repères de rythme pour modifier ce paramètre."},
-    {L"", L"Turn on Record usage history to change this.",
-     L"Activez Enregistrer l’historique d’utilisation pour modifier ce paramètre."},
-    {L"", L"Turn on Work days only to change this.",
-     L"Activez Jours de travail uniquement pour modifier ce paramètre."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Les quotas indisponibles sont masqués automatiquement. Au moins un reste sélectionné."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -3937,7 +3887,6 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"Utilisé se remplit à mesure que le quota est consommé\u202F; Restant se remplit avec ce qui reste. Les couleurs "
      L"suivent toujours l’utilisation."},
-    {L"", L"Used on tiles when Identity is Label.", L"Utilisé sur les vignettes quand Identité vaut Libellé."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Version {version}  ·  par Cleroth  ·  mod Windhawk"},
     {L"", L"Vertical bar length", L"Longueur des barres verticales"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
@@ -4683,11 +4632,6 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Chart width", L"グラフの幅"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"ローカルのサンプルからのグラフ、統計、CSV エクスポート。記録がオフでも使えます。"},
-    {L"", L"Choose Custom in Cloud poll interval to edit.",
-     L"編集するには、［クラウドのポーリング間隔］で［カスタム］を選択してください。"},
-    {L"", L"Choose Custom in Hidden accounts to edit.", L"編集するには、［非表示のアカウント］で［カスタム］を選択してください。"},
-    {L"", L"Choose Custom in Keep history to edit.", L"編集するには、［履歴の保持］で［カスタム］を選択してください。"},
-    {L"", L"Choose an identity position to change this.", L"変更するには、識別表示の位置を選択してください。"},
     {L"", L"Claude logo", L"Claude のロゴ"},
     {L"", L"Cloud poll interval", L"クラウドのポーリング間隔"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -4987,9 +4931,6 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Short text", L"短いテキスト"},
     {L"", L"Show details on hover", L"ホバー時に詳細を表示"},
     {L"", L"Show on", L"表示先"},
-    {L"", L"Show percentage text on hover or always to change this.", L"変更するには、パーセント表示を［ホバー時に表示］か［常に表示］にしてください。"},
-    {L"", L"Show percentage text or turn on Quota keys to change this.",
-     L"変更するには、パーセント表示をオンにするか、［クォータ キー］をオンにしてください。"},
     {L"", L"Show provider outages", L"プロバイダーの障害を表示"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -5112,10 +5053,6 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Translations are machine-made. Corrections are welcome as <link id=\"issues\">GitHub issues</link> or "
      L"pull requests.",
      L"翻訳は機械翻訳です。修正は <link id=\"issues\">GitHub の Issue</link> またはプル リクエストでお寄せください。"},
-    {L"", L"Turn off Reset countdown to change this.", L"変更するには、［リセットまでの残り時間］をオフにしてください。"},
-    {L"", L"Turn on Pace markers to change this.", L"変更するには、［ペース マーカー］をオンにしてください。"},
-    {L"", L"Turn on Record usage history to change this.", L"変更するには、［使用履歴を記録］をオンにしてください。"},
-    {L"", L"Turn on Work days only to change this.", L"変更するには、［勤務日のみ］をオンにしてください。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"利用できないクォータは自動的に非表示になります。少なくとも 1 つは選択されたままです。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -5134,7 +5071,6 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Usage history guide", L"使用履歴ガイド"},
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"［使用量］ではクォータの消費につれてバーが伸び、［残量］では残りの分だけバーが表示されます。色は常に使用量に従います。"},
-    {L"", L"Used on tiles when Identity is Label.", L"［識別表示］が［ラベル］のとき、タイルで使われます。"},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"バージョン {version}  ·  作者 Cleroth  ·  Windhawk Mod"},
     {L"", L"Vertical bar length", L"縦バーの長さ"},
     {L"", L"Wait for the current sign-in to finish before changing identity.", L"ID を変更する前に、現在のサインインが完了するまでお待ちください。"},
@@ -5839,11 +5775,6 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Chart width", L"Largura do gráfico"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Gráficos, estatísticas e exportação CSV a partir de amostras locais, mesmo com o registro desativado."},
-    {L"", L"Choose Custom in Cloud poll interval to edit.",
-     L"Escolha Personalizado em Intervalo de consulta na nuvem para editar."},
-    {L"", L"Choose Custom in Hidden accounts to edit.", L"Escolha Personalizado em Contas ocultas para editar."},
-    {L"", L"Choose Custom in Keep history to edit.", L"Escolha Personalizado em Manter histórico para editar."},
-    {L"", L"Choose an identity position to change this.", L"Escolha uma posição de identidade para alterar isto."},
     {L"", L"Claude logo", L"Logo do Claude"},
     {L"", L"Cloud poll interval", L"Intervalo de consulta na nuvem"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -6215,10 +6146,6 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Short text", L"Texto curto"},
     {L"", L"Show details on hover", L"Mostrar detalhes ao passar o mouse"},
     {L"", L"Show on", L"Mostrar em"},
-    {L"", L"Show percentage text on hover or always to change this.",
-     L"Mostre o texto de porcentagem ao passar o mouse ou sempre para alterar isto."},
-    {L"", L"Show percentage text or turn on Quota keys to change this.",
-     L"Mostre o texto de porcentagem ou ative Siglas das cotas para alterar isto."},
     {L"", L"Show provider outages", L"Mostrar interrupções dos provedores"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -6379,10 +6306,6 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"pull requests.",
      L"As traduções são automáticas. Correções são bem-vindas como <link id=\"issues\">issues no GitHub</link> ou "
      L"pull requests."},
-    {L"", L"Turn off Reset countdown to change this.", L"Desative Contagem até o reinício para alterar isto."},
-    {L"", L"Turn on Pace markers to change this.", L"Ative Marcadores de ritmo para alterar isto."},
-    {L"", L"Turn on Record usage history to change this.", L"Ative Registrar histórico de uso para alterar isto."},
-    {L"", L"Turn on Work days only to change this.", L"Ative Somente dias de trabalho para alterar isto."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Cotas indisponíveis são ocultadas automaticamente. Pelo menos uma fica selecionada."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -6403,7 +6326,6 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Usage history guide", L"Guia do histórico de uso"},
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"Usado preenche conforme a cota é consumida; Restante preenche com o que sobra. As cores sempre seguem o uso."},
-    {L"", L"Used on tiles when Identity is Label.", L"Usado nos blocos quando Identidade é Rótulo."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod",
      L"Versão {version}  ·  por Cleroth  ·  mod do Windhawk"},
     {L"", L"Vertical bar length", L"Comprimento da barra vertical"},
@@ -7156,12 +7078,6 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Chart width", L"Ширина графика"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Графики, статистика и экспорт в CSV по локальным замерам, даже когда запись выключена."},
-    {L"", L"Choose Custom in Cloud poll interval to edit.",
-     L"Чтобы изменить, выберите «Другой» в списке «Интервал опроса облака»."},
-    {L"", L"Choose Custom in Hidden accounts to edit.",
-     L"Чтобы изменить, выберите «Другой» в списке «Скрытые аккаунты»."},
-    {L"", L"Choose Custom in Keep history to edit.", L"Чтобы изменить, выберите «Другой» в списке «Хранить историю»."},
-    {L"", L"Choose an identity position to change this.", L"Чтобы изменить, выберите положение идентификации."},
     {L"", L"Claude logo", L"Логотип Claude"},
     {L"", L"Cloud poll interval", L"Интервал опроса облака"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -7529,10 +7445,6 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Short text", L"Короткий текст"},
     {L"", L"Show details on hover", L"Показывать сведения при наведении"},
     {L"", L"Show on", L"Показывать на"},
-    {L"", L"Show percentage text on hover or always to change this.",
-     L"Чтобы изменить, выберите показ текста процентов при наведении или всегда."},
-    {L"", L"Show percentage text or turn on Quota keys to change this.",
-     L"Чтобы изменить, включите показ текста процентов или «Обозначения квот»."},
     {L"", L"Show provider outages", L"Показывать сбои поставщиков"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -7692,11 +7604,6 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"pull requests.",
      L"Переводы выполнены автоматически. Исправления можно прислать через <link id=\"issues\">issues на "
      L"GitHub</link> или pull requests."},
-    {L"", L"Turn off Reset countdown to change this.", L"Чтобы изменить, выключите «Отсчёт до сброса»."},
-    {L"", L"Turn on Pace markers to change this.", L"Чтобы изменить, включите «Метки темпа»."},
-    {L"", L"Turn on Record usage history to change this.",
-     L"Чтобы изменить, включите «Записывать историю использования»."},
-    {L"", L"Turn on Work days only to change this.", L"Чтобы изменить, включите «Только рабочие дни»."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Недоступные квоты скрываются автоматически. Хотя бы одна остаётся выбранной."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -7718,8 +7625,6 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"«Использовано» заполняется по мере расхода квоты, «Осталось» показывает остаток. Цвета всегда следуют "
      L"использованию."},
-    {L"", L"Used on tiles when Identity is Label.",
-     L"Используется на плитках, если в поле «Идентификация» выбрано «Метка»."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Версия {version}  ·  автор Cleroth  ·  мод Windhawk"},
     {L"", L"Vertical bar length", L"Длина вертикальной полосы"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
@@ -8445,10 +8350,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Chart width", L"图表宽度"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"基于本地样本的图表、统计和 CSV 导出，记录关闭时也可使用。"},
-    {L"", L"Choose Custom in Cloud poll interval to edit.", L"在“云端轮询间隔”中选择“自定义”后即可编辑。"},
-    {L"", L"Choose Custom in Hidden accounts to edit.", L"在“隐藏的账户”中选择“自定义”后即可编辑。"},
-    {L"", L"Choose Custom in Keep history to edit.", L"在“保留历史”中选择“自定义”后即可编辑。"},
-    {L"", L"Choose an identity position to change this.", L"选择一个标识位置后即可更改。"},
     {L"", L"Claude logo", L"Claude 徽标"},
     {L"", L"Cloud poll interval", L"云端轮询间隔"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -8735,8 +8636,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Short text", L"短文本"},
     {L"", L"Show details on hover", L"悬停时显示详情"},
     {L"", L"Show on", L"显示于"},
-    {L"", L"Show percentage text on hover or always to change this.", L"将“百分比文本”设为“悬停时显示”或“始终显示”后即可更改。"},
-    {L"", L"Show percentage text or turn on Quota keys to change this.", L"显示百分比文本或开启“配额简称”后即可更改。"},
     {L"", L"Show provider outages", L"显示提供商故障"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -8856,10 +8755,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Translations are machine-made. Corrections are welcome as <link id=\"issues\">GitHub issues</link> or "
      L"pull requests.",
      L"翻译由机器生成。欢迎通过 <link id=\"issues\">GitHub 议题</link>或拉取请求提交更正。"},
-    {L"", L"Turn off Reset countdown to change this.", L"关闭“重置倒计时”后即可更改。"},
-    {L"", L"Turn on Pace markers to change this.", L"开启“节奏标记”后即可更改。"},
-    {L"", L"Turn on Record usage history to change this.", L"开启“记录使用历史”后即可更改。"},
-    {L"", L"Turn on Work days only to change this.", L"开启“仅工作日”后即可更改。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.", L"不可用的配额会自动隐藏。至少保留一个选中。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
           L"on the {key7d} chart.",
@@ -8875,7 +8770,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Usage history guide", L"使用历史指南"},
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"“已用量”随配额消耗而填充；“剩余量”以剩余部分填充。颜色始终跟随用量。"},
-    {L"", L"Used on tiles when Identity is Label.", L"“标识”为“标签”时在磁贴上使用。"},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"版本 {version}  ·  作者 Cleroth  ·  Windhawk 模组"},
     {L"", L"Vertical bar length", L"垂直条形长度"},
     {L"", L"Wait for the current sign-in to finish before changing identity.", L"请等待当前登录完成后再更改标识。"},
@@ -36518,6 +36412,12 @@ static const SettingsDraft* SettingsViewDraft(const SettingsView& view, Settings
     return nullptr;
 }
 
+// A setting another one turns off shows only while that one is on, or while it holds a value
+// being edited or one that couldn't be saved.
+static bool SettingsDependentShown(const SettingsView& view, bool on, SettingsField field) {
+    return on || SettingsViewDraft(view, field);
+}
+
 static UiAction SettingsCommand(SettingsField field, int value = 0) {
     return {UiActionKind::Command, value, {}, uint32_t(field)};
 }
@@ -38170,7 +38070,7 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
                                   SettingsField::ShowDetailsOnHover);
     }
 
-    // Pace and projection: the week's work days, Monday first. The days need the switch on.
+    // Pace and projection: the week's work days, Monday first. The days show with the switch on.
     y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Pace and projection")));
     {
         UiCardSpec spec;
@@ -38189,6 +38089,7 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
                                             {I18nText(locale, TrCtx(L"weekday", L"Saturday")), 6},
                                             {I18nText(locale, TrCtx(L"weekday", L"Sunday")), 0}};
     for (SettingsField field : {SettingsField::FirstWorkDay, SettingsField::LastWorkDay}) {
+        if (!SettingsDependentShown(view, s.workDays, field)) continue;
         UiCardSpec spec;
         if (field == SettingsField::FirstWorkDay) {
             spec.title = I18nText(locale, Tr(L"First work day"));
@@ -38196,14 +38097,12 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
         } else {
             spec.title = I18nText(locale, Tr(L"Last work day"));
         }
-        spec.enabled = s.workDays;
-        if (!s.workDays) spec.reason = I18nText(locale, Tr(L"Turn on Work days only to change this."));
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, field, 200, weekdays,
                                     SettingsFieldValue(s, field));
     }
 
-    // Updates: a preset interval, or Custom with its own number. Text typed into the custom box
-    // keeps Custom even while a partial number matches a preset.
+    // Updates: a preset interval, or Custom, which shows a box for its own number. Text typed into
+    // the custom box keeps Custom even while a partial number matches a preset.
     y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Updates")));
     bool preset = std::find(std::begin(kSettingsPollPresets), std::end(kSettingsPollPresets),
                             s.pollMinutes) != std::end(kSettingsPollPresets);
@@ -38225,12 +38124,10 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
         y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::PollMinutes,
                                     200, std::move(options), custom ? 0 : s.pollMinutes, 8);
     }
-    {
+    if (custom) {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Custom interval"));
         spec.description = {{I18nText(locale, Tr(L"2 to 1440 minutes."))}};
-        spec.enabled = custom;
-        if (!custom) spec.reason = I18nText(locale, Tr(L"Choose Custom in Cloud poll interval to edit."));
         // The unit agrees with the saved interval, not text still being typed.
         y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PollMinutes,
                                   I18nText(locale, TrCtx(L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}"),
@@ -38265,12 +38162,10 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HiddenPolling, 200,
                                     std::move(options), hiddenCustom ? kSettingsHiddenPollCustom : s.hiddenPollMinutes);
     }
-    {
+    if (hiddenCustom) {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Custom hidden interval"));
         spec.description = {{I18nText(locale, Tr(L"2 to 1440 minutes."))}};
-        spec.enabled = hiddenCustom;
-        if (!hiddenCustom) spec.reason = I18nText(locale, Tr(L"Choose Custom in Hidden accounts to edit."));
         // The unit agrees with the saved interval, not text still being typed.
         y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HiddenPollMinutes,
                                   I18nText(locale, TrCtx(L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}"),
@@ -38346,8 +38241,9 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
             {I18nText(locale, Tr(L"Applies to this Windows user only. Turning it off keeps saved history."))});
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::RecordHistory);
     }
-    // Retention: a preset, Forever (0) or Custom (-1) with its own number. Text typed into the
-    // custom box keeps Custom even while a partial number matches a preset.
+    // Retention, while recording is on: a preset, Forever (0) or Custom (-1), which shows a box for
+    // its own number. Text typed into the custom box keeps Custom even while a partial number
+    // matches a preset.
     auto days = [&](int count) {
         return I18nText(locale, TrCtx(L"history-span", L"{days, plural, one{# day} other{# days}}"),
                         {{L"days", count}});
@@ -38363,26 +38259,20 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
                               [&](const UiOption& option) { return option.value == s.historyRetentionDays; });
     const SettingsDraft* typed = SettingsViewDraft(view, SettingsField::RetentionDays);
     bool custom = s.historyRetentionDays > 0 && (view.retentionCustom || !preset || (typed && typed->text));
-    std::wstring recordingOff = I18nText(locale, Tr(L"Turn on Record usage history to change this."));
-    {
+    if (SettingsDependentShown(view, s.historyEnabled, SettingsField::KeepHistory)) {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Keep history"));
         spec.description = {{I18nText(locale, Tr(L"Shared across Windows users. Forever has no size limit, so history "
                                                  L"keeps growing on disk; Antigravity readings older than 15 days are "
                                                  L"kept about 10 minutes apart. Day limits prune hourly, with a cap of "
                                                  L"about 60 MB."))}};
-        spec.enabled = s.historyEnabled;
-        if (!s.historyEnabled) spec.reason = recordingOff;
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::KeepHistory,
                                     200, std::move(options), custom ? -1 : s.historyRetentionDays);
     }
-    {
+    if (custom && SettingsDependentShown(view, s.historyEnabled, SettingsField::RetentionDays)) {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Custom retention"));
         spec.description = {{I18nText(locale, Tr(L"1 to 3650 days."))}};
-        spec.enabled = s.historyEnabled && custom;
-        if (!s.historyEnabled) spec.reason = recordingOff;
-        else if (!custom) spec.reason = I18nText(locale, Tr(L"Choose Custom in Keep history to edit."));
         // The unit agrees with the saved retention, not text still being typed.
         y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RetentionDays,
                                   I18nText(locale, TrCtx(L"retention-unit", L"{days, plural, one{days} other{days}}"),
@@ -38592,58 +38482,54 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         uint32_t cardId = SettingsControlId(SettingsField::BarLayout, 10);
         return UiAddCard(g, items, cardId, x, top, width, spec).card.bottom;
     };
-    const std::wstring unplaced = text(Tr(L"Choose an identity position to change this."));
 
-    // Logo identities in every style: the logo size and the colors of the logos that have brand
-    // colors, the badge's size and color, then its offsets. Bars need an identity position, except
-    // for the logo colors, which the flyout and the windows also show.
-    auto logoCards = [&](float top, bool placed) {
-        auto slider = [&](float at, I18nKey title, I18nKey description, SettingsField field) {
+    // Logo identities in every style, each card 3 DIP under the one before it (`bottom`): the logo
+    // size and the colors of the logos that have brand colors, the badge's size and color, then
+    // its offsets. Bars show them only with an identity position, except the logo colors, which
+    // the flyout and the windows also show.
+    auto logoCards = [&](float bottom, bool placed) {
+        auto slider = [&](I18nKey title, I18nKey description, SettingsField field) {
+            if (!SettingsDependentShown(view, placed, field)) return;
             UiCardSpec spec;
             spec.title = text(title);
             spec.description = {{text(description)}};
-            spec.enabled = placed;
-            if (!placed) spec.reason = unplaced;
-            return SettingsAddSliderCard(g, view, items, id, x, at, width, spec, field);
+            bottom = SettingsAddSliderCard(g, view, items, id, x, bottom + 3, width, spec, field);
         };
-        auto brand = [&](float at, I18nKey title, I18nKey description, SettingsField field, I18nKey colors) {
+        auto brand = [&](I18nKey title, I18nKey description, SettingsField field, I18nKey colors) {
             UiCardSpec spec;
             spec.title = text(title);
             spec.description = {{text(description)}};
-            return SettingsAddDropdownCard(g, view, items, id, x, at, width, spec, field, 200,
-                                           {{text(TrCtx(L"logo-color", L"Taskbar text color")), 0}, {text(colors), 1}},
-                                           SettingsFieldValue(s, field));
+            bottom = SettingsAddDropdownCard(g, view, items, id, x, bottom + 3, width, spec, field, 200,
+                                             {{text(TrCtx(L"logo-color", L"Taskbar text color")), 0}, {text(colors), 1}},
+                                             SettingsFieldValue(s, field));
         };
-        top = slider(top, Tr(L"Logo size"), Tr(L"Percent of the standard size; rings keep it inside the hole."),
-                     SettingsField::LogoScale);
-        top = brand(top + 3, Tr(L"Claude logo"),
-                    Tr(L"The taskbar\u2019s text color, or Claude\u2019s orange. Details, Accounts and usage history "
-                       L"match."),
-                    SettingsField::ClaudeLogoBrand, TrCtx(L"logo-color", L"Orange"));
-        top = brand(top + 3, Tr(L"Antigravity logo"),
-                    Tr(L"The Gemini sparkle in the taskbar\u2019s text color, or its purple-to-blue gradient."),
-                    SettingsField::GeminiLogoBrand, TrCtx(L"logo-color", L"Gemini gradient"));
-        top = slider(top + 3, Tr(L"Badge size"),
-                     Tr(L"Text size of the number on a logo when several accounts share a provider, in pixels."),
-                     SettingsField::BadgeSize);
-        {
+        slider(Tr(L"Logo size"), Tr(L"Percent of the standard size; rings keep it inside the hole."),
+               SettingsField::LogoScale);
+        brand(Tr(L"Claude logo"),
+              Tr(L"The taskbar\u2019s text color, or Claude\u2019s orange. Details, Accounts and usage history match."),
+              SettingsField::ClaudeLogoBrand, TrCtx(L"logo-color", L"Orange"));
+        brand(Tr(L"Antigravity logo"),
+              Tr(L"The Gemini sparkle in the taskbar\u2019s text color, or its purple-to-blue gradient."),
+              SettingsField::GeminiLogoBrand, TrCtx(L"logo-color", L"Gemini gradient"));
+        slider(Tr(L"Badge size"),
+               Tr(L"Text size of the number on a logo when several accounts share a provider, in pixels."),
+               SettingsField::BadgeSize);
+        if (SettingsDependentShown(view, placed, SettingsField::BadgeColor)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Badge color"));
             spec.description = {{text(Tr(L"White, the default, follows the taskbar\u2019s text color. Custom... "
                                          L"opens the color picker."))}};
-            spec.enabled = placed;
-            if (!placed) spec.reason = unplaced;
-            top = SettingsAddColorCard(g, view, items, id, x, top + 3, width, spec, SettingsField::BadgeColor,
-                                       SettingsField::BadgeColorCustom,
-                                       {std::begin(kSettingsBadgeColors), std::end(kSettingsBadgeColors)},
-                                       s.badgeColor & 0x00FFFFFF);
+            bottom = SettingsAddColorCard(g, view, items, id, x, bottom + 3, width, spec, SettingsField::BadgeColor,
+                                          SettingsField::BadgeColorCustom,
+                                          {std::begin(kSettingsBadgeColors), std::end(kSettingsBadgeColors)},
+                                          s.badgeColor & 0x00FFFFFF);
         }
-        top = slider(top + 3, Tr(L"Badge horizontal offset"),
-                     Tr(L"Pixels right, or left when negative, from the logo\u2019s lower-right corner (inside the "
-                        L"hole on rings)."),
-                     SettingsField::BadgeOffsetX);
-        return slider(top + 3, Tr(L"Badge vertical offset"), Tr(L"Pixels down, or up when negative."),
-                      SettingsField::BadgeOffsetY);
+        slider(Tr(L"Badge horizontal offset"),
+               Tr(L"Pixels right, or left when negative, from the logo\u2019s lower-right corner (inside the hole on "
+                  L"rings)."),
+               SettingsField::BadgeOffsetX);
+        slider(Tr(L"Badge vertical offset"), Tr(L"Pixels down, or up when negative."), SettingsField::BadgeOffsetY);
+        return bottom;
     };
 
     if (bars) {
@@ -38683,7 +38569,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         }
 
         // Identity: the link to each account's identity, where it sits; the Label form's size, the
-        // gap and the logo cards need a position.
+        // gap and the logo cards show with a position.
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
         bool placed = s.labelPosition != LabelPosition::Hidden;
         y = identityCard(y);
@@ -38699,26 +38585,22 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {text(TrCtx(L"identity-position", L"Hidden")), int(LabelPosition::Hidden)}},
                                         int(s.labelPosition));
         }
-        {
+        if (SettingsDependentShown(view, placed, SettingsField::LabelFontSize)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Label font size"));
             spec.description = {{text(Tr(L"Text of accounts whose identity is Label, in pixels."))}};
-            spec.enabled = placed;
-            if (!placed) spec.reason = unplaced;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelFontSize);
         }
-        {
+        if (SettingsDependentShown(view, placed, SettingsField::LabelGap)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Identity gap"));
             spec.description = {{text(Tr(L"Space between the identity and the bars."))}};
-            spec.enabled = placed;
-            if (!placed) spec.reason = unplaced;
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelGap, pixels);
         }
-        y = logoCards(y + 3, placed);
+        y = logoCards(y, placed);
 
-        // Bar text: the percentage text (vertical bars' own), its alignment and the amounts that
-        // replace it, which need it shown; then quota keys, and the text size for either.
+        // Bar text: the percentage text (vertical bars' own), then, while it shows, its alignment
+        // and the amounts that replace it; quota keys, and the text size while either shows.
         y = section(y + 20, TrCtx(L"settings-section", L"Bar text"));
         const bool vertical = layout == BarLayout::Vertical;
         const bool percentShown = PercentTextVisibilityFor(s) != PercentTextVisibility::Never;
@@ -38737,13 +38619,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                  {text(TrCtx(L"percent-text", L"Always show")), int(PercentTextVisibility::Always)}},
                 int(PercentTextVisibilityFor(s)));
         }
-        const std::wstring textOff = text(Tr(L"Show percentage text on hover or always to change this."));
-        {
+        if (SettingsDependentShown(view, percentShown, SettingsField::PercentTextAlignment)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Percentage alignment"));
             spec.description = {{text(Tr(L"Adaptive: right side, moving left once the bar reaches the yellow threshold."))}};
-            spec.enabled = percentShown;
-            if (!percentShown) spec.reason = textOff;
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentTextAlignment,
                                         200,
                                         {{text(TrCtx(L"percent-alignment", L"Adaptive")), int(PercentTextAlignment::Adaptive)},
@@ -38752,13 +38631,11 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {text(TrCtx(L"percent-alignment", L"Right")), int(PercentTextAlignment::Right)}},
                                         int(s.percentTextAlignment));
         }
-        {
+        if (SettingsDependentShown(view, percentShown, SettingsField::ShowExtraBarAmounts)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Amounts on extra usage and credits"));
             spec.description = {{text(Tr(L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub "
                                          L"Copilot AI credits: spent in Used mode, left in Remaining mode."))}};
-            spec.enabled = percentShown;
-            if (!percentShown) spec.reason = textOff;
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowExtraBarAmounts);
         }
         {
@@ -38770,13 +38647,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                            {L"keyEx", key(3)}, {L"keyCr", key(5)}, {L"keyMo", key(6)}})}};
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowBarLabels);
         }
-        {
-            bool shown = s.showBarLabels || percentShown;
+        if (SettingsDependentShown(view, s.showBarLabels || percentShown, SettingsField::PercentFontSize)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar text size"));
             spec.description = {{text(Tr(L"Percentage text and quota keys, in pixels."))}};
-            spec.enabled = shown;
-            if (!shown) spec.reason = text(Tr(L"Show percentage text or turn on Quota keys to change this."));
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentFontSize);
         }
     } else if (IsFaceTile(layout)) {
@@ -38806,7 +38680,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RingThickness);
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
-        y = logoCards(identityCard(y) + 3, true);
+        y = logoCards(identityCard(y), true);
     } else if (layout == BarLayout::Sparkline) {
         // Usage graphs: each chart's width and height, its text size, the extra usage on the weekly
         // chart, the long windows' span and its swap on hover, then the current position cues and
@@ -38904,7 +38778,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineReadingScale);
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
-        y = logoCards(identityCard(y) + 3, true);
+        y = logoCards(identityCard(y), true);
     } else if (layout == BarLayout::QuotaMatrix) {
         // Quota matrix: the numbers' size, the headline's.
         y = section(y + 20, TrCtx(L"settings-section", L"Matrix"));
@@ -38916,10 +38790,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::HeadlineFontSize);
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
-        y = logoCards(identityCard(y) + 3, true);
+        y = logoCards(identityCard(y), true);
     } else {
-        // Headline tiles: the number's size, the countdown, then its bars' sizes and the bars'
-        // gap, which the countdown replaces.
+        // Headline tiles: the number's size, the countdown, then, unless the countdown replaces
+        // them, its bars' sizes and the bars' gap.
         y = section(y + 20, TrCtx(L"settings-section", L"Headline"));
         {
             UiCardSpec spec;
@@ -38936,41 +38810,33 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineCountdown);
         }
         const bool segments = !s.headlineCountdown;
-        const std::wstring countdownOn = text(Tr(L"Turn off Reset countdown to change this."));
-        {
+        if (SettingsDependentShown(view, segments, SettingsField::HeadlineBarLength)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar length"));
             spec.description = {{text(Tr(L"Pixels along each quota\u2019s bar under the number."))}};
-            spec.enabled = segments;
-            if (!segments) spec.reason = countdownOn;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarLength);
         }
-        {
+        if (SettingsDependentShown(view, segments, SettingsField::HeadlineBarThickness)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar thickness"));
             spec.description = {{text(Tr(L"Pixels across each bar."))}};
-            spec.enabled = segments;
-            if (!segments) spec.reason = countdownOn;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarThickness);
         }
-        {
+        if (SettingsDependentShown(view, segments, SettingsField::BarGap)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar gap"));
             spec.description = {{text(Tr(L"Space between an account\u2019s bars."))}};
-            spec.enabled = segments;
-            if (!segments) spec.reason = countdownOn;
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, pixels);
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
-        y = logoCards(identityCard(y) + 3, true);
+        y = logoCards(identityCard(y), true);
     }
 
     // Pace markers: none on headline tiles or the quota matrix; the marker style is the bars'.
-    // Style and color need the markers on.
+    // Style and color show with the markers on.
     if (layout != BarLayout::LogoHeadline && layout != BarLayout::QuotaMatrix) {
         y = section(y + 20, TrCtx(L"settings-section", L"Pace markers"));
         bool on = s.showPaceTicks;
-        const std::wstring off = text(Tr(L"Turn on Pace markers to change this."));
         {
             UiCardSpec spec;
             spec.title = text(Tr(L"Pace markers"));
@@ -38981,13 +38847,11 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                              L"its usage."))}};
             y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowPaceTicks);
         }
-        if (bars) {
+        if (bars && SettingsDependentShown(view, on, SettingsField::PaceTickStyle)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Marker style"));
             spec.description = {{text(Tr(L"Thin caret, full-width line, edge notch, centered dot, or a time track: a "
                                          L"small bar under each bar that fills with the elapsed time."))}};
-            spec.enabled = on;
-            if (!on) spec.reason = off;
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PaceTickStyle, 200,
                                         {{text(TrCtx(L"pace-marker", L"Caret")), int(PaceTickStyle::Caret)},
                                          {text(TrCtx(L"pace-marker", L"Full line")), int(PaceTickStyle::Line)},
@@ -38996,13 +38860,11 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {text(TrCtx(L"pace-marker", L"Time track")), int(PaceTickStyle::TimeTrack)}},
                                         int(s.paceTickStyle));
         }
-        {
+        if (SettingsDependentShown(view, on, SettingsField::PaceTickColor)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Marker color"));
             spec.description = {{text(Tr(L"Light grey by default, dark on a light taskbar. Custom... opens the color "
                                          L"picker."))}};
-            spec.enabled = on;
-            if (!on) spec.reason = off;
             y = SettingsAddColorCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PaceTickColor,
                                      SettingsField::PaceTickColorCustom,
                                      {std::begin(kSettingsPaceColors), std::end(kSettingsPaceColors)},
@@ -39743,17 +39605,15 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                               std::move(options), true,
                               command(SettingsField::AccountTileIdentity, int(account.tileIdentity)));
             }
-            {
-                // Its placeholder is what the tile shows without it: the label without spaces.
-                bool used = account.tileIdentity == TileIdentity::Text;
-                const SettingsDraft* draft = draftOf(SettingsField::AccountTileText);
+            // Short text, while Identity is Label or its box holds text being edited or unsaved. Its
+            // placeholder is what the tile shows without it: the label without spaces.
+            if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileText);
+                draft || account.tileIdentity == TileIdentity::Text) {
                 UiCardSpec spec;
                 spec.title = I18nText(locale, Tr(L"Short text"));
                 spec.description = {{I18nText(locale, Tr(L"The Label identity on tiles, up to 4 characters. Empty uses "
                                                          L"the label without spaces."))}};
                 spec.trailing = {96, 32};
-                spec.enabled = used;
-                if (!used) spec.reason = I18nText(locale, Tr(L"Used on tiles when Identity is Label."));
                 if (draft) spec.error = SettingsDraftErrorText(locale, *draft);
                 UiCardLayout layout = row(spec);
                 UiItem box;
@@ -39766,7 +39626,6 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                              [](wchar_t ch) { return !iswspace(ch); });
                 box.runs.push_back({std::move(placeholder)});
                 box.maximum = kSettingsTileTextLimit;
-                box.enabled = used;
                 box.action = command(SettingsField::AccountTileText);
                 push(box);
             }
@@ -40332,8 +40191,8 @@ struct SettingsUiClient final : UiHostClient {
             case UiActionKind::Command:
                 switch (field) {
                     case SettingsField::PollMinutes:
-                        // The interval dropdown: a preset, or 0 for Custom, which only enables
-                        // the custom box and moves focus there.
+                        // The interval dropdown: a preset, or 0 for Custom, which only shows the
+                        // custom box and moves focus there.
                         if (!action.value) {
                             pollCustom = true;
                             UiHostRequestRebuild(host, false);
@@ -40346,7 +40205,7 @@ struct SettingsUiClient final : UiHostClient {
                         break;
                     case SettingsField::HiddenPolling: {
                         // The hidden accounts dropdown: not polled, as shown ones, an interval, or
-                        // Custom, which drops a failed choice, enables the custom box and moves
+                        // Custom, which drops a failed choice, shows the custom box and moves
                         // focus there; without an interval yet, it starts at the default one. A
                         // commit drops the custom box's draft (settings/edits.h).
                         bool interval = edits.baseline.settings.hiddenPollMinutes > 0;
@@ -40366,7 +40225,7 @@ struct SettingsUiClient final : UiHostClient {
                     }
                     case SettingsField::KeepHistory: {
                         // The retention dropdown: days, 0 for Forever, or -1 for Custom, which
-                        // drops a failed choice, enables the custom box and moves focus there.
+                        // drops a failed choice, shows the custom box and moves focus there.
                         // Leaving the committed Forever asks first (pruning is shared and final);
                         // Custom then starts at the most days. A commit drops the custom box's
                         // draft (settings/edits.h).

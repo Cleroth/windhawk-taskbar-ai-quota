@@ -76,10 +76,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Chart width", L"图表宽度"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"基于本地样本的图表、统计和 CSV 导出，记录关闭时也可使用。"},
-    {L"", L"Choose Custom in Cloud poll interval to edit.", L"在“云端轮询间隔”中选择“自定义”后即可编辑。"},
-    {L"", L"Choose Custom in Hidden accounts to edit.", L"在“隐藏的账户”中选择“自定义”后即可编辑。"},
-    {L"", L"Choose Custom in Keep history to edit.", L"在“保留历史”中选择“自定义”后即可编辑。"},
-    {L"", L"Choose an identity position to change this.", L"选择一个标识位置后即可更改。"},
     {L"", L"Claude logo", L"Claude 徽标"},
     {L"", L"Cloud poll interval", L"云端轮询间隔"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -366,8 +362,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Short text", L"短文本"},
     {L"", L"Show details on hover", L"悬停时显示详情"},
     {L"", L"Show on", L"显示于"},
-    {L"", L"Show percentage text on hover or always to change this.", L"将“百分比文本”设为“悬停时显示”或“始终显示”后即可更改。"},
-    {L"", L"Show percentage text or turn on Quota keys to change this.", L"显示百分比文本或开启“配额简称”后即可更改。"},
     {L"", L"Show provider outages", L"显示提供商故障"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -487,10 +481,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Translations are machine-made. Corrections are welcome as <link id=\"issues\">GitHub issues</link> or "
      L"pull requests.",
      L"翻译由机器生成。欢迎通过 <link id=\"issues\">GitHub 议题</link>或拉取请求提交更正。"},
-    {L"", L"Turn off Reset countdown to change this.", L"关闭“重置倒计时”后即可更改。"},
-    {L"", L"Turn on Pace markers to change this.", L"开启“节奏标记”后即可更改。"},
-    {L"", L"Turn on Record usage history to change this.", L"开启“记录使用历史”后即可更改。"},
-    {L"", L"Turn on Work days only to change this.", L"开启“仅工作日”后即可更改。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.", L"不可用的配额会自动隐藏。至少保留一个选中。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
           L"on the {key7d} chart.",
@@ -506,7 +496,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Usage history guide", L"使用历史指南"},
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"“已用量”随配额消耗而填充；“剩余量”以剩余部分填充。颜色始终跟随用量。"},
-    {L"", L"Used on tiles when Identity is Label.", L"“标识”为“标签”时在磁贴上使用。"},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"版本 {version}  ·  作者 Cleroth  ·  Windhawk 模组"},
     {L"", L"Vertical bar length", L"垂直条形长度"},
     {L"", L"Wait for the current sign-in to finish before changing identity.", L"请等待当前登录完成后再更改标识。"},

@@ -952,7 +952,7 @@ static void RunAccountEditTests() {
         CHECK(UiRunsText(UiFindItem(build(60), 101)->runs) == note + L"; hidden accounts are polled less often.");
     });
 
-    Run("accounts page: an expanded card's rows per provider; Short text needs Label; chips keep one", [] {
+    Run("accounts page: an expanded card's rows per provider; Short text only with Label; chips keep one", [] {
         UiGraphics& g = TestGraphics();
         SettingsView view = AccountsView({0, 3});
         UiFrame frame;
@@ -962,23 +962,20 @@ static void RunAccountEditTests() {
         CHECK_NEAR(label->rect.right - label->rect.left, 200);
         const UiItem* credits = UiFindItem(frame, AccountId(1, SettingsField::AccountCreditsMax));
         CHECK(credits && credits->kind == UiItemKind::NumberBox && credits->text == L"2,500");
-        // The identity rows: Identity (logo + number badge by default; Label), then Short text for
-        // tiles, disabled until Identity is Label. No Logo on bars switch.
+        // The identity row: Identity (logo + number badge by default; Label); Short text for tiles
+        // only once Identity is Label. No Logo on bars switch.
         const UiItem* identity = UiFindItem(frame, AccountId(1, SettingsField::AccountTileIdentity));
         CHECK(identity && identity->kind == UiItemKind::Dropdown && identity->text == L"Logo + number badge");
         CHECK(identity->options.size() == 3 && identity->options[0].text == L"Logo + number badge" &&
               identity->options[1].text == L"Logo only" && identity->options[2].text == L"Label" &&
               identity->options[2].value == int(TileIdentity::Text));
-        const UiItem* shortText = UiFindItem(frame, AccountId(1, SettingsField::AccountTileText));
-        CHECK(shortText && !shortText->enabled && shortText->maximum == 4 && UiRunsText(shortText->runs) == L"OAI");
-        CHECK(shortText->rect.top > identity->rect.bottom);
+        CHECK(!UiFindItem(frame, AccountId(1, SettingsField::AccountTileText)) && !HasText(frame, L"Short text") &&
+              !HasText(frame, L"The Label identity on tiles"));
         CHECK(HasText(frame, L"Marks this account beside its bars and on tiles.") &&
               HasText(frame, L"Label shows the label on bars and its short text on tiles."));
-        CHECK(HasText(frame, L"The Label identity on tiles, up to 4 characters.") &&
-              HasText(frame, L"Used on tiles when Identity is Label."));
         CHECK(!HasText(frame, L"Logo on bars") && !HasText(frame, L"Tile identity") && !HasText(frame, L"Label text"));
         CHECK(HasText(frame, L"Shown in details, and next to bars when Identity is Label."));
-        // Its order: Identity, then (Short text disabled) Record history; no switch between.
+        // Its order: Identity, then Record history; no switch between.
         std::vector<UiFocusStop> stops = UiFocusStops(frame);
         auto stop = [&](uint32_t id) {
             return std::find_if(stops.begin(), stops.end(), [&](const UiFocusStop& s) { return s.ref.id == id; }) -
@@ -1035,14 +1032,28 @@ static void RunAccountEditTests() {
         CHECK(std::adjacent_find(ids.begin(), ids.end()) == ids.end());
         view.accounts[0].status.needsSignIn = false;
 
-        // Label enables Short text; the last chip can't clear; no credits max disables Credits.
+        // Short text whose save failed stays, with its error, whatever the identity.
+        view.drafts.push_back({11, SettingsField::AccountTileText, 1, true, L"OA", 0, true, true, SettingsDraftError::SaveFailed});
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountTileText))->text == L"OA" &&
+              HasText(frame, L"This change couldn't be saved."));
+        view.drafts.clear();
+
+        // Label shows Short text under Identity; the last chip can't clear; no credits max disables
+        // Credits.
         view.settings.accounts[0].tileIdentity = TileIdentity::Text;
         view.settings.accounts[0].showBars = {false, true, false, false};
         view.settings.accounts[0].creditsMax = 0;
         view.drafts.push_back({11, kLabel, 1, true, L"", 0, false, false, SettingsDraftError::LabelEmpty});
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-        CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountTileText))->enabled);
+        const UiItem* shortText = UiFindItem(frame, AccountId(1, SettingsField::AccountTileText));
+        CHECK(shortText && shortText->kind == UiItemKind::TextBox && shortText->enabled && shortText->maximum == 4 &&
+              UiRunsText(shortText->runs) == L"OAI");
+        CHECK(shortText->rect.top > UiFindItem(frame, AccountId(1, SettingsField::AccountTileIdentity))->rect.bottom &&
+              shortText->rect.bottom < UiFindItem(frame, AccountId(1, SettingsField::AccountRecordHistory))->rect.top);
+        CHECK(HasText(frame, L"Short text") && HasText(frame, L"The Label identity on tiles, up to 4 characters."));
         CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountTileIdentity))->text == L"Label");
         CHECK(UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kWeeklyBar))->action.value == 0b0010);
         CHECK(!UiFindItem(frame, AccountId(1, SettingsField::AccountBars, kExtraUsageBar))->enabled);

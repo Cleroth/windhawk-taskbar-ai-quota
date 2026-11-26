@@ -74,7 +74,7 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
                                   SettingsField::ShowDetailsOnHover);
     }
 
-    // Pace and projection: the week's work days, Monday first. The days need the switch on.
+    // Pace and projection: the week's work days, Monday first. The days show with the switch on.
     y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Pace and projection")));
     {
         UiCardSpec spec;
@@ -93,6 +93,7 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
                                             {I18nText(locale, TrCtx(L"weekday", L"Saturday")), 6},
                                             {I18nText(locale, TrCtx(L"weekday", L"Sunday")), 0}};
     for (SettingsField field : {SettingsField::FirstWorkDay, SettingsField::LastWorkDay}) {
+        if (!SettingsDependentShown(view, s.workDays, field)) continue;
         UiCardSpec spec;
         if (field == SettingsField::FirstWorkDay) {
             spec.title = I18nText(locale, Tr(L"First work day"));
@@ -100,14 +101,12 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
         } else {
             spec.title = I18nText(locale, Tr(L"Last work day"));
         }
-        spec.enabled = s.workDays;
-        if (!s.workDays) spec.reason = I18nText(locale, Tr(L"Turn on Work days only to change this."));
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, field, 200, weekdays,
                                     SettingsFieldValue(s, field));
     }
 
-    // Updates: a preset interval, or Custom with its own number. Text typed into the custom box
-    // keeps Custom even while a partial number matches a preset.
+    // Updates: a preset interval, or Custom, which shows a box for its own number. Text typed into
+    // the custom box keeps Custom even while a partial number matches a preset.
     y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Updates")));
     bool preset = std::find(std::begin(kSettingsPollPresets), std::end(kSettingsPollPresets),
                             s.pollMinutes) != std::end(kSettingsPollPresets);
@@ -129,12 +128,10 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
         y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::PollMinutes,
                                     200, std::move(options), custom ? 0 : s.pollMinutes, 8);
     }
-    {
+    if (custom) {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Custom interval"));
         spec.description = {{I18nText(locale, Tr(L"2 to 1440 minutes."))}};
-        spec.enabled = custom;
-        if (!custom) spec.reason = I18nText(locale, Tr(L"Choose Custom in Cloud poll interval to edit."));
         // The unit agrees with the saved interval, not text still being typed.
         y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PollMinutes,
                                   I18nText(locale, TrCtx(L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}"),
@@ -169,12 +166,10 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HiddenPolling, 200,
                                     std::move(options), hiddenCustom ? kSettingsHiddenPollCustom : s.hiddenPollMinutes);
     }
-    {
+    if (hiddenCustom) {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Custom hidden interval"));
         spec.description = {{I18nText(locale, Tr(L"2 to 1440 minutes."))}};
-        spec.enabled = hiddenCustom;
-        if (!hiddenCustom) spec.reason = I18nText(locale, Tr(L"Choose Custom in Hidden accounts to edit."));
         // The unit agrees with the saved interval, not text still being typed.
         y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HiddenPollMinutes,
                                   I18nText(locale, TrCtx(L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}"),

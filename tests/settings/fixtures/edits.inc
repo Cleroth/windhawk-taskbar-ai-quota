@@ -767,6 +767,10 @@ static const UiItem& Control(const UiFrame& frame, SettingsField field, uint32_t
     return *item;
 }
 
+static bool Shown(const UiFrame& frame, SettingsField field, uint32_t part = 0) {
+    return UiFindItem(frame, SettingsControlId(field, part)) != nullptr;
+}
+
 static bool HasText(const UiFrame& frame, std::wstring_view text) {
     return std::any_of(frame.content.begin(), frame.content.end(), [&](const UiItem& item) {
         return UiRunsText(item.runs).find(text) != std::wstring::npos;
@@ -791,9 +795,8 @@ static void RunPageTests() {
               showOn.options[3].value == 2);
         const UiItem& poll = Control(frame, kPoll, 8);
         CHECK(poll.text == L"10 minutes" && poll.options.back().text == L"Custom");
-        const UiItem& custom = Control(frame, kPoll);
-        CHECK(custom.kind == UiItemKind::NumberBox && !custom.enabled && custom.text == L"10");
-        CHECK(HasText(frame, L"Choose Custom in Cloud poll interval to edit."));
+        // A preset: no custom box.
+        CHECK(!Shown(frame, kPoll) && TextCount(frame, L"Custom interval") == 0);
         const UiItem& toggle = Control(frame, SettingsField::ShowDetailsOnHover);
         CHECK(toggle.kind == UiItemKind::Toggle && toggle.selected && toggle.action.value == 0);
         // Threshold notifications: Off or a level, each with its threshold.
@@ -812,8 +815,8 @@ static void RunPageTests() {
         CHECK(Control(frame, SettingsField::ResetBehavior).text == L"Reset");
         CHECK(HasText(frame, L"Notifies when a taskbar quota first reaches the chosen threshold."));
         // Focus order: language and display dropdowns, the hover toggle, the work days switch (its
-        // disabled days skipped), the poll and hidden accounts dropdowns (each one's disabled box
-        // skipped), notifications dropdown, reset.
+        // days hidden), the poll and hidden accounts dropdowns (each one's custom box hidden),
+        // notifications dropdown, reset.
         std::vector<UiFocusStop> stops = UiFocusStops(frame);
         CHECK(stops.size() == 6 + 8);
         const SettingsField order[] = {SettingsField::Language, SettingsField::ShowOn, SettingsField::ShowDetailsOnHover,
@@ -823,8 +826,8 @@ static void RunPageTests() {
             CHECK(stops[6 + i].ref.id == SettingsControlId(order[i], order[i] == kPoll ? 8 : 0));
         }
 
-        // A chosen display that is gone stays chosen, marked unavailable; Custom enables the box
-        // and its draft text and error show.
+        // A chosen display that is gone stays chosen, marked unavailable; Custom shows the box
+        // under its dropdown, and its draft text and error show.
         view.settings.taskbarMonitorMode = TaskbarMonitorMode::Specific;
         view.settings.taskbarMonitorNumber = 3;
         view.settings.showDetailsOnHover = false;
@@ -834,9 +837,11 @@ static void RunPageTests() {
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, SettingsField::ShowOn).text == L"Display 3 - unavailable");
         CHECK(Control(frame, kPoll, 8).text == L"Custom");
-        CHECK(Control(frame, kPoll).enabled && Control(frame, kPoll).text == L"7x");
+        CHECK(Control(frame, kPoll).kind == UiItemKind::NumberBox && Control(frame, kPoll).enabled &&
+              Control(frame, kPoll).text == L"7x" && TextCount(frame, L"Custom interval") == 1);
+        CHECK(Control(frame, kPoll, 8).rect.bottom < Control(frame, kPoll).rect.top &&
+              Control(frame, kPoll).rect.bottom < Control(frame, kHidden).rect.top);
         CHECK(HasText(frame, L"Enter a whole number from 2 to 1440."));
-        CHECK(!HasText(frame, L"Choose Custom in Cloud poll interval"));
         const UiItem& hover = Control(frame, SettingsField::ShowDetailsOnHover);
         CHECK(!hover.selected && hover.text == L"Off" && hover.action.value == 1);
         // The control ids stay put when lines appear above them.
@@ -855,7 +860,7 @@ static void RunPageTests() {
               off.options[2].text == L"Orange (60%)" && off.options[3].text == L"Red (85%)");
 
         // A saved custom interval being retyped: "1" projects to 2, a preset, yet Custom stays
-        // and the box stays enabled.
+        // and so does the box.
         view = TestView(SettingsUiPage::Behavior);
         view.settings.pollMinutes = 7;
         view.drafts.push_back({0, kPoll, 1, true, L"1", 2, true, false});
@@ -864,7 +869,7 @@ static void RunPageTests() {
         CHECK(Control(frame, kPoll, 8).text == L"Custom" && Control(frame, kPoll).enabled);
     });
 
-    Run("behavior page: work days: the switch, then the first and last day from Monday on, which need it on; they "
+    Run("behavior page: work days: the switch, then, while it is on, the first and last day from Monday on; they "
         "save at once and the Behavior reset restores them", [] {
         UiGraphics& g = TestGraphics();
         auto build = [&](const SettingsView& view) {
@@ -872,17 +877,30 @@ static void RunPageTests() {
             SettingsUiBuildFrame(g, view, {1000, 820}, frame);
             return frame;
         };
-        const std::wstring_view reason = L"Turn on Work days only to change this.";
-        // Off by default: Monday to Friday, shown but not editable, each day saying why.
+        // Off by default: the switch alone, the poll interval's section after it.
         SettingsView view = TestView(SettingsUiPage::Behavior);
         UiFrame frame = build(view);
+        CHECK(Control(frame, SettingsField::WorkDays).kind == UiItemKind::Toggle &&
+              !Control(frame, SettingsField::WorkDays).selected && Control(frame, SettingsField::WorkDays).enabled);
+        CHECK(!Shown(frame, SettingsField::FirstWorkDay) && !Shown(frame, SettingsField::LastWorkDay) &&
+              !HasText(frame, L"First work day") && !HasText(frame, L"Last work day"));
+        CHECK(HasText(frame, L"Pace and projection") && HasText(frame, L"Work days only") &&
+              Control(frame, SettingsField::WorkDays).rect.bottom < Control(frame, kPoll, 8).rect.top);
+        // A day whose save failed stays, with its error, while the switch is off.
+        view.drafts.push_back({0, SettingsField::LastWorkDay, 1, false, L"", 5, true, true, SettingsDraftError::SaveFailed});
+        frame = build(view);
+        CHECK(!Shown(frame, SettingsField::FirstWorkDay) && Control(frame, SettingsField::LastWorkDay).enabled &&
+              TextCount(frame, L"This change couldn't be saved.") == 1);
+        view.drafts.clear();
+        // On: Monday to Friday, each editable.
+        view.settings.workDays = true;
+        frame = build(view);
         const UiItem& toggle = Control(frame, SettingsField::WorkDays);
         const UiItem& first = Control(frame, SettingsField::FirstWorkDay);
         const UiItem& last = Control(frame, SettingsField::LastWorkDay);
-        CHECK(toggle.kind == UiItemKind::Toggle && !toggle.selected && toggle.enabled);
-        CHECK(first.kind == UiItemKind::Dropdown && !first.enabled && first.text == L"Monday" && first.action.value == 1);
-        CHECK(last.kind == UiItemKind::Dropdown && !last.enabled && last.text == L"Friday" && last.action.value == 5);
-        CHECK(TextCount(frame, reason) == 2);
+        CHECK(toggle.selected && toggle.action.value == 0);
+        CHECK(first.kind == UiItemKind::Dropdown && first.enabled && first.text == L"Monday" && first.action.value == 1);
+        CHECK(last.kind == UiItemKind::Dropdown && last.enabled && last.text == L"Friday" && last.action.value == 5);
         // Both list the week from Monday, each day by its weekday number (Sunday 0).
         const std::pair<PCWSTR, int> week[] = {{L"Monday", 1}, {L"Tuesday", 2}, {L"Wednesday", 3}, {L"Thursday", 4},
                                                {L"Friday", 5}, {L"Saturday", 6}, {L"Sunday", 0}};
@@ -900,7 +918,7 @@ static void RunPageTests() {
               HasText(frame, L"Your work days run from this day through the last one.") &&
               HasText(frame, L"Language, displays, hover details, work days, polling and notifications."));
 
-        // On, Sunday to Thursday: saved at once, shown and editable, without the reason.
+        // Sunday to Thursday: saved at once and shown.
         TestStore store;
         SettingsEdits edits(store);
         edits.Reload();
@@ -912,7 +930,7 @@ static void RunPageTests() {
               edits.drafts.empty());
         view.settings = edits.Projection();
         frame = build(view);
-        CHECK(Control(frame, SettingsField::WorkDays).selected && TextCount(frame, reason) == 0);
+        CHECK(Control(frame, SettingsField::WorkDays).selected);
         CHECK(Control(frame, SettingsField::FirstWorkDay).enabled && Control(frame, SettingsField::FirstWorkDay).text == L"Sunday");
         CHECK(Control(frame, SettingsField::LastWorkDay).enabled && Control(frame, SettingsField::LastWorkDay).text == L"Thursday");
         // Off again keeps the days; the Display reset leaves them, the Behavior reset restores them.
@@ -924,15 +942,15 @@ static void RunPageTests() {
         CHECK(!store.settings.workDays && store.settings.firstWorkDay == 1 && store.settings.lastWorkDay == 5);
     });
 
-    Run("behavior page: Hidden accounts' choices under the poll interval's cards; its custom box enabled only "
-        "while Custom shows, else with the reason; typed text and errors", [] {
+    Run("behavior page: Hidden accounts' choices under the poll interval's cards; its custom box only while Custom "
+        "shows; typed text and errors", [] {
         UiGraphics& g = TestGraphics();
         auto build = [&](const SettingsView& view) {
             UiFrame frame;
             SettingsUiBuildFrame(g, view, {1000, 820}, frame);
             return frame;
         };
-        // Every hour by default, a preset: the box shows its minutes, disabled, and says why.
+        // Every hour by default, a preset: no custom box.
         SettingsView view = TestView(SettingsUiPage::Behavior);
         UiFrame frame = build(view);
         const UiItem& choice = Control(frame, kHidden);
@@ -950,49 +968,52 @@ static void RunPageTests() {
         CHECK(kSettingsHiddenPollCustom < 0 && kSettingsHiddenPollCustom != kHiddenPollAsShown);
         CHECK_NEAR(choice.rect.right - choice.rect.left,
                    std::max(200.0f, TestTextWidth(L"Same as visible accounts", UiFont::Body) + 41));
-        const UiItem& box = Control(frame, kHiddenMinutes);
-        CHECK(box.kind == UiItemKind::NumberBox && !box.enabled && box.text == L"60");
-        CHECK(Control(frame, kHiddenMinutes, 3).runs[0].text == L"minutes");
-        CHECK(TextCount(frame, L"Hidden accounts") == 1 && TextCount(frame, L"Custom hidden interval") == 1 &&
-              TextCount(frame, L"Choose Custom in Hidden accounts to edit.") == 1);
+        CHECK(!Shown(frame, kHiddenMinutes) && TextCount(frame, L"Hidden accounts") == 1 &&
+              TextCount(frame, L"Custom hidden interval") == 0);
         CHECK(HasText(frame, L"How often accounts hidden from the taskbar are polled, for Accounts and usage history: "
                              L"never more often than visible ones. Shared across Windows users."));
-        CHECK(Control(frame, kPoll).rect.bottom < choice.rect.top && choice.rect.bottom < box.rect.top &&
-              box.rect.bottom < Control(frame, SettingsField::Notifications).rect.top);
+        CHECK(Control(frame, kPoll, 8).rect.bottom < choice.rect.top &&
+              choice.rect.bottom < Control(frame, SettingsField::Notifications).rect.top);
 
         struct HiddenCase {
             int minutes;   // The setting
             bool custom;   // Custom chosen earlier
             PCWSTR shown;  // The dropdown's text
             int value;     // The dropdown's value
-            bool enabled;  // The custom box
-            PCWSTR box;    // The custom box's text
+            PCWSTR box;    // The custom box's text; none: no box
         };
-        for (const HiddenCase& c : {HiddenCase{kHiddenPollNever, false, L"Not polled", 0, false, L"60"},
-                                    HiddenCase{kHiddenPollAsShown, false, L"Same as visible accounts", -1, false, L"60"},
-                                    HiddenCase{30, false, L"30 minutes", 30, false, L"30"},
-                                    HiddenCase{1440, false, L"24 hours", 1440, false, L"1,440"},
-                                    // Minutes no preset has, or Custom chosen: Custom, its box enabled.
-                                    HiddenCase{90, false, L"Custom", kSettingsHiddenPollCustom, true, L"90"},
-                                    HiddenCase{240, true, L"Custom", kSettingsHiddenPollCustom, true, L"240"},
-                                    // Without an interval, Custom chosen earlier enables nothing.
-                                    HiddenCase{kHiddenPollNever, true, L"Not polled", 0, false, L"60"},
-                                    HiddenCase{kHiddenPollAsShown, true, L"Same as visible accounts", -1, false, L"60"}}) {
+        for (const HiddenCase& c : {HiddenCase{kHiddenPollNever, false, L"Not polled", 0, nullptr},
+                                    HiddenCase{kHiddenPollAsShown, false, L"Same as visible accounts", -1, nullptr},
+                                    HiddenCase{30, false, L"30 minutes", 30, nullptr},
+                                    HiddenCase{1440, false, L"24 hours", 1440, nullptr},
+                                    // Minutes no preset has, or Custom chosen: Custom, with its box.
+                                    HiddenCase{90, false, L"Custom", kSettingsHiddenPollCustom, L"90"},
+                                    HiddenCase{240, true, L"Custom", kSettingsHiddenPollCustom, L"240"},
+                                    HiddenCase{1440, true, L"Custom", kSettingsHiddenPollCustom, L"1,440"},
+                                    // Without an interval, Custom chosen earlier shows none.
+                                    HiddenCase{kHiddenPollNever, true, L"Not polled", 0, nullptr},
+                                    HiddenCase{kHiddenPollAsShown, true, L"Same as visible accounts", -1, nullptr}}) {
             view.settings.hiddenPollMinutes = c.minutes;
             view.hiddenPollCustom = c.custom;
             frame = build(view);
             CHECK(Control(frame, kHidden).text == c.shown && Control(frame, kHidden).action.value == c.value);
-            CHECK(Control(frame, kHiddenMinutes).enabled == c.enabled && Control(frame, kHiddenMinutes).text == c.box);
-            CHECK(HasText(frame, L"Choose Custom in Hidden accounts to edit.") == !c.enabled);
-            // The enabled box is a tab stop after its dropdown.
+            CHECK(Shown(frame, kHiddenMinutes) == bool(c.box) && TextCount(frame, L"Custom hidden interval") == bool(c.box));
+            if (c.box) {
+                const UiItem& box = Control(frame, kHiddenMinutes);
+                CHECK(box.kind == UiItemKind::NumberBox && box.enabled && box.text == c.box &&
+                      Control(frame, kHiddenMinutes, 3).runs[0].text == L"minutes");
+                CHECK(Control(frame, kHidden).rect.bottom < box.rect.top &&
+                      box.rect.bottom < Control(frame, SettingsField::Notifications).rect.top);
+            }
+            // The box is a tab stop after its dropdown.
             std::vector<UiFocusStop> stops = UiFocusStops(frame);
-            CHECK(stops.size() == size_t(6 + 8 + c.enabled));
+            CHECK(stops.size() == size_t(6 + 8 + bool(c.box)));
             CHECK(stops[6 + 5].ref.id == SettingsControlId(kHidden) &&
-                  (stops[6 + 6].ref.id == SettingsControlId(kHiddenMinutes)) == c.enabled);
+                  (stops[6 + 6].ref.id == SettingsControlId(kHiddenMinutes)) == bool(c.box));
         }
 
         // A saved custom interval being retyped: "30" projects to a preset, yet Custom stays and
-        // the box stays enabled; text that isn't a number shows with its error, on this card only.
+        // so does the box; text that isn't a number shows with its error, on this card only.
         view = TestView(SettingsUiPage::Behavior);
         view.settings.hiddenPollMinutes = 30;
         view.drafts.push_back({0, kHiddenMinutes, 1, true, L"30", 30, true, false});
@@ -1002,13 +1023,12 @@ static void RunPageTests() {
         view.drafts[0] = {0, kHiddenMinutes, 2, true, L"30x", 30, false, false, SettingsDraftError::Range};
         frame = build(view);
         CHECK(Control(frame, kHiddenMinutes).text == L"30x" && TextCount(frame, L"Enter a whole number from 2 to 1440.") == 1);
-        CHECK(Control(frame, kPoll, 8).text == L"10 minutes" && !Control(frame, kPoll).enabled &&
-              HasText(frame, L"Choose Custom in Cloud poll interval to edit."));
-        // The poll interval's Custom leaves the hidden accounts' box as it is, and the other way.
+        CHECK(Control(frame, kPoll, 8).text == L"10 minutes" && !Shown(frame, kPoll));
+        // The poll interval's Custom shows no box for hidden accounts, and the other way.
         view = TestView(SettingsUiPage::Behavior);
         view.pollCustom = true;
         frame = build(view);
-        CHECK(Control(frame, kPoll).enabled && !Control(frame, kHiddenMinutes).enabled && Control(frame, kHidden).text == L"1 hour");
+        CHECK(Control(frame, kPoll).enabled && !Shown(frame, kHiddenMinutes) && Control(frame, kHidden).text == L"1 hour");
         // A choice whose save failed shows as chosen, with its error.
         view = TestView(SettingsUiPage::Behavior);
         view.settings.hiddenPollMinutes = kHiddenPollNever;
@@ -1024,30 +1044,37 @@ static void RunPageTests() {
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(HasText(frame, L"\u25CF Recording \u00B7 New samples arrive with each poll."));
         CHECK(Control(frame, SettingsField::RecordHistory).selected);
-        // Kept forever by default: the custom box shows the most days, disabled.
+        // Kept forever by default: no custom box.
         const UiItem& keep = Control(frame, kKeep);
         CHECK(keep.kind == UiItemKind::Dropdown && keep.enabled && keep.text == L"Forever");
         CHECK(keep.options.size() == 5 && keep.options[2].text == L"1 year" && keep.options[2].value == 365 &&
               keep.options[4].text == L"Custom");
-        CHECK(!Control(frame, kRetention).enabled && Control(frame, kRetention).text == L"3,650");
-        CHECK(HasText(frame, L"Choose Custom in Keep history to edit."));
+        CHECK(!Shown(frame, kRetention) && TextCount(frame, L"Custom retention") == 0);
         CHECK(HasText(frame, L"keep history forever"));
-        CHECK(Control(frame, kRetention, 3).runs[0].text == L"days");
-        // A preset; days no preset has, or Custom chosen: Custom with its box enabled. Kept forever,
-        // Custom chosen earlier enables nothing.
+        // A preset; days no preset has, or Custom chosen: Custom with its box. Kept forever, Custom
+        // chosen earlier shows none.
         struct RetentionCase {
             int days;
             bool custom;
             PCWSTR shown;
-            bool enabled;
+            PCWSTR box;  // The custom box's text; none: no box
         };
-        for (const RetentionCase& c : {RetentionCase{365, false, L"1 year", false}, RetentionCase{120, false, L"Custom", true},
-                                       RetentionCase{90, true, L"Custom", true}, RetentionCase{0, true, L"Forever", false}}) {
+        for (const RetentionCase& c : {RetentionCase{365, false, L"1 year", nullptr}, RetentionCase{120, false, L"Custom", L"120"},
+                                       RetentionCase{90, true, L"Custom", L"90"}, RetentionCase{3650, true, L"Custom", L"3,650"},
+                                       RetentionCase{0, true, L"Forever", nullptr}}) {
             view.settings.historyRetentionDays = c.days;
             view.retentionCustom = c.custom;
             frame = {};
             SettingsUiBuildFrame(g, view, {1000, 820}, frame);
-            CHECK(Control(frame, kKeep).text == c.shown && Control(frame, kRetention).enabled == c.enabled);
+            CHECK(Control(frame, kKeep).text == c.shown && Shown(frame, kRetention) == bool(c.box) &&
+                  TextCount(frame, L"Custom retention") == bool(c.box));
+            if (c.box) {
+                const UiItem& box = Control(frame, kRetention);
+                CHECK(box.kind == UiItemKind::NumberBox && box.enabled && box.text == c.box &&
+                      Control(frame, kRetention, 3).runs[0].text == L"days");
+                CHECK(Control(frame, kKeep).rect.bottom < box.rect.top &&
+                      box.rect.bottom < Control(frame, kRetention, 8).rect.top);
+            }
         }
         view.retentionCustom = false;
         CHECK(HasText(frame, view.status.historyFolder));
@@ -1072,9 +1099,17 @@ static void RunPageTests() {
         CHECK(HasText(frame, L"\u25CB Off"));
         CHECK(Control(frame, SettingsField::HistoryRange).enabled &&
               Control(frame, SettingsField::HistoryRange).text == L"90 days");
-        CHECK(!Control(frame, kKeep).enabled && Control(frame, kKeep).text == L"Custom");
-        CHECK(!Control(frame, kRetention).enabled && Control(frame, kRetention).text == L"1,500");
-        CHECK(HasText(frame, L"Turn on Record usage history to change this."));
+        // Recording off: no retention cards, the note about accounts right under the switch.
+        CHECK(!Shown(frame, kKeep) && !Shown(frame, kRetention) && TextCount(frame, L"Keep history") == 0 &&
+              TextCount(frame, L"Custom retention") == 0);
+        CHECK(Control(frame, SettingsField::RecordHistory).rect.bottom < Control(frame, kRetention, 8).rect.top);
+        // Typed days that couldn't be saved keep their box, with the error.
+        view.drafts.push_back({0, kRetention, 1, true, L"9x", 1500, false, false, SettingsDraftError::Range});
+        frame = {};
+        SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+        CHECK(!Shown(frame, kKeep) && Control(frame, kRetention).enabled && Control(frame, kRetention).text == L"9x" &&
+              HasText(frame, L"Enter a whole number from 1 to 3650."));
+        view.drafts.clear();
         view.settings.historyEnabled = true;
         for (auto [state, text] : {std::pair{SettingsRecording::PendingSave, L"\u25CF Waiting"},
                                    std::pair{SettingsRecording::StorageError, L"\u25CF Not saving"}}) {

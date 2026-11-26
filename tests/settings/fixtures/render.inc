@@ -1114,7 +1114,7 @@ static void RunRenders(const std::wstring& directory) {
             // poll interval and for hidden accounts (every 90 minutes), an invalid draft with its
             // error, a toggle off, the Show on popup open (the field pressed), the custom box
             // editing, the Hidden accounts field hovered and the keyboard focus ring on another;
-            // then History with recording off (a disabled box and its reason); then the popup's
+            // then History with recording off (no retention cards); then the popup's
             // rows with the pointer on the third.
             std::string controls = std::string("render-controls-") + theme.name + "-144.png";
             Run(controls, [&] {

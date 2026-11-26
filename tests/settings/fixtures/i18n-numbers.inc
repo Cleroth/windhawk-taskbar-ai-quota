@@ -228,11 +228,11 @@ static void RunI18nNumberTests() {
         edits.Revert(0, kRetention);
         edits.SetText(0, kRetention, L"1.442", de);
         CHECK(edits.Projection().historyRetentionDays == 1442 && edits.Find(0, kRetention)->valid);
-        // The History page's custom box: kept forever shows the most days.
+        // The History page's custom box: the most days.
         auto box = [](const I18nLocale& locale) {
             SettingsView view = TestView(SettingsUiPage::History);
             view.locale = locale;
-            view.settings.historyRetentionDays = 0;
+            view.settings.historyRetentionDays = 3650;
             UiFrame frame;
             SettingsUiBuildFrame(TestGraphics(), view, {1000, 820}, frame);
             return Control(frame, kRetention).text;

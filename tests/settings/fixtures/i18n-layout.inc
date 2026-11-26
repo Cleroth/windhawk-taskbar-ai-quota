@@ -77,8 +77,9 @@ static SettingsView I18nLayoutView(BarLayout layout) {
 static std::vector<I18nLayoutCase> I18nLayoutCases() {
     std::vector<I18nLayoutCase> cases;
     // Accounts with hidden ones polled every hour (the default), every 30 minutes, every 2 hours
-    // (the usage as what is left), as often as visible ones, and not polled (the hidden account's
-    // card expanded, its recording paused): each with its state text and header note.
+    // (the usage as what is left; the expanded card's identity Label, with its Short text), as
+    // often as visible ones, and not polled (the hidden account's card expanded, its recording
+    // paused): each with its state text and header note.
     cases.push_back({"accounts", I18nAccountsView()});
     {
         SettingsView view = I18nAccountsView({0});
@@ -87,6 +88,7 @@ static std::vector<I18nLayoutCase> I18nLayoutCases() {
         view = I18nAccountsView({2});
         view.settings.hiddenPollMinutes = 120;
         view.settings.barMode = BarMode::Remaining;
+        view.settings.accounts[2].tileIdentity = TileIdentity::Text;
         cases.push_back({"accounts-anthropic", view});
         view = I18nAccountsView({3});
         view.settings.hiddenPollMinutes = kHiddenPollAsShown;
@@ -132,10 +134,11 @@ static std::vector<I18nLayoutCase> I18nLayoutCases() {
         cases.push_back({"display-ring", view});
     }
     {
-        // Hidden accounts every hour; both custom boxes enabled with their errors; then its two
-        // choices that aren't an interval.
+        // Hidden accounts every hour; work days on with their days, and both custom boxes with
+        // their errors; then its two choices that aren't an interval.
         SettingsView view = TestView(SettingsUiPage::Behavior);
         cases.push_back({"behavior", view});
+        view.settings.workDays = true;
         view.pollCustom = true;
         view.settings.taskbarMonitorNumber = 3;
         view.settings.hiddenPollMinutes = 90;

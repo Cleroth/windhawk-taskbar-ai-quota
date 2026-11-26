@@ -145,58 +145,54 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         uint32_t cardId = SettingsControlId(SettingsField::BarLayout, 10);
         return UiAddCard(g, items, cardId, x, top, width, spec).card.bottom;
     };
-    const std::wstring unplaced = text(Tr(L"Choose an identity position to change this."));
 
-    // Logo identities in every style: the logo size and the colors of the logos that have brand
-    // colors, the badge's size and color, then its offsets. Bars need an identity position, except
-    // for the logo colors, which the flyout and the windows also show.
-    auto logoCards = [&](float top, bool placed) {
-        auto slider = [&](float at, I18nKey title, I18nKey description, SettingsField field) {
+    // Logo identities in every style, each card 3 DIP under the one before it (`bottom`): the logo
+    // size and the colors of the logos that have brand colors, the badge's size and color, then
+    // its offsets. Bars show them only with an identity position, except the logo colors, which
+    // the flyout and the windows also show.
+    auto logoCards = [&](float bottom, bool placed) {
+        auto slider = [&](I18nKey title, I18nKey description, SettingsField field) {
+            if (!SettingsDependentShown(view, placed, field)) return;
             UiCardSpec spec;
             spec.title = text(title);
             spec.description = {{text(description)}};
-            spec.enabled = placed;
-            if (!placed) spec.reason = unplaced;
-            return SettingsAddSliderCard(g, view, items, id, x, at, width, spec, field);
+            bottom = SettingsAddSliderCard(g, view, items, id, x, bottom + 3, width, spec, field);
         };
-        auto brand = [&](float at, I18nKey title, I18nKey description, SettingsField field, I18nKey colors) {
+        auto brand = [&](I18nKey title, I18nKey description, SettingsField field, I18nKey colors) {
             UiCardSpec spec;
             spec.title = text(title);
             spec.description = {{text(description)}};
-            return SettingsAddDropdownCard(g, view, items, id, x, at, width, spec, field, 200,
-                                           {{text(TrCtx(L"logo-color", L"Taskbar text color")), 0}, {text(colors), 1}},
-                                           SettingsFieldValue(s, field));
+            bottom = SettingsAddDropdownCard(g, view, items, id, x, bottom + 3, width, spec, field, 200,
+                                             {{text(TrCtx(L"logo-color", L"Taskbar text color")), 0}, {text(colors), 1}},
+                                             SettingsFieldValue(s, field));
         };
-        top = slider(top, Tr(L"Logo size"), Tr(L"Percent of the standard size; rings keep it inside the hole."),
-                     SettingsField::LogoScale);
-        top = brand(top + 3, Tr(L"Claude logo"),
-                    Tr(L"The taskbar\u2019s text color, or Claude\u2019s orange. Details, Accounts and usage history "
-                       L"match."),
-                    SettingsField::ClaudeLogoBrand, TrCtx(L"logo-color", L"Orange"));
-        top = brand(top + 3, Tr(L"Antigravity logo"),
-                    Tr(L"The Gemini sparkle in the taskbar\u2019s text color, or its purple-to-blue gradient."),
-                    SettingsField::GeminiLogoBrand, TrCtx(L"logo-color", L"Gemini gradient"));
-        top = slider(top + 3, Tr(L"Badge size"),
-                     Tr(L"Text size of the number on a logo when several accounts share a provider, in pixels."),
-                     SettingsField::BadgeSize);
-        {
+        slider(Tr(L"Logo size"), Tr(L"Percent of the standard size; rings keep it inside the hole."),
+               SettingsField::LogoScale);
+        brand(Tr(L"Claude logo"),
+              Tr(L"The taskbar\u2019s text color, or Claude\u2019s orange. Details, Accounts and usage history match."),
+              SettingsField::ClaudeLogoBrand, TrCtx(L"logo-color", L"Orange"));
+        brand(Tr(L"Antigravity logo"),
+              Tr(L"The Gemini sparkle in the taskbar\u2019s text color, or its purple-to-blue gradient."),
+              SettingsField::GeminiLogoBrand, TrCtx(L"logo-color", L"Gemini gradient"));
+        slider(Tr(L"Badge size"),
+               Tr(L"Text size of the number on a logo when several accounts share a provider, in pixels."),
+               SettingsField::BadgeSize);
+        if (SettingsDependentShown(view, placed, SettingsField::BadgeColor)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Badge color"));
             spec.description = {{text(Tr(L"White, the default, follows the taskbar\u2019s text color. Custom... "
                                          L"opens the color picker."))}};
-            spec.enabled = placed;
-            if (!placed) spec.reason = unplaced;
-            top = SettingsAddColorCard(g, view, items, id, x, top + 3, width, spec, SettingsField::BadgeColor,
-                                       SettingsField::BadgeColorCustom,
-                                       {std::begin(kSettingsBadgeColors), std::end(kSettingsBadgeColors)},
-                                       s.badgeColor & 0x00FFFFFF);
+            bottom = SettingsAddColorCard(g, view, items, id, x, bottom + 3, width, spec, SettingsField::BadgeColor,
+                                          SettingsField::BadgeColorCustom,
+                                          {std::begin(kSettingsBadgeColors), std::end(kSettingsBadgeColors)},
+                                          s.badgeColor & 0x00FFFFFF);
         }
-        top = slider(top + 3, Tr(L"Badge horizontal offset"),
-                     Tr(L"Pixels right, or left when negative, from the logo\u2019s lower-right corner (inside the "
-                        L"hole on rings)."),
-                     SettingsField::BadgeOffsetX);
-        return slider(top + 3, Tr(L"Badge vertical offset"), Tr(L"Pixels down, or up when negative."),
-                      SettingsField::BadgeOffsetY);
+        slider(Tr(L"Badge horizontal offset"),
+               Tr(L"Pixels right, or left when negative, from the logo\u2019s lower-right corner (inside the hole on "
+                  L"rings)."),
+               SettingsField::BadgeOffsetX);
+        slider(Tr(L"Badge vertical offset"), Tr(L"Pixels down, or up when negative."), SettingsField::BadgeOffsetY);
+        return bottom;
     };
 
     if (bars) {
@@ -236,7 +232,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         }
 
         // Identity: the link to each account's identity, where it sits; the Label form's size, the
-        // gap and the logo cards need a position.
+        // gap and the logo cards show with a position.
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
         bool placed = s.labelPosition != LabelPosition::Hidden;
         y = identityCard(y);
@@ -252,26 +248,22 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {text(TrCtx(L"identity-position", L"Hidden")), int(LabelPosition::Hidden)}},
                                         int(s.labelPosition));
         }
-        {
+        if (SettingsDependentShown(view, placed, SettingsField::LabelFontSize)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Label font size"));
             spec.description = {{text(Tr(L"Text of accounts whose identity is Label, in pixels."))}};
-            spec.enabled = placed;
-            if (!placed) spec.reason = unplaced;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelFontSize);
         }
-        {
+        if (SettingsDependentShown(view, placed, SettingsField::LabelGap)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Identity gap"));
             spec.description = {{text(Tr(L"Space between the identity and the bars."))}};
-            spec.enabled = placed;
-            if (!placed) spec.reason = unplaced;
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelGap, pixels);
         }
-        y = logoCards(y + 3, placed);
+        y = logoCards(y, placed);
 
-        // Bar text: the percentage text (vertical bars' own), its alignment and the amounts that
-        // replace it, which need it shown; then quota keys, and the text size for either.
+        // Bar text: the percentage text (vertical bars' own), then, while it shows, its alignment
+        // and the amounts that replace it; quota keys, and the text size while either shows.
         y = section(y + 20, TrCtx(L"settings-section", L"Bar text"));
         const bool vertical = layout == BarLayout::Vertical;
         const bool percentShown = PercentTextVisibilityFor(s) != PercentTextVisibility::Never;
@@ -290,13 +282,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                  {text(TrCtx(L"percent-text", L"Always show")), int(PercentTextVisibility::Always)}},
                 int(PercentTextVisibilityFor(s)));
         }
-        const std::wstring textOff = text(Tr(L"Show percentage text on hover or always to change this."));
-        {
+        if (SettingsDependentShown(view, percentShown, SettingsField::PercentTextAlignment)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Percentage alignment"));
             spec.description = {{text(Tr(L"Adaptive: right side, moving left once the bar reaches the yellow threshold."))}};
-            spec.enabled = percentShown;
-            if (!percentShown) spec.reason = textOff;
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentTextAlignment,
                                         200,
                                         {{text(TrCtx(L"percent-alignment", L"Adaptive")), int(PercentTextAlignment::Adaptive)},
@@ -305,13 +294,11 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {text(TrCtx(L"percent-alignment", L"Right")), int(PercentTextAlignment::Right)}},
                                         int(s.percentTextAlignment));
         }
-        {
+        if (SettingsDependentShown(view, percentShown, SettingsField::ShowExtraBarAmounts)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Amounts on extra usage and credits"));
             spec.description = {{text(Tr(L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub "
                                          L"Copilot AI credits: spent in Used mode, left in Remaining mode."))}};
-            spec.enabled = percentShown;
-            if (!percentShown) spec.reason = textOff;
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowExtraBarAmounts);
         }
         {
@@ -323,13 +310,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                            {L"keyEx", key(3)}, {L"keyCr", key(5)}, {L"keyMo", key(6)}})}};
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowBarLabels);
         }
-        {
-            bool shown = s.showBarLabels || percentShown;
+        if (SettingsDependentShown(view, s.showBarLabels || percentShown, SettingsField::PercentFontSize)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar text size"));
             spec.description = {{text(Tr(L"Percentage text and quota keys, in pixels."))}};
-            spec.enabled = shown;
-            if (!shown) spec.reason = text(Tr(L"Show percentage text or turn on Quota keys to change this."));
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentFontSize);
         }
     } else if (IsFaceTile(layout)) {
@@ -359,7 +343,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RingThickness);
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
-        y = logoCards(identityCard(y) + 3, true);
+        y = logoCards(identityCard(y), true);
     } else if (layout == BarLayout::Sparkline) {
         // Usage graphs: each chart's width and height, its text size, the extra usage on the weekly
         // chart, the long windows' span and its swap on hover, then the current position cues and
@@ -457,7 +441,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineReadingScale);
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
-        y = logoCards(identityCard(y) + 3, true);
+        y = logoCards(identityCard(y), true);
     } else if (layout == BarLayout::QuotaMatrix) {
         // Quota matrix: the numbers' size, the headline's.
         y = section(y + 20, TrCtx(L"settings-section", L"Matrix"));
@@ -469,10 +453,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::HeadlineFontSize);
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
-        y = logoCards(identityCard(y) + 3, true);
+        y = logoCards(identityCard(y), true);
     } else {
-        // Headline tiles: the number's size, the countdown, then its bars' sizes and the bars'
-        // gap, which the countdown replaces.
+        // Headline tiles: the number's size, the countdown, then, unless the countdown replaces
+        // them, its bars' sizes and the bars' gap.
         y = section(y + 20, TrCtx(L"settings-section", L"Headline"));
         {
             UiCardSpec spec;
@@ -489,41 +473,33 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineCountdown);
         }
         const bool segments = !s.headlineCountdown;
-        const std::wstring countdownOn = text(Tr(L"Turn off Reset countdown to change this."));
-        {
+        if (SettingsDependentShown(view, segments, SettingsField::HeadlineBarLength)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar length"));
             spec.description = {{text(Tr(L"Pixels along each quota\u2019s bar under the number."))}};
-            spec.enabled = segments;
-            if (!segments) spec.reason = countdownOn;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarLength);
         }
-        {
+        if (SettingsDependentShown(view, segments, SettingsField::HeadlineBarThickness)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar thickness"));
             spec.description = {{text(Tr(L"Pixels across each bar."))}};
-            spec.enabled = segments;
-            if (!segments) spec.reason = countdownOn;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarThickness);
         }
-        {
+        if (SettingsDependentShown(view, segments, SettingsField::BarGap)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar gap"));
             spec.description = {{text(Tr(L"Space between an account\u2019s bars."))}};
-            spec.enabled = segments;
-            if (!segments) spec.reason = countdownOn;
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, pixels);
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
-        y = logoCards(identityCard(y) + 3, true);
+        y = logoCards(identityCard(y), true);
     }
 
     // Pace markers: none on headline tiles or the quota matrix; the marker style is the bars'.
-    // Style and color need the markers on.
+    // Style and color show with the markers on.
     if (layout != BarLayout::LogoHeadline && layout != BarLayout::QuotaMatrix) {
         y = section(y + 20, TrCtx(L"settings-section", L"Pace markers"));
         bool on = s.showPaceTicks;
-        const std::wstring off = text(Tr(L"Turn on Pace markers to change this."));
         {
             UiCardSpec spec;
             spec.title = text(Tr(L"Pace markers"));
@@ -534,13 +510,11 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                              L"its usage."))}};
             y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowPaceTicks);
         }
-        if (bars) {
+        if (bars && SettingsDependentShown(view, on, SettingsField::PaceTickStyle)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Marker style"));
             spec.description = {{text(Tr(L"Thin caret, full-width line, edge notch, centered dot, or a time track: a "
                                          L"small bar under each bar that fills with the elapsed time."))}};
-            spec.enabled = on;
-            if (!on) spec.reason = off;
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PaceTickStyle, 200,
                                         {{text(TrCtx(L"pace-marker", L"Caret")), int(PaceTickStyle::Caret)},
                                          {text(TrCtx(L"pace-marker", L"Full line")), int(PaceTickStyle::Line)},
@@ -549,13 +523,11 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {text(TrCtx(L"pace-marker", L"Time track")), int(PaceTickStyle::TimeTrack)}},
                                         int(s.paceTickStyle));
         }
-        {
+        if (SettingsDependentShown(view, on, SettingsField::PaceTickColor)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Marker color"));
             spec.description = {{text(Tr(L"Light grey by default, dark on a light taskbar. Custom... opens the color "
                                          L"picker."))}};
-            spec.enabled = on;
-            if (!on) spec.reason = off;
             y = SettingsAddColorCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PaceTickColor,
                                      SettingsField::PaceTickColorCustom,
                                      {std::begin(kSettingsPaceColors), std::end(kSettingsPaceColors)},
