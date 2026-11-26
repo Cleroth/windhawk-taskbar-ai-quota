@@ -104,4 +104,7 @@ stub client). These need the root guide's runtime check, or the interactive mode
 - `fixtures/status/` holds captured public status pages only (no account data); replace a capture
   rather than edit it, and keep expected values read off it by hand.
 - Update [coverage.md](coverage.md) when adding a target, phase or fixture file.
+- The localized layout sweep (`fixtures/i18n-layout.inc`) measures only what its cases build, and
+  nothing fails for a card none of them shows: a card or text that appears only in some state
+  needs a case that shows it.
 - Keep generated artifacts under `.out/`.
