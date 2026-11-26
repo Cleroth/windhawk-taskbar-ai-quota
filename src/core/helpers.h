@@ -134,12 +134,13 @@ static std::wstring FormatLocalDayTime(SYSTEMTIME const& local) {
 }
 
 // When a reading that is out of date was taken: its local time, with its weekday from a day back,
-// or the region's short date from six days back; empty when unreadable.
+// or the region's short date from six days back; empty when unreadable. A reading ahead of the
+// clock (set back since) counts as just taken.
 static std::wstring FormatReadingTime(ULONGLONG unixMs, ULONGLONG now) {
     constexpr ULONGLONG kDayMs = 24ULL * 3600 * 1000;
     SYSTEMTIME local;
     if (!UnixMsToLocalSystemTime(unixMs, &local)) return {};
-    if (now - unixMs < kDayMs) return FormatLocalTime(local);
+    if (unixMs > now || now - unixMs < kDayMs) return FormatLocalTime(local);
     wchar_t date[80];
     if (now - unixMs < 6 * kDayMs ||
         GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_SHORTDATE, &local, nullptr, date, ARRAYSIZE(date), nullptr) <= 0) {
