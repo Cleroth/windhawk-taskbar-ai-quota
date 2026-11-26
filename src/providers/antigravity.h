@@ -129,6 +129,8 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
 static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                                        AccountError* error);
 
+// `foundServer`: one is running, whether it answered or its language server gave no endpoint or
+// token to ask it with.
 static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundServer = nullptr) {
     *info = {};
     if (foundServer) *foundServer = false;
@@ -328,6 +330,7 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
             endpoints.push_back(
                 {candidate.extensionPort, false, &candidate.extensionCsrfToken});
         }
+        if (endpoints.empty() && !candidate.cli && foundServer) *foundServer = true;
 
         for (const auto& endpoint : endpoints) {
             if (g_unloading) return false;
