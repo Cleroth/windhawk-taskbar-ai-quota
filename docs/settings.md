@@ -100,7 +100,8 @@ With a live preview of the taskbar:
   Go's monthly do, and so does Anthropic extra usage with this off or without a 7d chart, per
   Display's extra usage chart
 - identity position (left, right, top, bottom, or hidden) for stacked and vertical bars, the label
-  font size for label identities, and the identity gap
+  font size for label identities, and the identity gap; a hidden identity still shows, alone, for
+  an account whose poll failed before it had a reading
 - logo size (50 to 200% of the standard size; ring logos stay inside the hole), and the number
   badge's size (6 to 20 px, default 13), color, and horizontal and vertical offsets; the badge is
   an outlined number centered on the logo's lower-right corner (on rings, pulled inside the hole),

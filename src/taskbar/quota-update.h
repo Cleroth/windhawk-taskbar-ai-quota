@@ -130,6 +130,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 } else if (ui.tile.identity) {
                     identity = ui.tile.identity;
                 }
+                // At the Hidden position it shows only alone, once a failed poll left no bar.
+                int identityShown =
+                    identity && (settings.labelPosition != LabelPosition::Hidden || meters.failedUnread);
                 if (identity) {
                     double side = kBarLogoSide * display.logoScale;
                     BadgeBox badge = ui.tile.badge ?
@@ -154,7 +157,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     ap.paceLight = paceLight;
                 }
 
-                if (barMask != ap.barMask) {
+                if (barMask != ap.barMask || identityShown != ap.identityShown) {
+                    if (identity) {
+                        identity.Visibility(identityShown ? Visibility::Visible : Visibility::Collapsed);
+                    }
                     int visibleCount = 0;
                     for (int w = 0; w < kQuotaBarCount; w++) {
                         if (barMask & (1 << w)) visibleCount++;
@@ -186,11 +192,12 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     if (ui.content) {
                         // Without a quota or an identity shown, a small context-menu target stays.
                         double minimumHitSize =
-                            visibleCount || identity ? 0.0 : std::max(display.barThickness, 8);
+                            visibleCount || identityShown ? 0.0 : std::max(display.barThickness, 8);
                         ui.content.MinWidth(minimumHitSize);
                         ui.content.MinHeight(minimumHitSize);
                     }
                     ap.barMask = barMask;
+                    ap.identityShown = identityShown;
                 }
 
                 for (int w = 0; w < kQuotaBarCount; w++) {

@@ -1334,6 +1334,9 @@ struct QuotaMeter {
 struct AccountMeters {
     bool stale = false;
     bool warn = false;         // Stale with an error: the details flyout's stale marker.
+    // No quota shown and a poll reported why: bars then show their identity, alone, even while the
+    // identity position is Hidden.
+    bool failedUnread = false;
     IdentityMark mark = IdentityMark::None;
     // The outage mark's color (the usage palette's orange, or its red for a major outage) and size
     // in DIPs; 0 without one.
@@ -1440,6 +1443,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             count++;
         }
     }
+    meters.failedUnread = !meters.barMask && bool(data.error);
 
     bool tiles = IsTileLayout(layout);
     bool concentric = layout == BarLayout::ConcentricRings;

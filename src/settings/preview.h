@@ -325,7 +325,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             // Bars (quota-grid.h, quota-update.h): the tiles' box, at least the tile height, its
             // padding inside each side, holding the content centered across it: the identity
             // beside, above or below a stack of bars at the identity position, centered on them,
-            // the identity gap between them while a bar shows; or the bars alone. Each bar a track
+            // the identity gap between them while a bar shows; or either alone. Each bar a track
             // or thin rail, its fill and pace tick, an optional quota key and the percentage text;
             // a time track's small bar adds to its cell under it (vertical bars: right of it).
             const bool vertical = layout == BarLayout::Vertical;
@@ -356,7 +356,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             // (the icon font at the label's size, on its baseline), or the logo at its size; its
             // margins (BarIdentityMarginFor) make its box, with the label line's space beyond its
             // text as DirectWrite lays it out.
-            const bool shown = position != LabelPosition::Hidden;
+            // At the Hidden position it shows only alone, once a failed poll left no bar.
+            const bool shown = position != LabelPosition::Hidden || meters.failedUnread;
             const bool side = position == LabelPosition::Left || position == LabelPosition::Right;
             const bool labelForm = account.tileIdentity == TileIdentity::Text;
             const float logoSide = float(kBarLogoSide * display.logoScale);

@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.24.3
+// @version         2.24.4
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -10721,6 +10721,7 @@ struct AppliedState {
     double labelOpacity = -1;
     uint32_t labelMarkColor = 0;  // The Label identity's outage glyph color; 0: plain text.
     Thickness identityMargin{-1, -1, -1, -1};  // Bar columns' identity, label or logo.
+    int identityShown = -1;  // Bar columns' identity: -1 unset, 0 collapsed, 1 shown.
     double columnOpacity = -1;
     int barMask = -1;
     int visible = -1;  // -1 unset, 0 collapsed, 1 visible.
@@ -21005,6 +21006,9 @@ struct QuotaMeter {
 struct AccountMeters {
     bool stale = false;
     bool warn = false;         // Stale with an error: the details flyout's stale marker.
+    // No quota shown and a poll reported why: bars then show their identity, alone, even while the
+    // identity position is Hidden.
+    bool failedUnread = false;
     IdentityMark mark = IdentityMark::None;
     // The outage mark's color (the usage palette's orange, or its red for a major outage) and size
     // in DIPs; 0 without one.
@@ -21111,6 +21115,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             count++;
         }
     }
+    meters.failedUnread = !meters.barMask && bool(data.error);
 
     bool tiles = IsTileLayout(layout);
     bool concentric = layout == BarLayout::ConcentricRings;
@@ -25070,8 +25075,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             } else {
                 // The tiles' box: at least the tile height, up to 7 DIPs inside each side, holding
                 // the content centred across it: the identity beside, above or below the bars at
-                // the identity position, centred on them, or the bars alone while it is Hidden.
-                // UpdateQuotaUi sets the identity's margins.
+                // the identity position, centred on them; while it is Hidden, the bars alone, or
+                // without them the identity alone (AccountMeters::failedUnread). UpdateQuotaUi
+                // sets the identity's margins and shows it.
                 bool identityAcross = labelPosition == LabelPosition::Top ||
                                       labelPosition == LabelPosition::Bottom;
                 bool identityBeforeBars = labelPosition == LabelPosition::Left ||
@@ -25089,25 +25095,24 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                 // The identity: the account label, or the logo with its badge and stale mark.
                 FrameworkElement identity{nullptr};
-                if (labelPosition != LabelPosition::Hidden) {
-                    if (accounts[i].tileIdentity == TileIdentity::Text) {
-                        TextBlock label;
-                        label.Text(accounts[i].label);
-                        label.FontSize(labelFontSize);
-                        label.Opacity(0.8);
-                        swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
-                        label.Name(name);
-                        refs.label = label;
-                        identity = label;
-                    } else {
-                        identity = BuildTileIdentity(accounts, i, barLayout, display, refs.tile);
-                        identities = true;
-                    }
-                    identity.VerticalAlignment(VerticalAlignment::Center);
-                    identity.HorizontalAlignment(identityAcross ? HorizontalAlignment::Center :
-                                                                  HorizontalAlignment::Left);
-                    if (identityBeforeBars) content.Children().Append(identity);
+                if (accounts[i].tileIdentity == TileIdentity::Text) {
+                    TextBlock label;
+                    label.Text(accounts[i].label);
+                    label.FontSize(labelFontSize);
+                    label.Opacity(0.8);
+                    swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
+                    label.Name(name);
+                    refs.label = label;
+                    identity = label;
+                } else {
+                    identity = BuildTileIdentity(accounts, i, barLayout, display, refs.tile);
+                    identities = true;
                 }
+                identity.VerticalAlignment(VerticalAlignment::Center);
+                identity.HorizontalAlignment(identityAcross ? HorizontalAlignment::Center :
+                                                              HorizontalAlignment::Left);
+                if (labelPosition == LabelPosition::Hidden) identity.Visibility(Visibility::Collapsed);
+                if (identityBeforeBars) content.Children().Append(identity);
 
                 StackPanel bars;
                 bars.Orientation(verticalBars ? Orientation::Horizontal : Orientation::Vertical);
@@ -25325,7 +25330,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                 refs.barArea = bars.as<FrameworkElement>();
                 content.Children().Append(bars);
-                if (identity && !identityBeforeBars) content.Children().Append(identity);
+                if (!identityBeforeBars) content.Children().Append(identity);
                 col.Children().Append(content);
             }
 
@@ -25824,6 +25829,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 } else if (ui.tile.identity) {
                     identity = ui.tile.identity;
                 }
+                // At the Hidden position it shows only alone, once a failed poll left no bar.
+                int identityShown =
+                    identity && (settings.labelPosition != LabelPosition::Hidden || meters.failedUnread);
                 if (identity) {
                     double side = kBarLogoSide * display.logoScale;
                     BadgeBox badge = ui.tile.badge ?
@@ -25848,7 +25856,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     ap.paceLight = paceLight;
                 }
 
-                if (barMask != ap.barMask) {
+                if (barMask != ap.barMask || identityShown != ap.identityShown) {
+                    if (identity) {
+                        identity.Visibility(identityShown ? Visibility::Visible : Visibility::Collapsed);
+                    }
                     int visibleCount = 0;
                     for (int w = 0; w < kQuotaBarCount; w++) {
                         if (barMask & (1 << w)) visibleCount++;
@@ -25880,11 +25891,12 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     if (ui.content) {
                         // Without a quota or an identity shown, a small context-menu target stays.
                         double minimumHitSize =
-                            visibleCount || identity ? 0.0 : std::max(display.barThickness, 8);
+                            visibleCount || identityShown ? 0.0 : std::max(display.barThickness, 8);
                         ui.content.MinWidth(minimumHitSize);
                         ui.content.MinHeight(minimumHitSize);
                     }
                     ap.barMask = barMask;
+                    ap.identityShown = identityShown;
                 }
 
                 for (int w = 0; w < kQuotaBarCount; w++) {
@@ -36391,7 +36403,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             // Bars (quota-grid.h, quota-update.h): the tiles' box, at least the tile height, its
             // padding inside each side, holding the content centered across it: the identity
             // beside, above or below a stack of bars at the identity position, centered on them,
-            // the identity gap between them while a bar shows; or the bars alone. Each bar a track
+            // the identity gap between them while a bar shows; or either alone. Each bar a track
             // or thin rail, its fill and pace tick, an optional quota key and the percentage text;
             // a time track's small bar adds to its cell under it (vertical bars: right of it).
             const bool vertical = layout == BarLayout::Vertical;
@@ -36422,7 +36434,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             // (the icon font at the label's size, on its baseline), or the logo at its size; its
             // margins (BarIdentityMarginFor) make its box, with the label line's space beyond its
             // text as DirectWrite lays it out.
-            const bool shown = position != LabelPosition::Hidden;
+            // At the Hidden position it shows only alone, once a failed poll left no bar.
+            const bool shown = position != LabelPosition::Hidden || meters.failedUnread;
             const bool side = position == LabelPosition::Left || position == LabelPosition::Right;
             const bool labelForm = account.tileIdentity == TileIdentity::Text;
             const float logoSide = float(kBarLogoSide * display.logoScale);

@@ -46,6 +46,11 @@ optional colorblind or custom palette. Optional pace ticks compare quota usage w
 in each reset window. Stale errors can mark the identity with `!` and the details flyout with a
 warning icon.
 
+With **Identity position** hidden on stacked or vertical bars, an account shows its bars alone,
+without the `!`. An account with no reading yet has no bars: once a poll fails or it needs a
+sign-in, its dimmed identity shows in their place, with the `!`, until its first reading. While
+its first poll is still under way, nothing shows.
+
 Click a column to refresh it. Right-click it for Settings, Usage history, Refresh all, provider
 actions, **Hide**, and **Show on taskbar**: show/hide toggles that keep the menu open while you
 toggle several accounts. Each toggle ends with its account's usage at a glance, as the
@@ -88,7 +93,7 @@ custom palettes apply). When everything is operational nothing shows: there is n
 state. The details flyout adds a line under its header naming the component (and how many others
 are affected), its state, the incident's title when the page gives one, and since when, in local
 time; click it to open the status page. Nothing is notified. With **Identity position** hidden on
-stacked or vertical bars there is no mark, only the flyout line.
+stacked or vertical bars there is no mark while an account's bars show, only the flyout line.
 
 | Accounts | Status page read | Watched |
 | --- | --- | --- |

@@ -272,8 +272,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             } else {
                 // The tiles' box: at least the tile height, up to 7 DIPs inside each side, holding
                 // the content centred across it: the identity beside, above or below the bars at
-                // the identity position, centred on them, or the bars alone while it is Hidden.
-                // UpdateQuotaUi sets the identity's margins.
+                // the identity position, centred on them; while it is Hidden, the bars alone, or
+                // without them the identity alone (AccountMeters::failedUnread). UpdateQuotaUi
+                // sets the identity's margins and shows it.
                 bool identityAcross = labelPosition == LabelPosition::Top ||
                                       labelPosition == LabelPosition::Bottom;
                 bool identityBeforeBars = labelPosition == LabelPosition::Left ||
@@ -291,25 +292,24 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                 // The identity: the account label, or the logo with its badge and stale mark.
                 FrameworkElement identity{nullptr};
-                if (labelPosition != LabelPosition::Hidden) {
-                    if (accounts[i].tileIdentity == TileIdentity::Text) {
-                        TextBlock label;
-                        label.Text(accounts[i].label);
-                        label.FontSize(labelFontSize);
-                        label.Opacity(0.8);
-                        swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
-                        label.Name(name);
-                        refs.label = label;
-                        identity = label;
-                    } else {
-                        identity = BuildTileIdentity(accounts, i, barLayout, display, refs.tile);
-                        identities = true;
-                    }
-                    identity.VerticalAlignment(VerticalAlignment::Center);
-                    identity.HorizontalAlignment(identityAcross ? HorizontalAlignment::Center :
-                                                                  HorizontalAlignment::Left);
-                    if (identityBeforeBars) content.Children().Append(identity);
+                if (accounts[i].tileIdentity == TileIdentity::Text) {
+                    TextBlock label;
+                    label.Text(accounts[i].label);
+                    label.FontSize(labelFontSize);
+                    label.Opacity(0.8);
+                    swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
+                    label.Name(name);
+                    refs.label = label;
+                    identity = label;
+                } else {
+                    identity = BuildTileIdentity(accounts, i, barLayout, display, refs.tile);
+                    identities = true;
                 }
+                identity.VerticalAlignment(VerticalAlignment::Center);
+                identity.HorizontalAlignment(identityAcross ? HorizontalAlignment::Center :
+                                                              HorizontalAlignment::Left);
+                if (labelPosition == LabelPosition::Hidden) identity.Visibility(Visibility::Collapsed);
+                if (identityBeforeBars) content.Children().Append(identity);
 
                 StackPanel bars;
                 bars.Orientation(verticalBars ? Orientation::Horizontal : Orientation::Vertical);
@@ -527,7 +527,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                 refs.barArea = bars.as<FrameworkElement>();
                 content.Children().Append(bars);
-                if (identity && !identityBeforeBars) content.Children().Append(identity);
+                if (!identityBeforeBars) content.Children().Append(identity);
                 col.Children().Append(content);
             }
 

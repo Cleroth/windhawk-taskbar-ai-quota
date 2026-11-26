@@ -2111,7 +2111,7 @@ static void RunAccountTests() {
         CHECK(AccountMeterState(Display(), BarLayout::Stacked, account, Fresh({10, 20, 50, -1}), 0, 0)
                   .barMask == 0b0011);
         // Loading, or needing a sign-in, before any success: no quota in any layout, the dimmed
-        // identity alone; marked once the poll reports why.
+        // identity alone; marked once the poll reports why, which also brings out a Hidden one.
         AccountData loading = Fresh();
         loading.lastSuccessMs = 0;
         AccountData signedOut = loading;
@@ -2124,12 +2124,22 @@ static void RunAccountTests() {
                 if (BarLayout(layout) == BarLayout::Sparkline) CHECK_NEAR(m.faceWidth, 0);
             }
         }
+        CHECK(!AccountMeterState(Display(), BarLayout::Stacked, account, loading, 0, 0).failedUnread);
+        CHECK(AccountMeterState(Display(), BarLayout::Stacked, account, signedOut, 0, 0).failedUnread);
+        // The stale mark's setting doesn't decide it.
+        const MeterDisplay unmarked = Display(With([](Settings& s) { s.showStaleWarning = false; }));
+        AccountMeters quiet = AccountMeterState(unmarked, BarLayout::Stacked, account, signedOut, 0, 0);
+        CHECK(quiet.failedUnread && !quiet.warn && quiet.mark == IdentityMark::None);
+        // A success that reports none of the selected quotas isn't a failure.
+        CHECK(!AccountMeterState(Display(), BarLayout::Stacked, account, Fresh(), 0, 0).failedUnread);
         // Needing one again after a success keeps the last readings.
         AccountData expired = Fresh({10, 20, -1, -1});
         expired.stale = true;
         expired.needsLogin = true;
+        expired.error = signedOut.error;
         CHECK(AccountMeterState(Display(), BarLayout::Sparkline, account, expired, 0, 0).barMask == 0b0010);
-        CHECK(AccountMeterState(Display(), BarLayout::Stacked, account, expired, 0, 0).barMask == 0b0011);
+        const AccountMeters kept = AccountMeterState(Display(), BarLayout::Stacked, account, expired, 0, 0);
+        CHECK(kept.barMask == 0b0011 && !kept.failedUnread);
     });
 
     Run("headline: most-used quota, its key and color", [] {

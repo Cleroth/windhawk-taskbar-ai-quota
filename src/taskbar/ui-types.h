@@ -26,6 +26,7 @@ struct AppliedState {
     double labelOpacity = -1;
     uint32_t labelMarkColor = 0;  // The Label identity's outage glyph color; 0: plain text.
     Thickness identityMargin{-1, -1, -1, -1};  // Bar columns' identity, label or logo.
+    int identityShown = -1;  // Bar columns' identity: -1 unset, 0 collapsed, 1 shown.
     double columnOpacity = -1;
     int barMask = -1;
     int visible = -1;  // -1 unset, 0 collapsed, 1 visible.

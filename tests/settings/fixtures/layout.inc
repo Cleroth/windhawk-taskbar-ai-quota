@@ -893,7 +893,7 @@ static void RunLayoutTests() {
 
         // No quota reported: no bars and no gap; the identity alone in the 40 DIP box, its box
         // included (above or below the bars' place, padded like the label's line). Hidden: the
-        // 8 DIP context-menu target.
+        // 8 DIP context-menu target, until a failed poll brings the identity out.
         data = {Fresh(), Fresh(), Fresh()};
         for (BarLayout layout : {BarLayout::Stacked, BarLayout::Vertical}) {
             for (LabelPosition position : {LabelPosition::Left, LabelPosition::Right, LabelPosition::Top,
@@ -923,6 +923,40 @@ static void RunLayoutTests() {
             s.labelPosition = LabelPosition::Hidden;
             strip = StripOf(s, accounts, data);
             for (const D2D1_RECT_F& box : strip.columns) CHECK_NEAR(box.right - box.left, 7 + 8 + 7);
+
+            // Hidden, still loading (never read, no error yet): the target alone too.
+            std::vector<AccountData> unread(3, Fresh());
+            for (AccountData& d : unread) {
+                d.lastSuccessMs = 0;
+                d.stale = true;
+            }
+            strip = StripOf(s, accounts, unread);
+            CHECK(OpsOfKind(strip, SettingsPreviewOp::Kind::Logo).empty() && TextOps(strip, L"CC 2").empty());
+            for (const D2D1_RECT_F& box : strip.columns) CHECK_NEAR(box.right - box.left, 7 + 8 + 7);
+            // Hidden, once a poll failed without a reading: the dimmed identity alone, where Left
+            // puts it, with its "!": 4 DIPs past each logo (CC 1's badge reaches further), the
+            // label's own.
+            for (AccountData& d : unread) d.error = {AccountErrorCode::Message, L"timeout"};
+            strip = StripOf(s, accounts, unread);
+            logos = OpsOfKind(strip, SettingsPreviewOp::Kind::Logo);
+            CHECK(logos.size() == 2 && TextOps(strip, L"!").size() == 2 && OpsOfColor(strip, 0x46808080).empty());
+            const SettingsPreviewOp failedLabel = TextOps(strip, L"CC 2!")[0];
+            CHECK(NearDip(strip.columns[0].right - strip.columns[0].left, 7 + 15 + kBadgeRight + 7));
+            CHECK_NEAR(strip.columns[1].right - strip.columns[1].left,
+                       7 + failedLabel.rect.right - failedLabel.rect.left + 7);
+            CHECK_NEAR(strip.columns[2].right - strip.columns[2].left, 7 + 15 + 4 + 7);
+            CHECK_NEAR(logos[0].rect.left, strip.columns[0].left + 7);
+            CHECK(NearDip(logos[0].rect.top, 4 + (40 - 15) / 2.0));
+            CHECK_NEAR(logos[1].opacity, 0.45); CHECK_NEAR(failedLabel.opacity, 0.45);
+            for (const D2D1_RECT_F& box : strip.columns) {
+                CHECK_NEAR(box.top, 4); CHECK_NEAR(box.bottom, 44);
+            }
+            // Stale marks off: the identity without its "!".
+            s.showStaleWarning = false;
+            strip = StripOf(s, accounts, unread);
+            CHECK(TextOps(strip, L"!").empty() && TextOps(strip, L"CC 2").size() == 1);
+            CHECK(NearDip(strip.columns[0].right - strip.columns[0].left, 7 + 15 + kBadgeRight + 7));
+            CHECK_NEAR(strip.columns[2].right - strip.columns[2].left, 7 + 15 + 7);
         }
     });
 
