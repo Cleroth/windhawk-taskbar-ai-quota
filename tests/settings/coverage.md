@@ -14,7 +14,7 @@ to `<target>.cpp` with a `.manifest.json`.
 | --- | --- | --- | --- |
 | model | `extract`, `model-compile`, `model`, `render` | `fixtures/main.inc` | localization engine and catalogs, `core/model.h`, account and journal errors, threshold notification text, sign-in layout, logos, meter model, pure toolkit, settings edit controller, view, preview, pages and shell |
 | history | `extract-history`, `history-compile`, `history`, `history-render` | `fixtures/history-main.inc` | the same engine, model, meter model and toolkit; `history/` types, continuity, series, CSV and the window's view, chart, controller, chart painter, content and shell |
-| status | `extract-status`, `status-compile`, `status` | `fixtures/status-main.inc` | `fetch/status-feeds.h` with the model, JSON accessors and date parsing (Windows.Data.Json) |
+| status | `extract-status`, `status-compile`, `status` | `fixtures/status-main.inc` | `fetch/status-feeds.h` with the model, JSON accessors and date parsing (Windows.Data.Json), plus `providers/antigravity.h`'s daemon discovery helpers (`SanitizeAntigravityAppDataDir`, `ParseAntigravityDaemonJson`) |
 | host | `extract-host`, `host-compile`, `probe-compile`, `host-probe` | `fixtures/host-dll.inc` in `ui-host.dll`, driven by `host-probe.cpp` | the toolkit with its native host, `history/modal.h` and a stub client with window icons |
 | popup | `extract-popup`, `popup-compile`, `popup-probe` | `fixtures/popup-probe.inc` (`popup-automated.inc`, `popup-interactive.inc`) | the same host owning a hand-written probe popup |
 | signin | `extract-signin`, `signin-compile`, `signin-probe` | `fixtures/signin-probe.inc` | `auth/login-layout.h`, `auth/login-controls.h`, the catalogs and account errors |
@@ -100,7 +100,7 @@ to `<target>.cpp` with a `.manifest.json`.
   language, language switches, regional formats, the journal's coded errors, and the window in
   every language through the layout audit (also the localization review renders' cases).
 
-## Status pages
+## Status pages and Antigravity daemon discovery
 
 `fixtures/status/` holds captured public pages, read 2026-11-05 with update texts removed:
 Claude's and GitHub's Statuspage summaries, OpenAI's incident.io feed and OpenCode's status API
@@ -108,6 +108,9 @@ Claude's and GitHub's Statuspage summaries, OpenAI's incident.io feed and OpenCo
 `fixtures/status.inc` parses them as is and with one entry replaced (each level, incidents and
 maintenances, a live incident moved onto a Codex component, unwatched components, unknown
 statuses, strict dates, untrusted pages), plus the two-read confirmation and the reading's age.
+`fixtures/antigravity.inc` tests `SanitizeAntigravityAppDataDir` (valid segments, empty, path
+traversal, invalid chars, length limit) and `ParseAntigravityDaemonJson` (desktop and CLI schemas,
+single-protocol records, partial and empty port intersections, PID/token validation, invalid JSON).
 
 ## Renders
 

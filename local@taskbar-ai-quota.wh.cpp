@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.24.0
+// @version         2.24.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -14352,6 +14352,186 @@ static std::vector<int> FindAntigravityListeningPorts(DWORD pid) {
     return ports;
 }
 
+static std::wstring SanitizeAntigravityAppDataDir(const std::wstring& raw) {
+    constexpr PCWSTR kDefaultAppDataDir = L"antigravity";
+    if (raw.empty() || raw.size() > 128 || raw == L"." ||
+        raw.find(L"..") != std::wstring::npos ||
+        raw.back() == L' ' || raw.back() == L'.') {
+        return kDefaultAppDataDir;
+    }
+    constexpr std::wstring_view kInvalidChars = L"\\/:*?\"<>|";
+    for (wchar_t ch : raw) {
+        if (ch < 0x20 || ch == 0x7F || kInvalidChars.find(ch) != std::wstring_view::npos) {
+            return kDefaultAppDataDir;
+        }
+    }
+    return raw;
+}
+
+static bool ParseAntigravityDaemonJson(const std::string& body, DWORD expectedPid,
+                                       const std::vector<int>& listeningPorts,
+                                       int* httpsPort, int* httpPort,
+                                       std::wstring* csrfToken) {
+    if (httpsPort) *httpsPort = 0;
+    if (httpPort) *httpPort = 0;
+    if (csrfToken) csrfToken->clear();
+    if (body.empty() || body.find('\0') != std::string::npos ||
+        expectedPid == 0 || listeningPorts.empty()) {
+        return false;
+    }
+
+    try {
+        auto root = JsonObject::Parse(Utf8ToWide(body));
+        double rawPid = GetNum(root, L"pid", -1);
+        if (!std::isfinite(rawPid) || rawPid < 1 ||
+            rawPid > static_cast<double>(MAXDWORD) ||
+            std::floor(rawPid) != rawPid ||
+            static_cast<DWORD>(rawPid) != expectedPid) {
+            return false;
+        }
+
+        std::wstring token = GetStr(root, L"csrfToken");
+        if (token.empty()) return false;
+        for (wchar_t ch : token) {
+            if (ch < 0x20 || ch == 0x7F) return false;
+        }
+
+        auto parseVerifiedPort = [&](PCWSTR key) -> int {
+            double rawPort = GetNum(root, key, 0);
+            if (!std::isfinite(rawPort) || rawPort < 1 || rawPort > 65535 ||
+                std::floor(rawPort) != rawPort) {
+                return 0;
+            }
+            int port = static_cast<int>(rawPort);
+            if (std::find(listeningPorts.begin(), listeningPorts.end(), port) ==
+                listeningPorts.end()) {
+                return 0;
+            }
+            return port;
+        };
+
+        int parsedHttps = parseVerifiedPort(L"httpsPort");
+        int parsedHttp = parseVerifiedPort(L"httpPort");
+        if (parsedHttps == 0 && parsedHttp == 0) return false;
+
+        if (httpsPort) *httpsPort = parsedHttps;
+        if (httpPort) *httpPort = parsedHttp;
+        if (csrfToken) *csrfToken = std::move(token);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+static std::wstring GetUserProfileFolder() {
+    PWSTR profilePath = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_Profile, KF_FLAG_DEFAULT, nullptr, &profilePath)) ||
+        !profilePath || !*profilePath) {
+        if (profilePath) CoTaskMemFree(profilePath);
+        return {};
+    }
+    std::wstring profile(profilePath);
+    CoTaskMemFree(profilePath);
+    while (!profile.empty() && (profile.back() == L'\\' || profile.back() == L'/')) {
+        profile.pop_back();
+    }
+    return profile;
+}
+
+static bool ReadAntigravityDaemonFile(const std::wstring& path, std::string* contents) {
+    contents->clear();
+    if (g_unloading) return false;
+    winrt::file_handle file{CreateFileW(
+        path.c_str(), GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr)};
+    if (!file) return false;
+
+    constexpr DWORD kMaxDaemonFileBytes = 16384;
+    BY_HANDLE_FILE_INFORMATION info{};
+    if (!GetFileInformationByHandle(file.get(), &info) ||
+        (info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) ||
+        info.nFileSizeHigh != 0 || info.nFileSizeLow == 0 ||
+        info.nFileSizeLow > kMaxDaemonFileBytes) {
+        return false;
+    }
+
+    std::string buffer;
+    buffer.reserve(info.nFileSizeLow);
+    char chunk[4096];
+    while (!g_unloading && buffer.size() < kMaxDaemonFileBytes) {
+        DWORD toRead = static_cast<DWORD>(
+            std::min<size_t>(sizeof(chunk), kMaxDaemonFileBytes - buffer.size()));
+        DWORD read = 0;
+        if (!ReadFile(file.get(), chunk, toRead, &read, nullptr)) return false;
+        if (read == 0) break;
+        buffer.append(chunk, read);
+    }
+    if (g_unloading || buffer.empty()) return false;
+    if (buffer.size() == kMaxDaemonFileBytes) {
+        char extra = 0;
+        DWORD extraRead = 0;
+        if (ReadFile(file.get(), &extra, 1, &extraRead, nullptr) && extraRead > 0) {
+            return false;
+        }
+    }
+    *contents = std::move(buffer);
+    return true;
+}
+
+static bool DiscoverAntigravityDaemonRecord(const std::wstring& profileDir, DWORD pid,
+                                            const std::wstring& appDataDir,
+                                            const std::vector<int>& listeningPorts,
+                                            int* httpsPort, int* httpPort,
+                                            std::wstring* csrfToken) {
+    if (httpsPort) *httpsPort = 0;
+    if (httpPort) *httpPort = 0;
+    if (csrfToken) csrfToken->clear();
+    if (g_unloading || profileDir.empty() || listeningPorts.empty()) return false;
+
+    const std::wstring sanitizedDir = SanitizeAntigravityAppDataDir(appDataDir);
+    const std::wstring daemonDir = profileDir + L"\\.gemini\\" + sanitizedDir + L"\\daemon";
+    DWORD daemonAttrs = GetFileAttributesW(daemonDir.c_str());
+    if (daemonAttrs == INVALID_FILE_ATTRIBUTES || !(daemonAttrs & FILE_ATTRIBUTE_DIRECTORY)) {
+        return false;
+    }
+
+    std::string body;
+    // Direct hub_<port>.json probes avoid enumerating stale hub_* files in daemon\.
+    for (int port : listeningPorts) {
+        if (g_unloading) return false;
+        if (port <= 0 || port > 65535) continue;
+        std::wstring path = daemonDir + L"\\hub_" + std::to_wstring(port) + L".json";
+        if (ReadAntigravityDaemonFile(path, &body) &&
+            ParseAntigravityDaemonJson(body, pid, listeningPorts, httpsPort, httpPort,
+                                       csrfToken)) {
+            return true;
+        }
+    }
+
+    if (g_unloading) return false;
+    WIN32_FIND_DATAW found{};
+    HANDLE find = FindFirstFileExW((daemonDir + L"\\ls_*.json").c_str(), FindExInfoBasic,
+                                   &found, FindExSearchNameMatch, nullptr, 0);
+    if (find == INVALID_HANDLE_VALUE) return false;
+    std::unique_ptr<void, decltype([](HANDLE h) { FindClose(h); })> search(find);
+    do {
+        if (g_unloading) return false;
+        if (found.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) {
+            continue;
+        }
+        std::wstring name = found.cFileName;
+        if (name.empty() || name.find_first_of(L"\\/") != std::wstring::npos) continue;
+        std::wstring path = daemonDir + L"\\" + name;
+        if (ReadAntigravityDaemonFile(path, &body) &&
+            ParseAntigravityDaemonJson(body, pid, listeningPorts, httpsPort, httpPort,
+                                       csrfToken)) {
+            return true;
+        }
+    } while (FindNextFileW(find, &found));
+    return false;
+}
+
 static HttpResult HttpRequestLocal(int port, bool secure, PCWSTR path, PCWSTR csrfToken,
                                    DWORD timeoutMs);
 static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d,
@@ -14371,6 +14551,7 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
         DWORD pid;
         std::wstring mainCsrfToken;
         std::wstring extensionCsrfToken;
+        std::wstring appDataDir;
         std::vector<int> explicitMainPorts;
         int extensionPort = 0;
         bool cli = false;
@@ -14432,12 +14613,18 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
                  extensionCsrf.find_first_of(L"\r\n") != std::wstring::npos)) {
                 continue;
             }
-            if (!cli && mainCsrf.empty() && extensionCsrf.empty()) continue;
+
+            std::wstring appDataDir;
+            for (PCWSTR flag : std::array<PCWSTR, 2>{L"app_data_dir", L"app-data-dir"}) {
+                appDataDir = ParseCmdLineFlag(cmdLine, flag);
+                if (!appDataDir.empty()) break;
+            }
 
             Candidate candidate;
             candidate.pid = pe.th32ProcessID;
             candidate.mainCsrfToken = std::move(mainCsrf);
             candidate.extensionCsrfToken = std::move(extensionCsrf);
+            candidate.appDataDir = SanitizeAntigravityAppDataDir(appDataDir);
             candidate.cli = cli;
             bool ide = lowerCmdLine.find(L"antigravity-ide") != std::wstring::npos ||
                        lowerCmdLine.find(L"antigravity ide") != std::wstring::npos ||  // i18n-en
@@ -14479,6 +14666,8 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
                          return a.richQuotaLikely && !b.richQuotaLikely;
                      });
 
+    std::wstring profileDir;
+    bool profileDirChecked = false;
     AntigravityServerInfo legacyInfo;
     for (auto& candidate : candidates) {
         if (g_unloading) return false;
@@ -14493,15 +14682,47 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
             const std::wstring* csrfToken;
         };
         std::vector<Endpoint> endpoints;
+        std::vector<int> listeningPorts = FindAntigravityListeningPorts(candidate.pid);
         std::vector<int> ports = candidate.explicitMainPorts;
         ports.erase(std::remove(ports.begin(), ports.end(), candidate.extensionPort),
                     ports.end());
-        for (int port : FindAntigravityListeningPorts(candidate.pid)) {
+        for (int port : listeningPorts) {
             if (port == candidate.extensionPort) continue;
             if (std::find(ports.begin(), ports.end(), port) == ports.end()) ports.push_back(port);
         }
+
+        int daemonHttpsPort = 0;
+        int daemonHttpPort = 0;
+        bool hasDaemonRecord = false;
+        if (candidate.mainCsrfToken.empty() && !listeningPorts.empty()) {
+            if (!profileDirChecked) {
+                profileDir = GetUserProfileFolder();
+                profileDirChecked = true;
+            }
+            std::wstring daemonCsrf;
+            if (DiscoverAntigravityDaemonRecord(profileDir, candidate.pid,
+                                                candidate.appDataDir, listeningPorts,
+                                                &daemonHttpsPort, &daemonHttpPort,
+                                                &daemonCsrf)) {
+                candidate.mainCsrfToken = std::move(daemonCsrf);
+                hasDaemonRecord = true;
+            }
+        }
+
+        if (hasDaemonRecord) {
+            if (daemonHttpsPort > 0) {
+                endpoints.push_back({daemonHttpsPort, true, &candidate.mainCsrfToken});
+            }
+            if (daemonHttpPort > 0) {
+                endpoints.push_back({daemonHttpPort, false, &candidate.mainCsrfToken});
+            }
+        }
         if (candidate.cli || !candidate.mainCsrfToken.empty()) {
             for (int port : ports) {
+                if (hasDaemonRecord &&
+                    (port == daemonHttpsPort || port == daemonHttpPort)) {
+                    continue;
+                }
                 endpoints.push_back({port, true, &candidate.mainCsrfToken});
                 endpoints.push_back({port, false, &candidate.mainCsrfToken});
             }

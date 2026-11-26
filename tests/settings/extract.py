@@ -102,6 +102,8 @@ STATUS = [
     ("definition", "GetStr"),
     ("definition", "GetBool"),
     ("fragment", "fetch/status-feeds.h"),
+    ("definition", "SanitizeAntigravityAppDataDir"),
+    ("definition", "ParseAntigravityDaemonJson"),
 ]
 
 # The sign-in window's controls with their text and layout on the production catalogs: the sign-in
