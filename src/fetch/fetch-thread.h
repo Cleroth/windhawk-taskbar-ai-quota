@@ -172,19 +172,9 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, uint64_t 
         }
     }
 
-    if (!r.ok) {
-        d->stale = true;
-        d->error = {AccountErrorCode::Network};
-        return signInGeneration;
-    }
-    if (r.status == 401) {
-        d->stale = true;
-        d->needsLogin = true;
-        d->error = {AccountErrorCode::Unauthorized};
-        return signInGeneration;
-    }
     // GitHub's rate limits answer 403 with Retry-After or a message naming the rate limit; any
-    // other 403 means the signed-in GitHub account has no Copilot seat or plan.
+    // other 403 means the signed-in GitHub account has no Copilot seat or plan. A rate limit's
+    // status and headers say enough, even when its body couldn't be read.
     bool githubRateLimited = false;
     if (copilot && r.status == 403) {
         std::string message = r.body;
@@ -195,7 +185,19 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, uint64_t 
     if (r.status == 429 || githubRateLimited) {
         d->stale = true;
         d->error = {AccountErrorCode::RateLimited};
-        *retryAfterSec = r.retryAfterSec > 0 ? r.retryAfterSec : 120;
+        // 0 when it names no wait: the polling loop picks one.
+        *retryAfterSec = r.retryAfterSec;
+        return signInGeneration;
+    }
+    if (!r.ok) {
+        d->stale = true;
+        d->error = {AccountErrorCode::Network};
+        return signInGeneration;
+    }
+    if (r.status == 401) {
+        d->stale = true;
+        d->needsLogin = true;
+        d->error = {AccountErrorCode::Unauthorized};
         return signInGeneration;
     }
     if (copilot && r.status == 403) {
@@ -308,6 +310,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     std::vector<int> lastPollMinutes;
     // The sign-in generation each account's last poll read its token with.
     std::vector<uint64_t> pollSignInGeneration;
+    // Each account's rate limits in a row that named no wait (RateLimitWaitSeconds).
+    std::vector<int> rateLimitRefusals;
     std::vector<AccountDetailsCache> accountDetails;
     // Per-account notification arm state at the chosen threshold, indexed by QuotaBarIndex:
     // -1 unknown (primes without firing), 0 below/armed, 1 above/already notified.
@@ -430,19 +434,21 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             lastLoggedErrorStates.assign(accounts.size(), {});
 
             // Remap provider-directed Retry-After, normal poll deadlines, the sign-in they were
-            // read through and account details by stable account identity so settings changes
-            // don't cause another request for unchanged accounts.
+            // read through, rate limit counts and account details by stable account identity so
+            // settings changes don't cause another request for unchanged accounts.
             auto oldIdentityHashes = std::move(retryIdentityHashes);
             auto oldRetryDeadlineMs = std::move(retryDeadlineMs);
             auto oldNextPollDeadlineMs = std::move(nextPollDeadlineMs);
             auto oldPollMinutes = std::exchange(lastPollMinutes, pollMinutes);
             auto oldPollSignInGeneration = std::move(pollSignInGeneration);
+            auto oldRateLimitRefusals = std::move(rateLimitRefusals);
             auto oldAccountDetails = std::move(accountDetails);
             std::vector<bool> oldDeadlineUsed(oldIdentityHashes.size(), false);
             retryIdentityHashes.resize(accounts.size());
             retryDeadlineMs.assign(accounts.size(), 0);
             nextPollDeadlineMs.assign(accounts.size(), 0);
             pollSignInGeneration.assign(accounts.size(), 0);
+            rateLimitRefusals.assign(accounts.size(), 0);
             accountDetails.assign(accounts.size(), {});
             for (size_t i = 0; i < accounts.size(); ++i) {
                 retryIdentityHashes[i] = AccountIdentityHash(accounts[i]);
@@ -456,6 +462,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         if (j < oldPollSignInGeneration.size()) {
                             pollSignInGeneration[i] = oldPollSignInGeneration[j];
                         }
+                        if (j < oldRateLimitRefusals.size()) rateLimitRefusals[i] = oldRateLimitRefusals[j];
                         if (j < oldAccountDetails.size()) {
                             accountDetails[i] = std::move(oldAccountDetails[j]);
                         }
@@ -475,6 +482,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                             } else if (pollIntervalMs && ((changed && failed && accounts[i].hidden) ||
                                                           nextPollDeadlineMs[i] > NowUnixMs() + pollIntervalMs)) {
                                 nextPollDeadlineMs[i] = NowUnixMs() + pollIntervalMs;
+                            }
+                            // The flyout's countdown to a pending retry follows a moved deadline.
+                            if (results[i].retryDeadlineMs) {
+                                results[i].retryDeadlineMs = std::max(retryDeadlineMs[i], nextPollDeadlineMs[i]);
                             }
                         }
                         oldDeadlineUsed[j] = true;
@@ -520,11 +531,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         for (size_t i = 0; i < accounts.size() && !g_unloading; i++) {
             ULONGLONG nowMs = NowUnixMs();
             // The account's sign-in was replaced or removed since its last poll: that login's
-            // deadlines go with it, so the current one polls now.
+            // deadlines and rate limit count go with it, so the current one polls now.
             uint64_t signInGeneration = CurrentSignInGeneration(retryIdentityHashes[i]);
             if (pollSignInGeneration[i] != signInGeneration) {
                 retryDeadlineMs[i] = 0;
                 nextPollDeadlineMs[i] = 0;
+                rateLimitRefusals[i] = 0;
             }
             // A hidden account that isn't polled, Refresh all included.
             if (!pollMinutes[i]) {
@@ -574,9 +586,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 pollSignInGeneration[i] = readingGeneration[i] =
                     FetchAccount(accounts[i], &results[i], readingGeneration[i], &retryAfter, &accountDetails[i]);
             }
-            // Another sign-in than its last poll's: its notifications start over, as a new
-            // account's.
-            if (pollSignInGeneration[i] != lastPollGeneration) armState[i].fill(-1);
+            // Another sign-in than its last poll's: its notifications and rate limit count start
+            // over, as a new account's.
+            if (pollSignInGeneration[i] != lastPollGeneration) {
+                armState[i].fill(-1);
+                rateLimitRefusals[i] = 0;
+            }
             // The journal rejects samples without a known provider code.
             uint32_t providerCode = HistoryProviderCode(accounts[i].provider);
             if (historyEnabled && accounts[i].recordHistory && accounts[i].historyId && providerCode) {
@@ -622,13 +637,32 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 }
                 historyBatch.push_back(sample);
             }
-            // A failed poll retries sooner than the interval (when the provider says, or in two
-            // minutes), except a hidden account's, which never polls more often than its
-            // interval.
+            // A rate limit that names no wait waits longer with each one in a row
+            // (RateLimitWaitSeconds). Refreshes are refused for 15 minutes of that at most: a
+            // longer wait is the account's interval, which its poll deadline keeps. A reading, or
+            // a rate limit naming its wait, starts the count over; other failures, which don't
+            // show the limit lifted, keep it.
+            bool waitsInterval = accounts[i].hidden;
+            if (results[i].error.code == AccountErrorCode::RateLimited && retryAfter <= 0) {
+                rateLimitRefusals[i]++;
+                unsigned jitter = 0;
+                BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(&jitter), sizeof(jitter),
+                                BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+                int wait = RateLimitWaitSeconds(rateLimitRefusals[i], pollMinutes[i], int(jitter % 31));
+                Wh_Log(L"Fetch [%d] rate limited without a wait, %d in a row: next try in %d s", (int)i,
+                       rateLimitRefusals[i], wait);
+                retryAfter = std::min(wait, 900);
+                waitsInterval = true;
+            } else if (!results[i].error || results[i].error.code == AccountErrorCode::RateLimited) {
+                rateLimitRefusals[i] = 0;
+            }
+            // A failed poll retries when the provider says or after its rate limit's wait, else in
+            // two minutes if that is sooner than the interval; a hidden account's never polls more
+            // often than its interval. The flyout counts down to the later deadline.
             if (retryAfter > 0) {
-                nextPollDeadlineMs[i] = accounts[i].hidden ? NowUnixMs() + pollIntervalMs : 0;
+                nextPollDeadlineMs[i] = waitsInterval ? NowUnixMs() + pollIntervalMs : 0;
                 retryDeadlineMs[i] = NowUnixMs() + (ULONGLONG)retryAfter * 1000;
-                results[i].retryDeadlineMs = retryDeadlineMs[i];
+                results[i].retryDeadlineMs = std::max(retryDeadlineMs[i], nextPollDeadlineMs[i]);
                 if (nextRetryMs == 0 || retryDeadlineMs[i] < nextRetryMs) {
                     nextRetryMs = retryDeadlineMs[i];
                 }

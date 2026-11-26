@@ -349,6 +349,16 @@ static ULONGLONG AccountStaleAfterMs(const AccountConfig& account, int pollMinut
     return ULONGLONG(minutes) * 2 * 60000;
 }
 
+// Seconds an account waits after a rate limit that names no wait, the `refusals`th such one in a
+// row, polled every `pollMinutes`: that interval for the first two; then the interval rounded
+// down to 5 minutes, plus 5 minutes per further one and `jitterSeconds`, up to 15 minutes. An
+// interval of 15 minutes or more stays as it is.
+static int RateLimitWaitSeconds(int refusals, int pollMinutes, int jitterSeconds) {
+    int interval = pollMinutes * 60;
+    if (refusals <= 2 || interval >= 900) return interval;
+    return std::min(900, (interval / 300 + refusals - 2) * 300 + jitterSeconds);
+}
+
 static constexpr ULONGLONG kFiveHourWindowMs = 5ULL * 60 * 60 * 1000;
 static constexpr ULONGLONG kWeeklyWindowMs = 7ULL * 24 * 60 * 60 * 1000;
 

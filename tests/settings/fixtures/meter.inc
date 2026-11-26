@@ -1773,6 +1773,29 @@ static void RunAccountTests() {
         CHECK(AccountPollMinutes(cloud, 10, kHiddenPollNever) == 0 && AccountPollMinutes(local, 10, kHiddenPollNever) == 0);
     });
 
+    Run("rate limits naming no wait: a poll interval for the first two in a row, then 5-minute steps up to 15 "
+        "minutes", [] {
+        // The default 10 minutes: 10, 10, then 15.
+        CHECK(RateLimitWaitSeconds(1, 10, 0) == 600 && RateLimitWaitSeconds(2, 10, 0) == 600);
+        CHECK(RateLimitWaitSeconds(3, 10, 0) == 900 && RateLimitWaitSeconds(40, 10, 0) == 900);
+        // The shortest interval: 2, 2, 5, 10, 15, 15.
+        const int shortest[] = {120, 120, 300, 600, 900, 900};
+        for (int n = 1; n <= 6; n++) CHECK(RateLimitWaitSeconds(n, 2, 0) == shortest[n - 1]);
+        // 5 minutes: 5, 5, 10, 15. Steps count from the interval rounded down to 5 minutes: 7, 7, 10, 15
+        // and 14, 14, 15.
+        CHECK(RateLimitWaitSeconds(2, 5, 0) == 300 && RateLimitWaitSeconds(3, 5, 0) == 600 && RateLimitWaitSeconds(4, 5, 0) == 900);
+        CHECK(RateLimitWaitSeconds(2, 7, 0) == 420 && RateLimitWaitSeconds(3, 7, 0) == 600 && RateLimitWaitSeconds(4, 7, 0) == 900);
+        CHECK(RateLimitWaitSeconds(2, 14, 0) == 840 && RateLimitWaitSeconds(3, 14, 0) == 900);
+        // An interval of 15 minutes or more stays, a hidden account's hour included.
+        for (int minutes : {15, 60, 1440}) {
+            CHECK(RateLimitWaitSeconds(1, minutes, 30) == minutes * 60 && RateLimitWaitSeconds(9, minutes, 30) == minutes * 60);
+        }
+        // Jitter spreads the stepped waits only, never past 15 minutes.
+        CHECK(RateLimitWaitSeconds(1, 2, 30) == 120 && RateLimitWaitSeconds(2, 10, 30) == 600);
+        CHECK(RateLimitWaitSeconds(3, 2, 30) == 330 && RateLimitWaitSeconds(4, 2, 17) == 617);
+        CHECK(RateLimitWaitSeconds(5, 2, 30) == 900 && RateLimitWaitSeconds(3, 10, 30) == 900);
+    });
+
     Run("stale after two of an account's polls; a hidden account that isn't polled, after two of a shown one's", [] {
         AccountConfig cloud = Account(L"anthropic"), local = Account(L"antigravity");
         CHECK(AccountStaleAfterMs(cloud, 10, 60) == 20 * kMinute && AccountStaleAfterMs(local, 10, 60) == 2 * kMinute);

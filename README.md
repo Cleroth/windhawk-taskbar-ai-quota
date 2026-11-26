@@ -99,7 +99,7 @@ Thanks to everyone who contributed:
 - [Hugh Macdonald](https://github.com/HughMacdonald): provider outage marks from the status pages
 - [incconutwo](https://github.com/incconutwo): Google Antigravity support, StackPanel taskbar trays on newer Windows 11 builds, and left and right taskbars
 - [smnio](https://github.com/smnio): sign-in hardening (no HTTP redirects, refusing another sign-in's pasted Anthropic code)
-- [Sof2245](https://github.com/Sof2245): GitHub Copilot support, polling only from the taskbar's Explorer process, model and extra limits, free resets and the Claude plan in the details flyout, notification levels, the Custom usage palette, Copy version info, and Antigravity's other quota buckets
+- [Sof2245](https://github.com/Sof2245): GitHub Copilot support, polling only from the taskbar's Explorer process, model and extra limits, free resets and the Claude plan in the details flyout, notification levels, the Custom usage palette, Copy version info, Antigravity's other quota buckets, and growing waits after rate limits
 - [yalov](https://github.com/yalov): the first GitHub Copilot implementation ([#12](https://github.com/Cleroth/windhawk-taskbar-ai-quota/pull/12))
 
 ## License

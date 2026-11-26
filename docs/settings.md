@@ -178,6 +178,12 @@ With the same preview:
   OpenCode Go (Antigravity polls its local server every minute); only the Explorer process that
   runs the taskbar polls, refreshes sign-ins and notifies, so another one (such as folder windows
   launched in a separate process) adds no requests or notifications
+  - A failed poll retries after two minutes, or when the provider says. A rate limit that names
+    no wait is retried after one poll interval; from the third in a row the wait grows in
+    5-minute steps to 15 minutes (a longer poll interval stays as it is), until a poll succeeds
+    or the provider names a wait. The details flyout counts down to the retry; until then a
+    refresh polls nothing, for the whole of a wait the provider named, else for 15 minutes at
+    most.
 - hidden accounts: how often accounts hidden from the taskbar are polled, for the Accounts page,
   the **Show on taskbar** menu and usage history: **1 hour** (the default), 30 minutes, 2, 4, 12
   or 24 hours, a custom 2 to 1440 minutes, **Same as visible accounts**, or **Not polled**

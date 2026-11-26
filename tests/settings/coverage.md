@@ -29,8 +29,8 @@ to `<target>.cpp` with a `.manifest.json`.
   the registry, Automatic matching, the pseudo-locale, lookup with and without context.
 - `meter.inc`, `logos.inc`: the meter model (usage colors, also as text; bars, tiles, account
   state, headline countdown, identity, sparklines and their history requests, projections, matrix
-  cells), `core/model.h`'s account helpers (poll intervals, staleness, the usage summary) and logo
-  paths.
+  cells), `core/model.h`'s account helpers (poll intervals, rate limit waits, staleness, the usage
+  summary) and logo paths.
 - `ui.inc`: toolkit SVG paths, layout cache trims, palette, input, focus, hit testing, scroll,
   controls, the meter (decoration only, its paint), popup rows, placement and keys, the settings
   shell and pages (the About page's links and focus stops).
