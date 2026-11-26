@@ -219,6 +219,12 @@ access token without refresh or expiry and sent only to its usage endpoint.
   tokens mean renewing one signs the app out (launching it to renew races its refresh), a borrowed
   account follows the app's current login (one per source), and gh tokens carry repo/workflow
   scopes. Cut setup friction in the mod's own sign-in instead.
+- Antigravity has no sign-in of its own: the mod takes only the running language server's
+  loopback CSRF token, from its command line or, for a server given it in its environment
+  (`--app_data_dir`, no `--csrf_token`), from the discovery file of its HTTP port,
+  `%USERPROFILE%\.gemini\<app data dir>\daemon\hub_<port>.json` (`pid`, `httpsPort`, `httpPort`,
+  `csrfToken`). Those files outlive their server: trust one only when it names the PID that
+  listens on its port. Never read Antigravity's Google tokens or its other files.
 - Refresh tokens go only to provider token endpoints, never as a bearer token to a quota endpoint.
 - The token store is keyed by `AccountIdentityHash` (provider+label). Keep it stable or sign-ins
   get orphaned.

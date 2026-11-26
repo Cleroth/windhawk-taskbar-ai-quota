@@ -141,6 +141,8 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
         DWORD pid;
         std::wstring mainCsrfToken;
         std::wstring extensionCsrfToken;
+        // Where a server started without a token on its command line writes it.
+        std::wstring discoveryFolder;
         std::vector<int> explicitMainPorts;
         int extensionPort = 0;
         bool cli = false;
@@ -202,13 +204,30 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
                  extensionCsrf.find_first_of(L"\r\n") != std::wstring::npos)) {
                 continue;
             }
-            if (!cli && mainCsrf.empty() && extensionCsrf.empty()) continue;
 
             Candidate candidate;
             candidate.pid = pe.th32ProcessID;
             candidate.mainCsrfToken = std::move(mainCsrf);
             candidate.extensionCsrfToken = std::move(extensionCsrf);
             candidate.cli = cli;
+            // A server given its token in its environment writes it to a discovery file under
+            // <home>\.gemini\<app data dir>\daemon.
+            if (candidate.mainCsrfToken.empty()) {
+                std::wstring appDataDir;
+                for (PCWSTR flag : std::array<PCWSTR, 2>{L"app_data_dir", L"app-data-dir"}) {
+                    appDataDir = ParseCmdLineFlag(cmdLine, flag);
+                    if (!appDataDir.empty()) break;
+                }
+                if (appDataDir.empty()) appDataDir = L"antigravity";
+                wchar_t home[MAX_PATH];
+                DWORD homeLength = GetEnvironmentVariableW(L"USERPROFILE", home, ARRAYSIZE(home));
+                if (homeLength > 0 && homeLength < ARRAYSIZE(home) &&
+                    appDataDir.find_first_of(L"\\/:") == std::wstring::npos &&
+                    appDataDir.find_first_not_of(L'.') != std::wstring::npos) {
+                    candidate.discoveryFolder =
+                        std::wstring(home, homeLength) + L"\\.gemini\\" + appDataDir + L"\\daemon";
+                }
+            }
             bool ide = lowerCmdLine.find(L"antigravity-ide") != std::wstring::npos ||
                        lowerCmdLine.find(L"antigravity ide") != std::wstring::npos ||  // i18n-en
                        lowerCmdLine.find(L"\\extensions\\antigravity\\") != std::wstring::npos ||
@@ -270,6 +289,35 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
             if (port == candidate.extensionPort) continue;
             if (std::find(ports.begin(), ports.end(), port) == ports.end()) ports.push_back(port);
         }
+
+        // The discovery file of the server's HTTP port names its PID and token. Files outlive
+        // their server and a later one can take the port: only one naming this PID counts.
+        if (candidate.mainCsrfToken.empty() && !candidate.discoveryFolder.empty()) {
+            for (int port : ports) {
+                winrt::file_handle file{CreateFileW(
+                    (candidate.discoveryFolder + L"\\hub_" + std::to_wstring(port) + L".json").c_str(),
+                    GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+                std::string text(4096, '\0');
+                DWORD read = 0;
+                if (!file || !ReadFile(file.get(), text.data(), (DWORD)text.size(), &read, nullptr)) {
+                    continue;
+                }
+                text.resize(read);
+                try {
+                    auto discovery = JsonObject::Parse(Utf8ToWide(text));
+                    std::wstring token = GetStr(discovery, L"csrfToken");
+                    if (GetNum(discovery, L"pid") == candidate.pid && !token.empty() &&
+                        token.find_first_of(L"\r\n") == std::wstring::npos) {
+                        candidate.mainCsrfToken = std::move(token);
+                        break;
+                    }
+                } catch (...) {
+                    // Not a discovery file.
+                }
+            }
+        }
+
         if (candidate.cli || !candidate.mainCsrfToken.empty()) {
             for (int port : ports) {
                 endpoints.push_back({port, true, &candidate.mainCsrfToken});
