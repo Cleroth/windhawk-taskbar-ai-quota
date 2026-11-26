@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.27.0
+// @version         2.27.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -1881,8 +1881,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Beim Tempo der letzten 24\u00A0Std.: Limit in ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
      L"Beim Tempo seit {time}: Limit in ~{duration}"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
-     L"Beim Durchschnittstempo dieses Zeitfensters: Limit in ~{duration}"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"Bei diesem Tempo: Limit in ~{duration}"},
     {L"weekday", L"Friday", L"Freitag"},
     {L"weekday", L"Monday", L"Montag"},
     {L"weekday", L"Saturday", L"Samstag"},
@@ -3200,8 +3199,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Al ritmo de las últimas 24\u00A0h: límite en ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
      L"Al ritmo desde {time}: límite en ~{duration}"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
-     L"Al ritmo medio de esta ventana: límite en ~{duration}"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"A este ritmo: límite en ~{duration}"},
     {L"weekday", L"Friday", L"Viernes"},
     {L"weekday", L"Monday", L"Lunes"},
     {L"weekday", L"Saturday", L"Sábado"},
@@ -4536,8 +4534,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Au rythme des dernières 24\u00A0h\u202F: limite dans ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
      L"Au rythme observé depuis {time}\u202F: limite dans ~{duration}"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
-     L"Au rythme moyen de cette fenêtre\u202F: limite dans ~{duration}"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"À ce rythme\u202F: limite dans ~{duration}"},
     {L"weekday", L"Friday", L"Vendredi"},
     {L"weekday", L"Monday", L"Lundi"},
     {L"weekday", L"Saturday", L"Samedi"},
@@ -5660,7 +5657,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"usage-band", L"From yellow", L"黄色以上"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}", L"直近 24 時間のペース: 約 {duration}後に上限"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"{time} 以降のペース: 約 {duration}後に上限"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"この期間の平均ペース: 約 {duration}後に上限"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"現在のペース: 約 {duration}後に上限"},
     {L"weekday", L"Friday", L"金曜日"},
     {L"weekday", L"Monday", L"月曜日"},
     {L"weekday", L"Saturday", L"土曜日"},
@@ -6963,8 +6960,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"No ritmo das últimas 24\u00A0h: limite em ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
      L"No ritmo desde {time}: limite em ~{duration}"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
-     L"No ritmo médio desta janela: limite em ~{duration}"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"Neste ritmo: limite em ~{duration}"},
     {L"weekday", L"Friday", L"Sexta-feira"},
     {L"weekday", L"Monday", L"Segunda-feira"},
     {L"weekday", L"Saturday", L"Sábado"},
@@ -8258,8 +8254,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"При темпе за последние 24\u00A0ч: лимит через ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
      L"При темпе с {time}: лимит через ~{duration}"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
-     L"При среднем темпе этого окна: лимит через ~{duration}"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"При таком темпе: лимит через ~{duration}"},
     {L"weekday", L"Friday", L"Пятница"},
     {L"weekday", L"Monday", L"Понедельник"},
     {L"weekday", L"Saturday", L"Суббота"},
@@ -9350,7 +9345,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"usage-band", L"From yellow", L"自黄色起"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}", L"按过去 24 小时的速率：约 {duration}后达到上限"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"按自 {time} 以来的速率：约 {duration}后达到上限"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"按此窗口的平均速率：约 {duration}后达到上限"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"按当前速率：约 {duration}后达到上限"},
     {L"weekday", L"Friday", L"星期五"},
     {L"weekday", L"Monday", L"星期一"},
     {L"weekday", L"Saturday", L"星期六"},
@@ -23488,8 +23483,9 @@ static std::array<const WindowUsage*, kFlyoutRowCount> FlyoutRowReadings(Account
             &d.antigravityThirdPartyWeek, &d.extraUsage};
 }
 
-// A projection's text when it reaches the limit before the reset, naming its rate's span, as the
-// details flyout and threshold notifications show it; empty otherwise.
+// A projection's text when it reaches the limit before the reset, naming its rate's span unless
+// that is its window's average, as the details flyout and threshold notifications show it; empty
+// otherwise.
 static std::wstring LimitProjectionText(const I18nLocale& locale, const std::optional<UsageProjection>& projected,
                                         const WindowUsage& reading) {
     if (!projected || !projected->limit) return {};
@@ -23505,7 +23501,7 @@ static std::wstring LimitProjectionText(const I18nLocale& locale, const std::opt
         return I18nText(locale, TrCtx(L"usage-projection", L"At the rate since {time}: limit in ~{duration}"),
                         {{L"time", FormatLocalDayTime(since)}, {L"duration", duration}});
     }
-    return I18nText(locale, TrCtx(L"usage-projection", L"At this window's average rate: limit in ~{duration}"),
+    return I18nText(locale, TrCtx(L"usage-projection", L"At this rate: limit in ~{duration}"),
                     {{L"duration", duration}});
 }
 
@@ -24411,8 +24407,8 @@ static void UpdateAccountFlyout(
             show(row.trend, overPace);
             row.unit.Foreground(overPace ? theme.warning : theme.mutedText);
 
-            // The usage graph tiles' projection; the text, naming the rate's span, when it
-            // reaches the limit before the reset. None once the limit is reached.
+            // The usage graph tiles' projection; the text when it reaches the limit before the
+            // reset. None once the limit is reached.
             static const std::vector<TileTracePoint> kNoTrace;
             const std::vector<TileTracePoint>& trace = r >= 0 ? traces[r] : kNoTrace;
             std::optional<UsageProjection> projected;

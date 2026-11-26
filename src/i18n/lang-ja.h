@@ -1108,7 +1108,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"usage-band", L"From yellow", L"黄色以上"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}", L"直近 24 時間のペース: 約 {duration}後に上限"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"{time} 以降のペース: 約 {duration}後に上限"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"この期間の平均ペース: 約 {duration}後に上限"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"現在のペース: 約 {duration}後に上限"},
     {L"weekday", L"Friday", L"金曜日"},
     {L"weekday", L"Monday", L"月曜日"},
     {L"weekday", L"Saturday", L"土曜日"},

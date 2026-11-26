@@ -11,8 +11,8 @@ graph shows only the current reading and its projection.
 Projections run at the average rate over the last 24 hours; during a window's first day, for
 5-hour windows, for monthly extra usage, without recordings, and when recorded usage dropped in
 that span, at the window's average. A recording gap at the 24-hour mark starts the span at the
-reading before the gap. The flyout names the rate when a projection reaches the limit before the
-reset.
+reading before the gap. When a projection reaches the limit before the reset, the flyout says in
+how long: "At this rate" for the window's average, naming the span otherwise.
 
 ## Viewer
 

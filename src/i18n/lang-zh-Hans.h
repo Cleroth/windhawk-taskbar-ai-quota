@@ -1076,7 +1076,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"usage-band", L"From yellow", L"自黄色起"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}", L"按过去 24 小时的速率：约 {duration}后达到上限"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"按自 {time} 以来的速率：约 {duration}后达到上限"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"按此窗口的平均速率：约 {duration}后达到上限"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"按当前速率：约 {duration}后达到上限"},
     {L"weekday", L"Friday", L"星期五"},
     {L"weekday", L"Monday", L"星期一"},
     {L"weekday", L"Saturday", L"星期六"},

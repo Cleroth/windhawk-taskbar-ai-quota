@@ -53,8 +53,9 @@ static std::array<const WindowUsage*, kFlyoutRowCount> FlyoutRowReadings(Account
             &d.antigravityThirdPartyWeek, &d.extraUsage};
 }
 
-// A projection's text when it reaches the limit before the reset, naming its rate's span, as the
-// details flyout and threshold notifications show it; empty otherwise.
+// A projection's text when it reaches the limit before the reset, naming its rate's span unless
+// that is its window's average, as the details flyout and threshold notifications show it; empty
+// otherwise.
 static std::wstring LimitProjectionText(const I18nLocale& locale, const std::optional<UsageProjection>& projected,
                                         const WindowUsage& reading) {
     if (!projected || !projected->limit) return {};
@@ -70,7 +71,7 @@ static std::wstring LimitProjectionText(const I18nLocale& locale, const std::opt
         return I18nText(locale, TrCtx(L"usage-projection", L"At the rate since {time}: limit in ~{duration}"),
                         {{L"time", FormatLocalDayTime(since)}, {L"duration", duration}});
     }
-    return I18nText(locale, TrCtx(L"usage-projection", L"At this window's average rate: limit in ~{duration}"),
+    return I18nText(locale, TrCtx(L"usage-projection", L"At this rate: limit in ~{duration}"),
                     {{L"duration", duration}});
 }
 
@@ -976,8 +977,8 @@ static void UpdateAccountFlyout(
             show(row.trend, overPace);
             row.unit.Foreground(overPace ? theme.warning : theme.mutedText);
 
-            // The usage graph tiles' projection; the text, naming the rate's span, when it
-            // reaches the limit before the reset. None once the limit is reached.
+            // The usage graph tiles' projection; the text when it reaches the limit before the
+            // reset. None once the limit is reached.
             static const std::vector<TileTracePoint> kNoTrace;
             const std::vector<TileTracePoint>& trace = r >= 0 ? traces[r] : kNoTrace;
             std::optional<UsageProjection> projected;
