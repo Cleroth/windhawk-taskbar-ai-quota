@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.24.5
+// @version         2.24.6
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -1476,8 +1476,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"flyout-note", L"No premium request allowance on this plan.",
      L"Dieser Plan enthält keine Premium-Anforderungen."},
     {L"flyout-note", L"No quotas reported.", L"Keine Kontingente gemeldet."},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
-     L"Anmeldung erforderlich. Klicken Sie auf die Balken, um sich anzumelden."},
+    {L"flyout-note", L"Sign-in required. Click the account on the taskbar to sign in.",
+     L"Anmeldung erforderlich. Klicken Sie in der Taskleiste auf das Konto, um sich anzumelden."},
     {L"flyout-note", L"extra usage: unlimited", L"Zusatznutzung: unbegrenzt"},
     {L"flyout-note", L"rate limits: none reported", L"Ratenlimits: keine gemeldet"},
     {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
@@ -2775,8 +2775,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"flyout-note", L"No AI-credit allowance on this plan.", L"Este plan no incluye créditos de IA."},
     {L"flyout-note", L"No premium request allowance on this plan.", L"Este plan no incluye solicitudes premium."},
     {L"flyout-note", L"No quotas reported.", L"No se informó ninguna cuota."},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
-     L"Debes iniciar sesión. Haz clic en las barras para hacerlo."},
+    {L"flyout-note", L"Sign-in required. Click the account on the taskbar to sign in.",
+     L"Debes iniciar sesión. Haz clic en la cuenta en la barra de tareas para hacerlo."},
     {L"flyout-note", L"extra usage: unlimited", L"uso adicional: ilimitado"},
     {L"flyout-note", L"rate limits: none reported", L"límites de frecuencia: no se informó ninguno"},
     {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
@@ -4101,8 +4101,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"flyout-note", L"No AI-credit allowance on this plan.", L"Ce forfait n’inclut aucun crédit IA."},
     {L"flyout-note", L"No premium request allowance on this plan.", L"Ce forfait n’inclut aucune requête premium."},
     {L"flyout-note", L"No quotas reported.", L"Aucun quota signalé."},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
-     L"Connexion requise. Cliquez sur les barres pour vous connecter."},
+    {L"flyout-note", L"Sign-in required. Click the account on the taskbar to sign in.",
+     L"Connexion requise. Cliquez sur le compte dans la barre des tâches pour vous connecter."},
     {L"flyout-note", L"extra usage: unlimited", L"utilisation supplémentaire\u202F: illimitée"},
     {L"flyout-note", L"rate limits: none reported", L"limites de débit\u202F: aucune signalée"},
     {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
@@ -5247,7 +5247,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"flyout-note", L"No AI-credit allowance on this plan.", L"このプランには AI クレジットの割り当てがありません。"},
     {L"flyout-note", L"No premium request allowance on this plan.", L"このプランにはプレミアム リクエストの割り当てがありません。"},
     {L"flyout-note", L"No quotas reported.", L"報告されたクォータはありません。"},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"サインインが必要です。バーをクリックしてサインインしてください。"},
+    {L"flyout-note", L"Sign-in required. Click the account on the taskbar to sign in.",
+     L"サインインが必要です。タスク バーのアカウントをクリックしてサインインしてください。"},
     {L"flyout-note", L"extra usage: unlimited", L"追加使用量: 無制限"},
     {L"flyout-note", L"rate limits: none reported", L"レート制限: 報告なし"},
     {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
@@ -6506,8 +6507,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"flyout-note", L"No AI-credit allowance on this plan.", L"Este plano não inclui créditos de IA."},
     {L"flyout-note", L"No premium request allowance on this plan.", L"Este plano não inclui solicitações premium."},
     {L"flyout-note", L"No quotas reported.", L"Nenhuma cota informada."},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
-     L"É necessário entrar. Clique nas barras para entrar."},
+    {L"flyout-note", L"Sign-in required. Click the account on the taskbar to sign in.",
+     L"É necessário entrar. Clique na conta na barra de tarefas para entrar."},
     {L"flyout-note", L"extra usage: unlimited", L"uso adicional: ilimitado"},
     {L"flyout-note", L"rate limits: none reported", L"limites de taxa: nenhum informado"},
     {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
@@ -7792,7 +7793,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"flyout-note", L"No AI-credit allowance on this plan.", L"В этом тарифе нет ИИ-кредитов."},
     {L"flyout-note", L"No premium request allowance on this plan.", L"В этом тарифе нет премиум-запросов."},
     {L"flyout-note", L"No quotas reported.", L"Нет данных о квотах."},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"Требуется вход. Щёлкните полосы, чтобы войти."},
+    {L"flyout-note", L"Sign-in required. Click the account on the taskbar to sign in.",
+     L"Требуется вход. Щёлкните аккаунт на панели задач, чтобы войти."},
     {L"flyout-note", L"extra usage: unlimited", L"доп. использование: без ограничений"},
     {L"flyout-note", L"rate limits: none reported", L"лимиты запросов: нет данных"},
     {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
@@ -8908,7 +8910,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"flyout-note", L"No AI-credit allowance on this plan.", L"此计划不包含 AI 积分额度。"},
     {L"flyout-note", L"No premium request allowance on this plan.", L"此计划不包含高级请求额度。"},
     {L"flyout-note", L"No quotas reported.", L"未报告任何配额。"},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"需要登录。单击条形以登录。"},
+    {L"flyout-note", L"Sign-in required. Click the account on the taskbar to sign in.",
+     L"需要登录。单击任务栏上的账户以登录。"},
     {L"flyout-note", L"extra usage: unlimited", L"额外用量：无限制"},
     {L"flyout-note", L"rate limits: none reported", L"速率限制：未报告"},
     {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
@@ -24333,7 +24336,8 @@ static void UpdateAccountFlyout(
         show(popup.error, !error.empty());
         std::wstring status;
         if (d.needsLogin && !display.visualTestMode) {
-            status = I18nText(locale, TrCtx(L"flyout-note", L"Sign-in required. Click the bars to sign in."));
+            status = I18nText(locale, TrCtx(L"flyout-note",
+                                            L"Sign-in required. Click the account on the taskbar to sign in."));
         } else if (!visibleRows && d.lastSuccessMs && error.empty() && note.empty()) {
             status = I18nText(locale, TrCtx(L"flyout-note", L"No quotas reported."));
         }

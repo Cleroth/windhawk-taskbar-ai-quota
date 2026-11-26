@@ -1205,7 +1205,8 @@ static void UpdateAccountFlyout(
         show(popup.error, !error.empty());
         std::wstring status;
         if (d.needsLogin && !display.visualTestMode) {
-            status = I18nText(locale, TrCtx(L"flyout-note", L"Sign-in required. Click the bars to sign in."));
+            status = I18nText(locale, TrCtx(L"flyout-note",
+                                            L"Sign-in required. Click the account on the taskbar to sign in."));
         } else if (!visibleRows && d.lastSuccessMs && error.empty() && note.empty()) {
             status = I18nText(locale, TrCtx(L"flyout-note", L"No quotas reported."));
         }
