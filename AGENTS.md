@@ -14,8 +14,8 @@ Windhawk mod that draws AI subscription quota bars on the Windows 11 taskbar; it
 - User-facing docs: [README.md](README.md), the GitHub readme (overview, languages, limitations,
   contributors), and its reference pages: [docs/taskbar.md](docs/taskbar.md) (quotas per
   provider, columns, flyout, outages, notifications), [docs/accounts.md](docs/accounts.md)
-  (adding accounts, sign-in flows, security), [docs/settings.md](docs/settings.md) (every
-  setting), [docs/usage-history.md](docs/usage-history.md) (recording, viewer, storage,
+  (adding accounts, sign-in flows, security, hosts contacted), [docs/settings.md](docs/settings.md)
+  (every setting), [docs/usage-history.md](docs/usage-history.md) (recording, viewer, storage,
   downgrades) and its manual runtime checks
   [docs/usage-history-verification.md](docs/usage-history-verification.md).
 - The catalog readme is the `WindhawkModReadme` block in `src/taskbar-ai-quota.cpp`; it hot-links

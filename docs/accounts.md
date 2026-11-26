@@ -36,3 +36,16 @@ Signing in uses the public OAuth clients of the official CLIs (Claude Code for A
 Status pages are read without any token, key or cookie, with plain GETs to the four hosts listed under [Provider outages](taskbar.md#provider-outages), and never follow redirects either.
 
 Anthropic's usage and profile requests identify as the Claude Code CLI (its user agent): Anthropic reports free resets only to a recent CLI. Besides the usage endpoints, the mod reads Anthropic's OAuth profile (`api.anthropic.com/api/oauth/profile`, for the plan name, about every 6 hours) and, while a ChatGPT account has free resets, `chatgpt.com/backend-api/wham/rate-limit-reset-credits` for their expiry, both with the account's usage token. It never redeems resets.
+
+## Network access
+
+Every host the mod contacts; it makes no other requests. Only the Explorer process that runs the taskbar makes them, and only for providers you added an account of.
+
+| Host | What is sent | When | Stops with |
+| --- | --- | --- | --- |
+| `api.anthropic.com`, `chatgpt.com`, `api.github.com`, `opencode.ai` | The account's access token or key | Each poll of the account: when the mod starts, at the poll interval (10 minutes by default; hidden accounts every hour) and on a refresh | Signing out or removing the account; for a hidden one, **Settings > Behavior > Hidden accounts > Not polled** |
+| `console.anthropic.com`, `auth.openai.com`, `github.com` | The sign-in's code, later the refresh token | When you sign in, and when an access token expires | Signing out or removing the account |
+| `status.claude.com`, `status.openai.com`, `www.githubstatus.com`, `status.opencode.ai` | No token, key or cookie | About every 5 minutes (OpenCode every 10), for providers with an account on the taskbar | **Settings > Display > Show provider outages** |
+| `127.0.0.1` (Antigravity's own server on this PC) | That server's local CSRF token | Each poll of an Antigravity account: every minute on the taskbar, hidden ones every hour | Removing the account; for a hidden one, **Not polled** |
+
+The intervals are set under [Settings > Behavior](settings.md#behavior); what each request reads is described under [Security](#security) and [Provider outages](taskbar.md#provider-outages).
