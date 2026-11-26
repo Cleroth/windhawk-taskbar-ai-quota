@@ -25,9 +25,16 @@ static TaskbarEdge DockedEdge(VisualState const& state) {
     return TaskbarEdge::Unknown;
 }
 
+// The taskbar's frame under a XAML root's content: the content itself on builds whose frame also
+// hosts the tray (an item of its repeater), else a named descendant.
+static FrameworkElement FindTaskbarFrame(FrameworkElement const& root) {
+    if (root && winrt::get_class_name(root) == L"Taskbar.TaskbarFrame") return root;
+    return FindChildByName(root, L"TaskbarFrame", 4);
+}
+
 static StartArea FindStartArea(FrameworkElement const& root) {
     StartArea area;
-    FrameworkElement frame = FindChildByName(root, L"TaskbarFrame", 4);
+    FrameworkElement frame = FindTaskbarFrame(root);
     FrameworkElement rootGrid = frame ? FindChildByName(frame, L"RootGrid", 1) : nullptr;
     area.rootGrid = rootGrid ? rootGrid.try_as<Grid>() : nullptr;
     if (!area.rootGrid) return area;

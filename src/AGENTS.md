@@ -175,6 +175,9 @@ first, then reads/updates XAML.
   `TaskbarHost::FrameHeight` offset can break on Windows updates. If bars stop showing, suspect
   `HookTaskbarDllSymbols` and `TryGetTaskbarElementAbi` first. Positions depend on taskbar element
   names (tray anchors, `TaskbarFrame`/`RootGrid`/`TaskbarFrameRepeater`, Start's automation ID).
+  Since 26300.10075 a taskbar layout rolls out (`Feature_SystemTrayComponent`, 58550794) whose
+  XAML root content is the `Taskbar.TaskbarFrame` itself, with the tray in an item of its
+  repeater; find the frame only through `FindTaskbarFrame`.
 - Symbols come from Windhawk's local cache, then the published mod's online cache entry, then
   Microsoft's PDB. The entry's offsets can be ported from the previous Windows build without a
   PDB and are used unchecked, bar the `FrameHeight` prologue. Windhawk skips the online cache for

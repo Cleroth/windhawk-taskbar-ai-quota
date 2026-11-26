@@ -212,7 +212,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
         // The edge Windows docks the taskbar at, from the native position setting's DockingStates
         // (absent on builds without it). Left and right lay the bars out down the taskbar, at its
         // width.
-        FrameworkElement taskbarFrame = FindChildByName(root, L"TaskbarFrame", 4);
+        FrameworkElement taskbarFrame = FindTaskbarFrame(root);
         VisualStateGroup dockingStates{nullptr};
         if (FrameworkElement rootGrid = taskbarFrame ? FindChildByName(taskbarFrame, L"RootGrid", 1) : nullptr) {
             for (auto const& group : VisualStateManager::GetVisualStateGroups(rootGrid)) {
