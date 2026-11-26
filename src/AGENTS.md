@@ -302,6 +302,8 @@ access token without refresh or expiry and sent only to its usage endpoint.
   [settings reference](../docs/settings.md). A per-user one (consent, language) skips JSON:
   deserialization keeps the caller's value, `LoadSettings` reads it in every branch and
   `ApplyOwnedSettings` writes it.
+- A changed setting rebuilds the taskbar bars unless `KeepQuotaGrids` (`taskbar/inject.h`) lists
+  it. List one only if nothing that builds a grid reads it: a kept grid only repaints.
 - Wide strings throughout; `swprintf`'s `%s` is wide here.
 - UI text: wrap it for localization and update every catalog in the same change; before adding
   or changing UI text, read [i18n/AGENTS.md](i18n/AGENTS.md).

@@ -1046,8 +1046,10 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
     return SettingsApplyResult::Changed;
 }
 
+// After a published change, outside every lock: the bars stay when it can't affect any taskbar's
+// (KeepQuotaGrids), else all are rebuilt; the retry worker injects any that are missing either way.
 static void FinishSettingsApply(bool wakeFetch = true) {
-    RemoveAllQuotaGrids();
+    if (!KeepQuotaGrids()) RemoveAllQuotaGrids();
     StartRetryInject();
     if (wakeFetch && g_refreshEvent) SetEvent(g_refreshEvent);
 }

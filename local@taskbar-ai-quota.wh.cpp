@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.25.1
+// @version         2.25.2
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -11154,7 +11154,10 @@ struct QuotaUiInstance {
     bool frameSide = false;
     double frameThickness = 0;
     bool edgeChanged = false;
+    // The settings the grid was built from and their generation, or the later ones it took
+    // without a rebuild (KeepQuotaGrids).
     ULONGLONG buildSettingsGeneration = 0;
+    Settings buildSettings;
     bool buildVisualTestMode = false;
     // The language current at build, which the grid's updates, menus and flyouts keep: a grid
     // built in another one is never reused. Each update refreshes its regional number format
@@ -25046,6 +25049,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             state.buildSettingsGeneration = g_settingsGeneration;
             settings = g_settings;
         }
+        state.buildSettings = settings;
         std::vector<AccountConfig>& accounts = settings.accounts;
         BarLayout barLayout = settings.barLayout;
         state.buildVisualTestMode = visualTestMode;
@@ -27180,6 +27184,64 @@ static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARA
         return result;
     }
     return DefSubclassProc(hWnd, message, wParam, lParam);
+}
+
+// After a settings change: whether every taskbar keeps its bars, each repainted and taken as built
+// from the current settings. A grid stays when the settings it was built from differ from them
+// only in what no built grid holds: the poll intervals, which each update rereads for the stale
+// mark, and what only polling, notifications and history read. A difference in any other field,
+// one added later included, rebuilds, and so do bars on a taskbar the settings don't show them on
+// (an injection under way as they changed) and the setup tile, whose tooltip holds the stored
+// settings' load state.
+static bool KeepQuotaGrids() {
+    std::vector<std::pair<HWND, DWORD>> windows;
+    {
+        std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
+        if (!g_uiInstances) return false;
+        for (auto& state : *g_uiInstances) windows.push_back({state->hWnd, state->ownerThreadId});
+    }
+    std::vector<HWND> shown = FindCurrentProcessTaskbarWnds();
+    for (auto& window : windows) {
+        if (std::find(shown.begin(), shown.end(), window.first) == shown.end()) return false;
+        bool kept = RunFromWindowThread(window.first, [](void* param) -> bool {
+            auto [hWnd, ownerThreadId] = *static_cast<std::pair<HWND, DWORD>*>(param);
+            // On another thread (the window was replaced), the state isn't this thread's to read.
+            if (g_unloading || GetCurrentThreadId() != ownerThreadId) return false;
+            auto* state = FindUiState(hWnd);
+            if (!state || state->ownerThreadId != ownerThreadId || !state->quotaGrid || state->edgeChanged ||
+                state->buildSettings.accounts.empty()) {
+                return false;
+            }
+            Settings settings;
+            ULONGLONG generation;
+            {
+                std::lock_guard<std::mutex> lk(g_settingsMutex);
+                settings = g_settings;
+                generation = g_settingsGeneration;
+            }
+            // The position, the language and the visual test are read apart from the build's
+            // settings, as for a current grid (InjectQuotaGrid).
+            if (state->placement != settings.placement ||
+                &state->buildLocale.Language() != g_language.load(std::memory_order_acquire) ||
+                state->buildVisualTestMode != g_visualTestMode.load(std::memory_order_acquire)) {
+                return false;
+            }
+            auto held = [](Settings s) {
+                s.pollMinutes = s.hiddenPollMinutes = s.historyRetentionDays = 0;
+                s.notificationLevel = {};
+                s.historyEnabled = false;
+                s.historyDefaultRange = {};
+                return s;
+            };
+            if (held(state->buildSettings) != held(settings)) return false;
+            state->buildSettings = std::move(settings);
+            state->buildSettingsGeneration = generation;
+            UpdateQuotaUi(*state);
+            return true;
+        }, &window);
+        if (!kept) return false;
+    }
+    return true;
 }
 
 static void RemoveAllQuotaGrids(bool waitForCompletion = false) {
@@ -33899,8 +33961,10 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
     return SettingsApplyResult::Changed;
 }
 
+// After a published change, outside every lock: the bars stay when it can't affect any taskbar's
+// (KeepQuotaGrids), else all are rebuilt; the retry worker injects any that are missing either way.
 static void FinishSettingsApply(bool wakeFetch = true) {
-    RemoveAllQuotaGrids();
+    if (!KeepQuotaGrids()) RemoveAllQuotaGrids();
     StartRetryInject();
     if (wakeFetch && g_refreshEvent) SetEvent(g_refreshEvent);
 }

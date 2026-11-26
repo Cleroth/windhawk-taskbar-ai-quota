@@ -387,7 +387,10 @@ struct QuotaUiInstance {
     bool frameSide = false;
     double frameThickness = 0;
     bool edgeChanged = false;
+    // The settings the grid was built from and their generation, or the later ones it took
+    // without a rebuild (KeepQuotaGrids).
     ULONGLONG buildSettingsGeneration = 0;
+    Settings buildSettings;
     bool buildVisualTestMode = false;
     // The language current at build, which the grid's updates, menus and flyouts keep: a grid
     // built in another one is never reused. Each update refreshes its regional number format

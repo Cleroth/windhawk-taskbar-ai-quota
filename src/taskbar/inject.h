@@ -608,6 +608,64 @@ static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARA
     return DefSubclassProc(hWnd, message, wParam, lParam);
 }
 
+// After a settings change: whether every taskbar keeps its bars, each repainted and taken as built
+// from the current settings. A grid stays when the settings it was built from differ from them
+// only in what no built grid holds: the poll intervals, which each update rereads for the stale
+// mark, and what only polling, notifications and history read. A difference in any other field,
+// one added later included, rebuilds, and so do bars on a taskbar the settings don't show them on
+// (an injection under way as they changed) and the setup tile, whose tooltip holds the stored
+// settings' load state.
+static bool KeepQuotaGrids() {
+    std::vector<std::pair<HWND, DWORD>> windows;
+    {
+        std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
+        if (!g_uiInstances) return false;
+        for (auto& state : *g_uiInstances) windows.push_back({state->hWnd, state->ownerThreadId});
+    }
+    std::vector<HWND> shown = FindCurrentProcessTaskbarWnds();
+    for (auto& window : windows) {
+        if (std::find(shown.begin(), shown.end(), window.first) == shown.end()) return false;
+        bool kept = RunFromWindowThread(window.first, [](void* param) -> bool {
+            auto [hWnd, ownerThreadId] = *static_cast<std::pair<HWND, DWORD>*>(param);
+            // On another thread (the window was replaced), the state isn't this thread's to read.
+            if (g_unloading || GetCurrentThreadId() != ownerThreadId) return false;
+            auto* state = FindUiState(hWnd);
+            if (!state || state->ownerThreadId != ownerThreadId || !state->quotaGrid || state->edgeChanged ||
+                state->buildSettings.accounts.empty()) {
+                return false;
+            }
+            Settings settings;
+            ULONGLONG generation;
+            {
+                std::lock_guard<std::mutex> lk(g_settingsMutex);
+                settings = g_settings;
+                generation = g_settingsGeneration;
+            }
+            // The position, the language and the visual test are read apart from the build's
+            // settings, as for a current grid (InjectQuotaGrid).
+            if (state->placement != settings.placement ||
+                &state->buildLocale.Language() != g_language.load(std::memory_order_acquire) ||
+                state->buildVisualTestMode != g_visualTestMode.load(std::memory_order_acquire)) {
+                return false;
+            }
+            auto held = [](Settings s) {
+                s.pollMinutes = s.hiddenPollMinutes = s.historyRetentionDays = 0;
+                s.notificationLevel = {};
+                s.historyEnabled = false;
+                s.historyDefaultRange = {};
+                return s;
+            };
+            if (held(state->buildSettings) != held(settings)) return false;
+            state->buildSettings = std::move(settings);
+            state->buildSettingsGeneration = generation;
+            UpdateQuotaUi(*state);
+            return true;
+        }, &window);
+        if (!kept) return false;
+    }
+    return true;
+}
+
 static void RemoveAllQuotaGrids(bool waitForCompletion = false) {
     std::vector<std::pair<HWND, DWORD>> windows;
     {

@@ -36,6 +36,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             state.buildSettingsGeneration = g_settingsGeneration;
             settings = g_settings;
         }
+        state.buildSettings = settings;
         std::vector<AccountConfig>& accounts = settings.accounts;
         BarLayout barLayout = settings.barLayout;
         state.buildVisualTestMode = visualTestMode;
