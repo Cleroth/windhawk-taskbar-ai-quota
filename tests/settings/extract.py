@@ -32,6 +32,7 @@ MODEL = [
     # The sign-in window's text and layout.
     ("fragment", "auth/login-layout.h"),
     ("fragment", "taskbar/logo-paths.h"),
+    ("fragment", "taskbar/work-clock.h"),
     ("fragment", "taskbar/meter-model.h"),
     *UI_PURE,
     *I18N_UI,
@@ -57,6 +58,7 @@ HISTORY = [
     ("definition", "Utf8ToWide"),
     ("definition", "WideToUtf8"),
     ("fragment", "taskbar/logo-paths.h"),
+    ("fragment", "taskbar/work-clock.h"),
     ("fragment", "taskbar/meter-model.h"),
     *UI_PURE,
     *I18N_UI,

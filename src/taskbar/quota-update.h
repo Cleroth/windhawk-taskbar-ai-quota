@@ -24,7 +24,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     state.buildLocale = I18nLocale(state.buildLocale.Language(), ReadNumberFormat());
     MeterDisplay display = MeterDisplayFor(settings, state.buildLocale, XamlTileTextMeasure(state.buildLocale),
                                            NowUnixMs(), state.rasterizationScale, state.taskbarHeight,
-                                           state.sideWidth);
+                                           state.sideWidth, UnixMsToLocalSystemTime);
     ULONGLONG now = display.now;
     if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, &data);
     if (data.size() != accounts.size()) return;
@@ -316,6 +316,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     if (settings.flyoutChartHoverSpan) {
                         flyoutDisplay.chartHoverAroundMs = SparklineAroundMs(*settings.flyoutChartHoverSpan);
                     }
+                    flyoutDisplay.workDays = display.workDays;
                     flyoutDisplay.outage = outage;
                     flyoutDisplay.outageColor = meters.mark == IdentityMark::Outage ? meters.markColor : 0;
                     flyoutDisplay.locale = display.locale;

@@ -129,6 +129,8 @@ static bool NormalizeSettings(Settings* s) {
         (*s->flyoutChartHoverSpan < SparklineSpan::Window || *s->flyoutChartHoverSpan > SparklineSpan::Hours48)) {
         s->flyoutChartHoverSpan = SparklineSpan::Hours24;
     }
+    if (s->firstWorkDay < 0 || s->firstWorkDay > 6) s->firstWorkDay = Settings().firstWorkDay;
+    if (s->lastWorkDay < 0 || s->lastWorkDay > 6) s->lastWorkDay = Settings().lastWorkDay;
     s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
     s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 13, kBadgeSizeMin, kBadgeSizeMax);
     s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
@@ -325,6 +327,9 @@ static std::wstring SerializeSettings(const Settings& s) {
                                       s.extraUsageChart == ExtraUsageChart::Week ? L"week" : L"month");
         setString(L"flyoutChartSpan", spanName(s.flyoutChartSpan));
         setString(L"flyoutChartHoverSpan", s.flyoutChartHoverSpan ? spanName(*s.flyoutChartHoverSpan) : L"off");
+        setBool(L"workDays", s.workDays);
+        setNumber(L"firstWorkDay", s.firstWorkDay);
+        setNumber(L"lastWorkDay", s.lastWorkDay);
         setNumber(L"yellowThreshold", s.yellowThreshold);
         setNumber(L"orangeThreshold", s.orangeThreshold);
         setNumber(L"redThreshold", s.redThreshold);
@@ -594,6 +599,12 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.flyoutChartHoverSpan = GetStr(root, L"flyoutChartHoverSpan") == L"off" ?
                                      std::nullopt :
                                      std::optional(spanOf(L"flyoutChartHoverSpan", SparklineSpan::Hours24));
+        s.workDays = getBoolDefault(L"workDays", false);
+        // A weekday that is missing or isn't one keeps its default.
+        double firstWorkDay = GetNum(root, L"firstWorkDay", s.firstWorkDay);
+        double lastWorkDay = GetNum(root, L"lastWorkDay", s.lastWorkDay);
+        if (firstWorkDay >= 0 && firstWorkDay <= 6 && firstWorkDay == (int)firstWorkDay) s.firstWorkDay = (int)firstWorkDay;
+        if (lastWorkDay >= 0 && lastWorkDay <= 6 && lastWorkDay == (int)lastWorkDay) s.lastWorkDay = (int)lastWorkDay;
         s.yellowThreshold = (int)GetNum(root, L"yellowThreshold", 50);
         s.orangeThreshold = (int)GetNum(root, L"orangeThreshold", 75);
         s.redThreshold = (int)GetNum(root, L"redThreshold", 90);

@@ -43,8 +43,8 @@ bars fill left to right, stacked vertically; vertical bars sit side by side and 
 the other tile styles are listed in the [settings reference](settings.md). Bars can show compact
 quota keys and percentage text, and use configurable green/yellow/orange/red thresholds with an
 optional colorblind or custom palette. Optional pace ticks compare quota usage with elapsed time
-in each reset window. Stale errors can mark the identity with `!` and the details flyout with a
-warning icon.
+in each reset window, or with the elapsed share of its [work days](#work-days). Stale errors can
+mark the identity with `!` and the details flyout with a warning icon.
 
 With **Identity position** hidden on stacked or vertical bars, an account shows its bars alone,
 without the `!`. An account with no reading yet has no bars: once a poll fails or it needs a
@@ -87,6 +87,29 @@ A quota with recorded usage shows a chart across its window in place of its bar.
 on a weekly or monthly quota's row and its chart zooms to 24 hours each side of now, until the
 pointer leaves the row; **Settings > Display > Chart time span** and **Chart time span on hover**
 set both spans, or turn the zoom off.
+
+## Work days
+
+By default pace and projections count every day alike. With **Settings > Behavior > Work days
+only** on, quotas whose window is longer than a day (weekly and monthly ones, and long limits
+listed in the flyout) count only your work days, from the first through the last you choose:
+
+- The pace (taskbar markers, the flyout's tick and its over-pace arrow, the even-pace line of
+  usage graphs and flyout charts) is the share of the window's working time that has passed. It
+  stands still through a day off, and reaches 100% at the reset as before.
+- The projection measures its rate over the last 24 hours of working time (on a Monday morning
+  that reaches back over the weekend into Friday), applies it to the working time left, and stays
+  level through each day off. The time to the limit it gives is still clock time, days off
+  included. When those 24 working hours reach back over a day off, the flyout and notifications
+  say "At the rate since" with the time they start from, instead of "At the last 24h's rate".
+- Usage on a day off still counts as usage: it shows over a pace that stands still, and it raises
+  the projection's rate, since that time doesn't count as working time. The projection still stays
+  level for the rest of that day.
+
+Days off are whole local dates of this PC, midnight to midnight, so a time zone or clock change
+moves them from the next update on; a provider's reset times never change. A window of a day or
+less (the 5-hour ones) keeps even pace whatever the day. A longer window that lies wholly inside
+days off has no pace or projection.
 
 ## Provider outages
 

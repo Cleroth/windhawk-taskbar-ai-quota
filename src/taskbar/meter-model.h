@@ -647,6 +647,7 @@ struct MeterDisplay {
     bool showPaceTicks;
     PaceTickStyle paceTickStyle;
     COLORREF paceTickColor;   // RGB only.
+    WorkDays workDays;        // The days pace and projections count (WorkDaysFor).
     PercentTextAlignment percentTextAlignment;
     bool showExtraBarAmounts;
     bool showStaleWarning;
@@ -662,10 +663,12 @@ struct MeterDisplay {
 
 // `locale`: the frame's language, `measure` its text widths. `taskbarHeight`: the taskbar's height
 // in DIPs, 0 if unknown (or on a side); tiles leave 4 DIPs above and below them. `sideWidth`:
-// MeterDisplay::sideWidth.
+// MeterDisplay::sideWidth. `localTime`: this PC's, which tells the work days; without it every day
+// is one.
 static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& locale,
                                     const TileTextMeasure& measure, ULONGLONG now, double rasterizationScale,
-                                    double taskbarHeight, double sideWidth = 0) {
+                                    double taskbarHeight, double sideWidth = 0,
+                                    const LocalTimeSource& localTime = {}) {
     int yellow = std::clamp(settings.yellowThreshold, 0, 100);
     int orange = std::clamp(settings.orangeThreshold, yellow, 100);
     sideWidth = std::isfinite(sideWidth) ? std::max(sideWidth, 0.0) : 0.0;
@@ -732,6 +735,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& 
         .showPaceTicks = settings.showPaceTicks,
         .paceTickStyle = settings.paceTickStyle,
         .paceTickColor = settings.paceTickColor & 0x00FFFFFF,
+        .workDays = WorkDaysFor(settings, localTime),
         .percentTextAlignment = settings.percentTextAlignment,
         .showExtraBarAmounts = settings.showExtraBarAmounts,
         .showStaleWarning = settings.showStaleWarning,
@@ -920,14 +924,14 @@ static std::vector<TileTracePoint> VisualTestTrace(const AccountConfig& account,
     return trace;
 }
 
-// How far back a quota's projection measures its rate: a day, so it follows a start late in a
-// weekly window while sleep and breaks stay in the average. 5-hour windows (and a window's first
-// day) get their window's average; monthly extra usage passes 0 for it, since its percentage
-// moves with its budget.
+// How far back a quota's projection measures its rate: a day of its window's working time, so it
+// follows a start late in a weekly window while sleep and breaks stay in the average, and a day
+// off doesn't. 5-hour windows (and a window's first day) get their window's average; monthly
+// extra usage passes 0 for it, since its percentage moves with its budget.
 static constexpr ULONGLONG kProjectionLookbackMs = 24ULL * 60 * 60 * 1000;
 
 // A quota's projection from its current reading, to the reset or, reaching 100% before it, to
-// the limit.
+// the limit: straight in its window's working time, so level through a day off.
 struct UsageProjection {
     ULONGLONG fromMs = 0;   // The current reading's time: now, or the newest recorded reading if later.
     // The rate's span start: the window's start (its average), the lookback's cutoff, or the
@@ -936,31 +940,46 @@ struct UsageProjection {
     ULONGLONG toMs = 0;     // The reset, or the limit's time.
     double toUsed = 0;      // Used % at toMs; 100 at the limit.
     bool limit = false;
+
+    // Used % at `time` on the way from `fromUsed` at fromMs to toMs, by the window's `clock`.
+    double UsedAt(const WorkClock& clock, double fromUsed, ULONGLONG time) const {
+        ULONGLONG work = clock.Work(fromMs, toMs);
+        return work ? fromUsed + (toUsed - fromUsed) * double(clock.Work(fromMs, time)) / double(work) : fromUsed;
+    }
 };
 
-// Projects `reading` (fresh: the caller's check) above 0% and short of 100%, from 5% of its window
-// on and before its reset, at the average rate since its window started at 0%, or with a
-// `lookbackMs` ending after that, since the cutoff it gives. `trace` (oldest first) places the
-// cutoff's usage: interpolated between connected readings, across a recording gap only between
-// equal ones, else the span starts at the reading before the gap. Any decrease from there to the
-// current reading (a reset, a changed budget) falls back to the window's average.
-static std::optional<UsageProjection> ProjectUsage(const WindowUsage& reading,
+// Projects `reading` (fresh: the caller's check) above 0% and short of 100%, from 5% of its
+// window's working time (`clock`: its WorkClockFor) on and before its reset, at the average rate
+// over the working time since its window started at 0%, or with a `lookbackMs` of working time
+// ending after that, since the cutoff it gives. `trace` (oldest first) places the cutoff's usage:
+// interpolated between connected readings, across a recording gap only between equal ones, else
+// the span starts at the reading before the gap. Any decrease from there to the current reading
+// (a reset, a changed budget) falls back to the window's average. Usage on a day off counts in the
+// rise, not in the time it took. The limit is the first time the projection reaches 100%, which a
+// day off before the reset can follow.
+static std::optional<UsageProjection> ProjectUsage(const WindowUsage& reading, const WorkClock& clock,
                                                    const std::vector<TileTracePoint>& trace,
                                                    ULONGLONG now, ULONGLONG lookbackMs) {
     double pct = reading.pct;
-    if (pct <= 0 || pct >= 100 || !reading.windowDurationMs || reading.resetUnixMs <= reading.windowDurationMs) {
-        return std::nullopt;
-    }
-    ULONGLONG start = reading.resetUnixMs - reading.windowDurationMs;
+    if (pct <= 0 || pct >= 100 || !clock.total) return std::nullopt;
+    ULONGLONG start = clock.start;
     ULONGLONG from = trace.empty() ? now : std::max(now, trace.back().timeMs);
-    double elapsed = ((double)from - (double)start) / reading.windowDurationMs;
-    if (elapsed < 0.05 || from >= reading.resetUnixMs) return std::nullopt;
+    if (clock.Elapsed(from) < 0.05 || from >= clock.reset) return std::nullopt;
 
     TileTracePoint base{start, 0, false};
-    if (lookbackMs && from - start > lookbackMs) {
+    if (lookbackMs && clock.Work(start, from) > lookbackMs) {
+        // The cutoff: the latest time with the lookback's working time before the reading.
+        ULONGLONG cutoff = from, missing = lookbackMs;
+        for (auto dayOff = clock.off.rbegin(); dayOff != clock.off.rend(); ++dayOff) {
+            if (dayOff->first >= cutoff) continue;
+            ULONGLONG worked = cutoff - std::min(dayOff->second, cutoff);
+            if (worked >= missing) break;
+            missing -= worked;
+            cutoff = dayOff->first;
+        }
+        cutoff -= missing;
         // The readings around the cutoff: the window's start before the first, the current
         // reading after the last.
-        ULONGLONG cutoff = from - lookbackMs;
         auto next = std::upper_bound(trace.begin(), trace.end(), cutoff,
                                      [](ULONGLONG time, const TileTracePoint& point) { return time < point.timeMs; });
         TileTracePoint before = next == trace.begin() ? base : next[-1];
@@ -983,13 +1002,31 @@ static std::optional<UsageProjection> ProjectUsage(const WindowUsage& reading,
 
     // Products before quotients keep exact cases exact (even use reaching 100% at the reset).
     double rise = pct - base.used;
-    double span = double(from - base.timeMs);
-    UsageProjection projection{from, base.timeMs, reading.resetUnixMs,
-                               pct + rise * double(reading.resetUnixMs - from) / span, false};
-    if (projection.toUsed > 100) {
-        projection.toMs = from + (ULONGLONG)std::llround((100 - pct) * span / rise);
+    double span = double(clock.Work(base.timeMs, from));
+    double left = double(clock.Work(from, clock.reset));
+    UsageProjection projection{from, base.timeMs, clock.reset, pct + rise * left / span, false};
+    // 100% to within the arithmetic's noise is reached: a limit met as a work day ends comes
+    // before the days off that follow, not after them.
+    static constexpr double kReached = 100 - 1e-9;
+    if (rise > 0 && projection.toUsed >= kReached) {
+        // The limit lies in the working time before the first day off that starts with it
+        // reached, else before the reset: that stretch starts at `at`, `worked` from the reading,
+        // and ends `room` from it.
+        double worked = 0, room = left;
+        ULONGLONG at = from;
+        for (const auto& [begin, end] : clock.off) {
+            if (end <= at) continue;
+            double stretch = begin > at ? double(begin - at) : 0;
+            if (pct + rise * (worked + stretch) / span >= kReached) {
+                room = worked + stretch;
+                break;
+            }
+            worked += stretch;
+            at = end;
+        }
+        projection.toMs = at + (ULONGLONG)std::llround(std::clamp((100 - pct) * span / rise, worked, room) - worked);
         projection.toUsed = 100;
-        projection.limit = true;
+        projection.limit = projection.toMs < clock.reset;
     }
     return projection;
 }
@@ -1391,7 +1428,8 @@ struct AccountMeters {
     // display.sparklineAroundMs, a window longer than twice it spans only that much each side of
     // now, kept inside the window: earlier readings drop out, the diagonal is the
     // window's even use across that span, and the projection stops at its end (with the limit mark
-    // only when it reaches the limit before then).
+    // only when it reaches the limit before then). In a window with days off (WorkClockFor), the
+    // diagonal and the projection are level through each of them.
     uint32_t sparkLimitColor = 0;
     double sparkChartHeight = 0;
     double sparkKeyFont = 0;  // The key and extra usage text, display.sparklineTextSize.
@@ -1654,11 +1692,10 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         // Color stays keyed to actual usage so depleting quota still reds out.
         m.color = UsageColor(wu.pct, meters.stale, yellow, orange, red, display.usageColors);
         m.key = QuotaKey(display.locale, account.provider, w);
-        m.paceVisible = paceMarks && !meters.stale && wu.pct >= 0 &&
-                        wu.resetUnixMs > wu.windowDurationMs && wu.windowDurationMs > 0 &&
-                        display.now >= wu.resetUnixMs - wu.windowDurationMs;
-        double remainingFraction = m.paceVisible ?
-            ((double)wu.resetUnixMs - (double)display.now) / wu.windowDurationMs : 0.0;
+        // The pace: the share of the window's working time passed; none without any.
+        const WorkClock clock = WorkClockFor(display.workDays, wu);
+        m.paceVisible = paceMarks && !meters.stale && wu.pct >= 0 && clock.total > 0 && display.now >= clock.start;
+        double remainingFraction = m.paceVisible ? 1.0 - clock.Elapsed(display.now) : 0.0;
 
         if (!tiles) {
             // Remaining mode shows the quota left (100 - used); n/a (pct < 0) stays unchanged
@@ -1932,14 +1969,16 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 return {std::move(figure)};
             };
             if (timed(w)) {
-                // The window's even use, 0% to 100% across the whole window, over the part of it in
-                // the span.
+                // The window's even use, 0% to 100% across its working time, over the part of it in
+                // the span: level through each day off.
                 const ULONGLONG paceFrom = std::max(start, windowStart), paceTo = std::min(start + span, wu.resetUnixMs);
-                if (display.showPaceTicks && paceFrom < paceTo) {
-                    auto even = [&](ULONGLONG time) {
-                        return 100.0 * double(time - windowStart) / double(wu.windowDurationMs);
-                    };
-                    shapes[kSparkPace] = {{xAt(paceFrom), yAt(even(paceFrom)), {{xAt(paceTo), yAt(even(paceTo))}}}};
+                if (display.showPaceTicks && paceFrom < paceTo && clock.total) {
+                    const std::vector<ULONGLONG> corners = clock.Corners(paceFrom, paceTo);
+                    TileOutlineFigure even{xAt(paceFrom), yAt(100 * clock.Elapsed(paceFrom)), {}};
+                    for (size_t c = 1; c < corners.size(); c++) {
+                        even.segments.push_back({xAt(corners[c]), yAt(100 * clock.Elapsed(corners[c]))});
+                    }
+                    shapes[kSparkPace] = {std::move(even)};
                 }
                 // Readings before a span starting inside the window drop out.
                 const std::vector<TileTracePoint> drawn = start > windowStart ? TraceFrom(trace, start) : trace;
@@ -1970,22 +2009,24 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                     // None for a window its provider reports at its limit, whatever its percentage.
                     std::optional<UsageProjection> projection;
                     if (!meters.stale && !data.opencodeLimited[w]) {
-                        projection = ProjectUsage(wu, trace, display.now,
+                        projection = ProjectUsage(wu, clock, trace, display.now,
                                                   w == kExtraUsageBar ? 0 : kProjectionLookbackMs);
                     }
                     if (projection) {
-                        // Cut at the span's end, before a later reset or limit.
+                        // Level through each day off; cut at the span's end, before a later reset
+                        // or limit.
                         ULONGLONG toMs = std::min(projection->toMs, start + span);
-                        double toUsed = projection->toUsed;
-                        if (toMs < projection->toMs) {
-                            toUsed = wu.pct + (toUsed - wu.pct) * ((double)toMs - (double)projection->fromMs) /
-                                                  ((double)projection->toMs - (double)projection->fromMs);
+                        const std::vector<ULONGLONG> corners = clock.Corners(projection->fromMs, toMs);
+                        TileOutlineFigure ahead{x, y, {}};
+                        for (size_t c = 1; c < corners.size(); c++) {
+                            ahead.segments.push_back(
+                                {xAt(corners[c]), yAt(projection->UsedAt(clock, wu.pct, corners[c]))});
                         }
-                        double endX = xAt(toMs), endY = yAt(toUsed);
-                        shapes[kSparkProjection] = {{x, y, {{endX, endY}}}};
                         if (projection->limit && toMs == projection->toMs) {
-                            shapes[kSparkLimit] = {circle(endX, endY, kSparkLimitRadius)};
+                            shapes[kSparkLimit] = {circle(ahead.segments.back().x, ahead.segments.back().y,
+                                                          kSparkLimitRadius)};
                         }
+                        shapes[kSparkProjection] = {std::move(ahead)};
                     }
                 }
             } else {

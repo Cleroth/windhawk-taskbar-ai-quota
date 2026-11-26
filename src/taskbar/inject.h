@@ -610,11 +610,11 @@ static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARA
 
 // After a settings change: whether every taskbar keeps its bars, each repainted and taken as built
 // from the current settings. A grid stays when the settings it was built from differ from them
-// only in what no built grid holds: the poll intervals, which each update rereads for the stale
-// mark, and what only polling, notifications and history read. A difference in any other field,
-// one added later included, rebuilds, and so do bars on a taskbar the settings don't show them on
-// (an injection under way as they changed) and the setup tile, whose tooltip holds the stored
-// settings' load state.
+// only in what no built grid holds: the poll intervals and the work days, which each update
+// rereads for the stale mark, the pace and the projections, and what only polling, notifications
+// and history read. A difference in any other field, one added later included, rebuilds, and so
+// do bars on a taskbar the settings don't show them on (an injection under way as they changed)
+// and the setup tile, whose tooltip holds the stored settings' load state.
 static bool KeepQuotaGrids() {
     std::vector<std::pair<HWND, DWORD>> windows;
     {
@@ -650,6 +650,8 @@ static bool KeepQuotaGrids() {
             }
             auto held = [](Settings s) {
                 s.pollMinutes = s.hiddenPollMinutes = s.historyRetentionDays = 0;
+                s.workDays = false;
+                s.firstWorkDay = s.lastWorkDay = 0;
                 s.notificationLevel = {};
                 s.historyEnabled = false;
                 s.historyDefaultRange = {};

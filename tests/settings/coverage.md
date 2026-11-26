@@ -31,6 +31,10 @@ to `<target>.cpp` with a `.manifest.json`.
   state, headline countdown, identity, sparklines and their history requests, projections, matrix
   cells), `core/model.h`'s account helpers (poll intervals, rate limit waits, staleness, the usage
   summary) and logo paths.
+- `work-days.inc`: work days on synthetic calendars (`taskbar/work-clock.h`): a window's days off
+  by local date (time zones, 23- and 25-hour days, a skipped or repeated midnight), its working
+  time, and what they change in the meter model: pace marks, the projection's rate, lookback and
+  limit, the usage graph's lines.
 - `ui.inc`: toolkit SVG paths, layout cache trims, palette, input, focus, hit testing, scroll,
   controls, the meter (decoration only, its paint), popup rows, placement and keys, the settings
   shell and pages (the About page's links and focus stops).
@@ -42,8 +46,8 @@ to `<target>.cpp` with a `.manifest.json`.
 - `edits.inc`: the edit controller against `TestStore` (in-memory, with an operation log,
   deterministic save failures, saves blocked from replacing unreadable stored settings until
   confirmed, and unload after N transactions), number parsing, the render projection, the paired
-  fields (Keep history and Hidden accounts with their custom numbers), the Behavior and History
-  pages.
+  fields (Keep history and Hidden accounts with their custom numbers), the Behavior (the work
+  days' switch and days among its cards) and History pages.
 - `accounts.inc`: account edits and actions against `TestStore` (labels, drafts, removal with its
   sign-in and history deletion, Add account, sign-in after naming, visibility, moves) and the
   Accounts page (cards, each card's usage with its meter and tooltip, hidden accounts' states, the

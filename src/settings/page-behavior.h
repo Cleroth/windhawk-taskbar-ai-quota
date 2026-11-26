@@ -1,5 +1,6 @@
-// Settings > Behavior: this user's language, where the bars show, hover details, polling (hidden
-// accounts' too) and notifications (approved mockup behavior.png). Pure builder.
+// Settings > Behavior: this user's language, where the bars show, hover details, the work days of
+// pace and projections, polling (hidden accounts' too) and notifications (approved mockup
+// behavior.png, the work days aside). Pure builder.
 
 static constexpr int kSettingsPollPresets[] = {2, 5, 10, 15, 30, 60};
 // Hidden accounts' intervals, in minutes, and the dropdown's value for Custom.
@@ -71,6 +72,38 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
         spec.description = {{I18nText(locale, Tr(L"Opens an account\u2019s details after the pointer rests on it."))}};
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec,
                                   SettingsField::ShowDetailsOnHover);
+    }
+
+    // Pace and projection: the week's work days, Monday first. The days need the switch on.
+    y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Pace and projection")));
+    {
+        UiCardSpec spec;
+        spec.title = I18nText(locale, Tr(L"Work days only"));
+        spec.description = {{I18nText(locale, Tr(L"Pace and projections count only your work days and stay level "
+                                                 L"through your days off, for quotas whose window is longer than a "
+                                                 L"day. Usage on a day off still counts, and reset times stay as "
+                                                 L"they are."))}};
+        y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::WorkDays);
+    }
+    const std::vector<UiOption> weekdays = {{I18nText(locale, TrCtx(L"weekday", L"Monday")), 1},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Tuesday")), 2},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Wednesday")), 3},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Thursday")), 4},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Friday")), 5},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Saturday")), 6},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Sunday")), 0}};
+    for (SettingsField field : {SettingsField::FirstWorkDay, SettingsField::LastWorkDay}) {
+        UiCardSpec spec;
+        if (field == SettingsField::FirstWorkDay) {
+            spec.title = I18nText(locale, Tr(L"First work day"));
+            spec.description = {{I18nText(locale, Tr(L"Your work days run from this day through the last one."))}};
+        } else {
+            spec.title = I18nText(locale, Tr(L"Last work day"));
+        }
+        spec.enabled = s.workDays;
+        if (!s.workDays) spec.reason = I18nText(locale, Tr(L"Turn on Work days only to change this."));
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, field, 200, weekdays,
+                                    SettingsFieldValue(s, field));
     }
 
     // Updates: a preset interval, or Custom with its own number. Text typed into the custom box
@@ -169,7 +202,8 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
 
     UiCardSpec reset;
     reset.title = I18nText(locale, Tr(L"Reset Behavior to defaults"));
-    reset.description = {{I18nText(locale, Tr(L"Language, displays, hover details, polling and notifications."))}};
+    reset.description = {
+        {I18nText(locale, Tr(L"Language, displays, hover details, work days, polling and notifications."))}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset,
                                  SettingsField::ResetBehavior, I18nText(locale, TrCtx(L"button", L"Reset")));
 }

@@ -157,7 +157,7 @@ static void RunDisplayPageTests() {
             CHECK(SettingsFieldValue(changed, field) != SettingsFieldValue(defaults, field));
         }
 
-        // Every scalar setting changed: the four page resets' 73 fields restore every one, and no
+        // Every scalar setting changed: the four page resets' 76 fields restore every one, and no
         // field belongs to two groups (Show on holds the monitor mode and number; Keep history and
         // its custom days both set the retention, Hidden accounts and its custom minutes the hidden
         // accounts' interval).
@@ -167,6 +167,9 @@ static void RunDisplayPageTests() {
         every.showDetailsOnHover = false;
         every.hiddenPollMinutes = 240;
         every.notificationLevel = NotificationLevel::Off;
+        every.workDays = true;
+        every.firstWorkDay = 0;
+        every.lastWorkDay = 4;
         every.language = L"de";
         every.historyEnabled = false;
         every.historyDefaultRange = HistoryUiRange::Quarter;
@@ -224,7 +227,7 @@ static void RunDisplayPageTests() {
         fresh.accounts = every.accounts;
         CHECK(restored == fresh);
         std::sort(seen.begin(), seen.end());
-        CHECK(seen.size() == 73 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+        CHECK(seen.size() == 76 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     });
 
     Run("projection: thresholds stay ordered while typing; out-of-range and bad text", [] {

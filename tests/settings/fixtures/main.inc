@@ -1,6 +1,7 @@
 #include "support.inc"
 #include "i18n.inc"
 #include "meter.inc"
+#include "work-days.inc"
 #include "logos.inc"
 #include "ui.inc"
 #include "controls.inc"
@@ -36,6 +37,7 @@ int main(int argc, char** argv) {
     } else {
         RunI18nTests();
         RunMeterTests();
+        RunWorkDayTests();
         RunLogoTests();
         RunUiTests();
         RunControlTests();

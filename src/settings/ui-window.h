@@ -218,6 +218,7 @@ struct SettingsUiClient final : UiHostClient {
         if (std::exchange(previewPlacement, view.settings.placement) != view.settings.placement) previewScroll = 0;
         view.previewScroll = previewScroll;
         view.now = NowUnixMs();
+        view.localTime = UnixMsToLocalSystemTime;
         view.versionCopied = versionCopied;
         for (size_t i = 0; i < view.settings.accounts.size() && i < edits.keys.size(); i++) {
             SettingsViewAccount account;

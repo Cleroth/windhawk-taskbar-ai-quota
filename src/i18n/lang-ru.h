@@ -207,6 +207,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"many{Экспортировано # строк показателей} other{Экспортировано # строки показателей}} (выбранный "
      L"аккаунт) в {path}. Метки не включены; время в UTC."},
     {L"", L"Extra usage chart", L"График доп. использования"},
+    {L"", L"First work day", L"Первый рабочий день"},
     {L"", L"Free to use, modify and share.", L"Можно свободно использовать, изменять и распространять."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -253,8 +254,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Keep history", L"Хранить историю"},
     {L"", L"Label", L"Метка"},
     {L"", L"Label font size", L"Размер шрифта метки"},
-    {L"", L"Language, displays, hover details, polling and notifications.",
-     L"Язык, дисплеи, сведения при наведении, опрос и уведомления."},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.",
+     L"Язык, дисплеи, сведения при наведении, рабочие дни, опрос и уведомления."},
+    {L"", L"Last work day", L"Последний рабочий день"},
     {L"", L"License", L"Лицензия"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"По умолчанию светло-серый, тёмный на светлой панели задач. «Другой…» открывает выбор цвета."},
@@ -303,6 +305,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Открывает сведения об аккаунте, когда указатель задерживается на нём."},
     {L"", L"Orange from", L"Оранжевый от"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"Темп и прогнозы учитывают только ваши рабочие дни и не растут в выходные — для квот с окном длиннее суток. "
+     L"Использование в выходной день по-прежнему учитывается, а время сброса не меняется."},
     {L"", L"Pace markers", L"Метки темпа"},
     {L"", L"Palette", L"Палитра"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -633,6 +639,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Turn on Pace markers to change this.", L"Чтобы изменить, включите «Метки темпа»."},
     {L"", L"Turn on Record usage history to change this.",
      L"Чтобы изменить, включите «Записывать историю использования»."},
+    {L"", L"Turn on Work days only to change this.", L"Чтобы изменить, включите «Только рабочие дни»."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Недоступные квоты скрываются автоматически. Хотя бы одна остаётся выбранной."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -683,7 +690,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Белый (по умолчанию) следует цвету текста панели задач. «Другой…» открывает выбор цвета."},
     {L"", L"Windows transparency effects are off, so it shows as Solid.",
      L"Эффекты прозрачности Windows выключены, поэтому он отображается как «Сплошной»."},
+    {L"", L"Work days only", L"Только рабочие дни"},
     {L"", L"Yellow from", L"Жёлтый от"},
+    {L"", L"Your work days run from this day through the last one.",
+     L"Ваши рабочие дни идут с этого дня по последний включительно."},
     {L"", L"{exported} Includes both elapsed 7-day periods.", L"{exported} Включает оба прошедших 7-дневных периода."},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
@@ -1174,6 +1184,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"settings-section", L"Language", L"Язык"},
     {L"settings-section", L"Links", L"Ссылки"},
     {L"settings-section", L"Matrix", L"Матрица"},
+    {L"settings-section", L"Pace and projection", L"Темп и прогноз"},
     {L"settings-section", L"Pace markers", L"Метки темпа"},
     {L"settings-section", L"Pies", L"Диаграммы"},
     {L"settings-section", L"Placement", L"Размещение"},
@@ -1287,6 +1298,13 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"При темпе с {time}: лимит через ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"При среднем темпе этого окна: лимит через ~{duration}"},
+    {L"weekday", L"Friday", L"Пятница"},
+    {L"weekday", L"Monday", L"Понедельник"},
+    {L"weekday", L"Saturday", L"Суббота"},
+    {L"weekday", L"Sunday", L"Воскресенье"},
+    {L"weekday", L"Thursday", L"Четверг"},
+    {L"weekday", L"Tuesday", L"Вторник"},
+    {L"weekday", L"Wednesday", L"Среда"},
     {L"window-title", L"{app} — Settings", L"{app} — Параметры"},
     {L"window-title", L"{app} — Usage history", L"{app} — История использования"},
 };

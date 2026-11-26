@@ -25,6 +25,7 @@ struct FlyoutDisplay {
     // whose quota row the pointer rests on (none: as the others).
     ULONGLONG chartAroundMs = 0;
     std::optional<ULONGLONG> chartHoverAroundMs;
+    WorkDays workDays;  // MeterDisplay::workDays
     // What the provider's status page shows, and the taskbar mark's color for it (0: none).
     ProviderOutage outage;
     uint32_t outageColor = 0;
@@ -74,8 +75,8 @@ static std::wstring LimitProjectionText(const I18nLocale& locale, const std::opt
 }
 
 // Fetch thread: the flyout's projection text for a fresh reading of a taskbar slot, from the
-// account's published curve (the flyout row's) and its lookback, in the notification's language.
-// Takes the settings and data locks; call holding neither.
+// account's published curve (the flyout row's), its lookback and the current work days, in the
+// notification's language. Takes the settings and data locks; call holding neither.
 static std::wstring NotificationProjectionText(const I18nLocale& locale, uint64_t historyId, int slot,
                                                const WindowUsage& reading) {
     static constexpr int kRows[kQuotaBarCount] = {kFlyoutFiveHourRow, kFlyoutWeeklyRow, kFlyoutFableRow,
@@ -84,9 +85,15 @@ static std::wstring NotificationProjectionText(const I18nLocale& locale, uint64_
     if (std::optional<BurnUpCurve> curve = CopyBurnUpCurve(historyId, kRows[slot], reading)) {
         for (const BurnUpPoint& point : curve->points) trace.push_back({point.timeMs, point.used, point.connect});
     }
-    return LimitProjectionText(
-        locale, ProjectUsage(reading, trace, NowUnixMs(), slot == kExtraUsageBar ? 0 : kProjectionLookbackMs),
-        reading);
+    WorkDays workDays;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        workDays = WorkDaysFor(g_settings, UnixMsToLocalSystemTime);
+    }
+    return LimitProjectionText(locale,
+                               ProjectUsage(reading, WorkClockFor(workDays, reading), trace, NowUnixMs(),
+                                            slot == kExtraUsageBar ? 0 : kProjectionLookbackMs),
+                               reading);
 }
 
 // Finds the main quota row under the pointer (FlyoutPopup::hoverRow) from its last position over
@@ -169,12 +176,12 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         pattern.Append(gap);
         return pattern;
     };
-    auto paceStroke = [&](wuxs::Line const& line) {
+    auto paceStroke = [&](wuxs::Shape const& line) {
         line.Stroke(theme.chartGuide);
         line.StrokeThickness(1);
         line.StrokeDashArray(dashes(3, 3));
     };
-    auto projectionStroke = [&](wuxs::Line const& line) {
+    auto projectionStroke = [&](wuxs::Shape const& line) {
         line.StrokeThickness(1.4);
         line.StrokeDashArray(dashes(1.5 / 1.4, 2.5 / 1.4));
         line.StrokeDashCap(PenLineCap::Round);
@@ -527,10 +534,10 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
             RectangleGeometry bounds;
             bounds.Rect({0, 0, (float)kFlyoutChartWidth, (float)kFlyoutChartHeight});
             canvas.Clip(bounds);
-            wuxs::Line pace;
-            paceStroke(pace);
-            canvas.Children().Append(pace);
-            row.chartPace = pace;
+            row.chartPace = wuxs::Polyline{};
+            paceStroke(row.chartPace);
+            collapsed(row.chartPace);
+            canvas.Children().Append(row.chartPace);
             row.chartArea = wuxs::Path{};
             canvas.Children().Append(row.chartArea);
             row.chartLines = wuxs::Path{};
@@ -541,7 +548,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
             canvas.Children().Append(row.chartLines);
             row.chartDots = wuxs::Path{};
             canvas.Children().Append(row.chartDots);
-            row.chartProjection = wuxs::Line{};
+            row.chartProjection = wuxs::Polyline{};
             projectionStroke(row.chartProjection);
             collapsed(row.chartProjection);
             canvas.Children().Append(row.chartProjection);
@@ -952,12 +959,10 @@ static void UpdateAccountFlyout(
                 row.fillColor = colorValue;
             }
 
-            bool paced = !display.stale && wu.windowDurationMs > 0 &&
-                         wu.resetUnixMs > wu.windowDurationMs &&
-                         display.now >= wu.resetUnixMs - wu.windowDurationMs;
-            double elapsed = paced ?
-                std::clamp(1.0 - ((double)wu.resetUnixMs - (double)display.now) /
-                                     wu.windowDurationMs, 0.0, 1.0) : 0.0;
+            // The pace: the share of the window's working time passed; none without any.
+            const WorkClock clock = WorkClockFor(display.workDays, wu);
+            bool paced = !display.stale && clock.total > 0 && display.now >= clock.start;
+            double elapsed = paced ? std::clamp(clock.Elapsed(display.now), 0.0, 1.0) : 0.0;
             show(row.paceTick, paced);
             if (paced) {
                 double pacePct = (remainingMode ? 1.0 - elapsed : elapsed) * 100.0;
@@ -977,7 +982,7 @@ static void UpdateAccountFlyout(
             const std::vector<TileTracePoint>& trace = r >= 0 ? traces[r] : kNoTrace;
             std::optional<UsageProjection> projected;
             if (r >= 0 && !display.stale && !limited) {
-                projected = ProjectUsage(wu, trace, display.now,
+                projected = ProjectUsage(wu, clock, trace, display.now,
                                          r == kFlyoutExtraRow ? 0 : kProjectionLookbackMs);
             }
             std::wstring projection = LimitProjectionText(locale, projected, wu);
@@ -1031,34 +1036,31 @@ static void UpdateAccountFlyout(
                 }
                 shape.now = {xAt(now), yAt(wu.pct)};
                 if (projected) {
-                    // Cut at the span's end, before a later reset or limit.
-                    ULONGLONG toMs = std::min(projected->toMs, start + span);
-                    double toUsed = projected->toUsed;
-                    if (toMs < projected->toMs) {
-                        toUsed = wu.pct + (toUsed - wu.pct) * ((double)toMs - (double)projected->fromMs) /
-                                              ((double)projected->toMs - (double)projected->fromMs);
+                    // Level through each day off; cut at the span's end, before a later reset or
+                    // limit.
+                    for (ULONGLONG time : clock.Corners(projected->fromMs, std::min(projected->toMs, start + span))) {
+                        shape.projection.push_back({xAt(time), yAt(projected->UsedAt(clock, wu.pct, time))});
                     }
-                    shape.projectionEnd = {xAt(toMs), yAt(toUsed)};
                 }
-                // The window's even use, 0% at its start to 100% at its reset, over the part of
-                // it in the span.
+                // The window's even use, 0% at its start to 100% at its reset across its working
+                // time, over the part of it in the span: level through each day off.
                 const ULONGLONG paceFrom = std::max(start, windowStart), paceTo = std::min(start + span, wu.resetUnixMs);
-                if (paceFrom < paceTo) {
-                    auto even = [&](ULONGLONG time) {
-                        return 100.0 * double(time - windowStart) / double(wu.windowDurationMs);
-                    };
-                    shape.paceFrom = {xAt(paceFrom), yAt(even(paceFrom))};
-                    shape.paceTo = {xAt(paceTo), yAt(even(paceTo))};
+                if (paceFrom < paceTo && clock.total) {
+                    for (ULONGLONG time : clock.Corners(paceFrom, paceTo)) {
+                        shape.pace.push_back({xAt(time), yAt(100 * clock.Elapsed(time))});
+                    }
                 }
                 shape.color = colorValue;
 
                 FlyoutChartShape& drawn = row.chartShape;
-                if (shape.paceFrom != drawn.paceFrom || shape.paceTo != drawn.paceTo) {
-                    show(row.chartPace, shape.paceFrom.X >= 0);
-                    row.chartPace.X1(shape.paceFrom.X);
-                    row.chartPace.Y1(shape.paceFrom.Y);
-                    row.chartPace.X2(shape.paceTo.X);
-                    row.chartPace.Y2(shape.paceTo.Y);
+                auto points = [](const std::vector<Point>& line) {
+                    PointCollection collection;
+                    for (Point point : line) collection.Append(point);
+                    return collection;
+                };
+                if (shape.pace != drawn.pace) {
+                    show(row.chartPace, !shape.pace.empty());
+                    row.chartPace.Points(points(shape.pace));
                 }
                 if (shape.lines != drawn.lines || shape.dots != drawn.dots) {
                     // Each run is a stroked figure over a filled one closed to the plot bottom.
@@ -1095,19 +1097,15 @@ static void UpdateAccountFlyout(
                     row.chartLines.Data(lines);
                     row.chartDots.Data(dots);
                 }
-                if (shape.now != drawn.now || shape.projectionEnd != drawn.projectionEnd) {
+                if (shape.now != drawn.now) {
                     row.chartNow.X1(shape.now.X);
                     row.chartNow.X2(shape.now.X);
                     Canvas::SetLeft(row.chartMarker, shape.now.X - 3.0);
                     Canvas::SetTop(row.chartMarker, shape.now.Y - 3.0);
-                    bool projectionShown = shape.projectionEnd.X >= 0;
-                    show(row.chartProjection, projectionShown);
-                    if (projectionShown) {
-                        row.chartProjection.X1(shape.now.X);
-                        row.chartProjection.Y1(shape.now.Y);
-                        row.chartProjection.X2(shape.projectionEnd.X);
-                        row.chartProjection.Y2(shape.projectionEnd.Y);
-                    }
+                }
+                if (shape.projection != drawn.projection) {
+                    show(row.chartProjection, !shape.projection.empty());
+                    row.chartProjection.Points(points(shape.projection));
                 }
                 if (shape.color != drawn.color) {
                     Brush usage = FlyoutShapeBrush(color);

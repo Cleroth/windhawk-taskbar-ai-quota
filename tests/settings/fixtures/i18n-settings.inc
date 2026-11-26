@@ -180,7 +180,7 @@ static void RunI18nSettingsTests() {
         CHECK(pseudo.options.size() == 10 && pseudo.options.back().text == L"Pseudo-locale" &&
               pseudo.options.back().value == kSettingsPseudoLanguage && pseudo.text == L"Pseudo-locale");
         // The reset card names the language too.
-        CHECK(HasText(TestBehaviorFrame({}), L"Language, displays, hover details, polling and notifications."));
+        CHECK(HasText(TestBehaviorFrame({}), L"Language, displays, hover details, work days, polling and notifications."));
     });
 
     Run("behavior page in German: navigation, title, sections, cards, options, toggles and the reset; wider "
@@ -197,8 +197,14 @@ static void RunI18nSettingsTests() {
         for (const UiItem& item : frame.content) {
             if (item.kind == UiItemKind::Text && item.font == UiFont::BodyStrong) sections.push_back(UiRunsText(item.runs));
         }
-        CHECK((sections == std::vector<std::wstring>{L"Sprache", L"Taskleiste", L"Details", L"Aktualisierungen",
-                                                     L"Warnungen"}));
+        CHECK((sections == std::vector<std::wstring>{L"Sprache", L"Taskleiste", L"Details", L"Tempo und Prognose",
+                                                     L"Aktualisierungen", L"Warnungen"}));
+        // Work days: the week from Monday, and the days' reason while the switch is off.
+        CHECK((TestOptionTexts(Control(frame, SettingsField::FirstWorkDay)) ==
+               std::vector<std::wstring>{L"Montag", L"Dienstag", L"Mittwoch", L"Donnerstag", L"Freitag", L"Samstag",
+                                         L"Sonntag"}));
+        CHECK(Control(frame, SettingsField::LastWorkDay).text == L"Freitag" && TextCount(frame, L"Nur Arbeitstage") == 1 &&
+              HasText(frame, L"Schalten Sie \u201ENur Arbeitstage\u201C ein, um dies zu \u00E4ndern."));
         CHECK(Control(frame, SettingsField::Language).text == L"Automatisch (Deutsch)");
         const UiItem& showOn = Control(frame, SettingsField::ShowOn);
         CHECK((TestOptionTexts(showOn) == std::vector<std::wstring>{L"Nur Hauptbildschirm", L"Alle Bildschirme",

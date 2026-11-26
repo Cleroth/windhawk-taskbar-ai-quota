@@ -314,6 +314,12 @@ struct Settings {
     // rests on (none: as the others).
     SparklineSpan flyoutChartSpan = SparklineSpan::Window;
     std::optional<SparklineSpan> flyoutChartHoverSpan = SparklineSpan::Hours24;
+    // Quotas whose window is longer than a day pace and project over the week's work days only:
+    // every weekday from the first through the last (SYSTEMTIME::wDayOfWeek, 0: Sunday), wrapping
+    // past Saturday. The days stay while it is off.
+    bool workDays = false;
+    int firstWorkDay = 1;
+    int lastWorkDay = 5;
     UsagePalette usagePalette = UsagePalette::Default;
     // The Custom palette's colors, kept while another palette is chosen.
     std::array<COLORREF, 4> customUsageColors = kDefaultUsageColors;

@@ -303,11 +303,24 @@ static void RunEditTests() {
         CHECK(s.notificationLevel == NotificationLevel::Red);
         SettingsAssign(s, SettingsField::Notifications, -1);
         CHECK(s.notificationLevel == NotificationLevel::Off);
+        // Work days: off, Monday (1) to Friday (5) by default; the switch as desired, the days
+        // clamped to Sunday (0) and Saturday (6).
+        CHECK(SettingsFieldValue(s, SettingsField::WorkDays) == 0 && SettingsFieldValue(s, SettingsField::FirstWorkDay) == 1 &&
+              SettingsFieldValue(s, SettingsField::LastWorkDay) == 5);
+        SettingsAssign(s, SettingsField::WorkDays, 7);
+        SettingsAssign(s, SettingsField::FirstWorkDay, -1);
+        SettingsAssign(s, SettingsField::LastWorkDay, INT_MAX);
+        CHECK(s.workDays && s.firstWorkDay == 0 && s.lastWorkDay == 6 && SettingsFieldValue(s, SettingsField::WorkDays) == 1);
+        SettingsAssign(s, SettingsField::FirstWorkDay, 9);
+        SettingsAssign(s, SettingsField::LastWorkDay, 4);
+        CHECK(s.firstWorkDay == 6 && SettingsFieldValue(s, SettingsField::LastWorkDay) == 4);
+        CHECK(!SettingsFieldRange(SettingsField::FirstWorkDay) && !SettingsFieldRange(SettingsField::LastWorkDay));
         s.historyEnabled = false;
         SettingsAssign(s, SettingsField::ResetBehavior, 0);
         CHECK(s.taskbarMonitorMode == TaskbarMonitorMode::Primary && s.taskbarMonitorNumber == 1);
         CHECK(s.showDetailsOnHover && s.pollMinutes == 10 && s.notificationLevel == NotificationLevel::Red);
         CHECK(s.hiddenPollMinutes == 60);
+        CHECK(!s.workDays && s.firstWorkDay == 1 && s.lastWorkDay == 5);
         CHECK(!s.historyEnabled && s.historyRetentionDays == 3650);  // Not Behavior's
         CHECK(s.historyDefaultRange == HistoryUiRange::Day);
         SettingsAssign(s, SettingsField::ResetHistory, 0);
@@ -732,7 +745,7 @@ static void RunEditTests() {
         CHECK(edits.Reset(SettingsField::ResetBehavior) == 0);
         CHECK(edits.drafts.size() == 1 && edits.drafts[0].field == kRetention && store.settings.hiddenPollMinutes == 60);
         std::vector<SettingsField> behavior = SettingsGroupFields(SettingsField::ResetBehavior);
-        CHECK(behavior.size() == 7 && std::count(behavior.begin(), behavior.end(), kHidden) == 1 &&
+        CHECK(behavior.size() == 10 && std::count(behavior.begin(), behavior.end(), kHidden) == 1 &&
               std::count(behavior.begin(), behavior.end(), kHiddenMinutes) == 1);
     });
 }
@@ -798,12 +811,14 @@ static void RunPageTests() {
         }
         CHECK(Control(frame, SettingsField::ResetBehavior).text == L"Reset");
         CHECK(HasText(frame, L"Notifies when a taskbar quota first reaches the chosen threshold."));
-        // Focus order: language and display dropdowns, the hover toggle, the poll and hidden
-        // accounts dropdowns (each one's disabled box skipped), notifications dropdown, reset.
+        // Focus order: language and display dropdowns, the hover toggle, the work days switch (its
+        // disabled days skipped), the poll and hidden accounts dropdowns (each one's disabled box
+        // skipped), notifications dropdown, reset.
         std::vector<UiFocusStop> stops = UiFocusStops(frame);
-        CHECK(stops.size() == 6 + 7);
+        CHECK(stops.size() == 6 + 8);
         const SettingsField order[] = {SettingsField::Language, SettingsField::ShowOn, SettingsField::ShowDetailsOnHover,
-                                       kPoll, kHidden, SettingsField::Notifications, SettingsField::ResetBehavior};
+                                       SettingsField::WorkDays, kPoll, kHidden, SettingsField::Notifications,
+                                       SettingsField::ResetBehavior};
         for (size_t i = 0; i < std::size(order); i++) {
             CHECK(stops[6 + i].ref.id == SettingsControlId(order[i], order[i] == kPoll ? 8 : 0));
         }
@@ -847,6 +862,66 @@ static void RunPageTests() {
         frame = {};
         SettingsUiBuildFrame(g, view, {1000, 820}, frame);
         CHECK(Control(frame, kPoll, 8).text == L"Custom" && Control(frame, kPoll).enabled);
+    });
+
+    Run("behavior page: work days: the switch, then the first and last day from Monday on, which need it on; they "
+        "save at once and the Behavior reset restores them", [] {
+        UiGraphics& g = TestGraphics();
+        auto build = [&](const SettingsView& view) {
+            UiFrame frame;
+            SettingsUiBuildFrame(g, view, {1000, 820}, frame);
+            return frame;
+        };
+        const std::wstring_view reason = L"Turn on Work days only to change this.";
+        // Off by default: Monday to Friday, shown but not editable, each day saying why.
+        SettingsView view = TestView(SettingsUiPage::Behavior);
+        UiFrame frame = build(view);
+        const UiItem& toggle = Control(frame, SettingsField::WorkDays);
+        const UiItem& first = Control(frame, SettingsField::FirstWorkDay);
+        const UiItem& last = Control(frame, SettingsField::LastWorkDay);
+        CHECK(toggle.kind == UiItemKind::Toggle && !toggle.selected && toggle.enabled);
+        CHECK(first.kind == UiItemKind::Dropdown && !first.enabled && first.text == L"Monday" && first.action.value == 1);
+        CHECK(last.kind == UiItemKind::Dropdown && !last.enabled && last.text == L"Friday" && last.action.value == 5);
+        CHECK(TextCount(frame, reason) == 2);
+        // Both list the week from Monday, each day by its weekday number (Sunday 0).
+        const std::pair<PCWSTR, int> week[] = {{L"Monday", 1}, {L"Tuesday", 2}, {L"Wednesday", 3}, {L"Thursday", 4},
+                                               {L"Friday", 5}, {L"Saturday", 6}, {L"Sunday", 0}};
+        CHECK(first.options.size() == 7 && last.options.size() == 7);
+        for (size_t day = 0; day < 7 && first.options.size() == 7 && last.options.size() == 7; day++) {
+            CHECK(first.options[day].text == week[day].first && first.options[day].value == week[day].second);
+            CHECK(last.options[day].text == week[day].first && last.options[day].value == week[day].second);
+        }
+        // Their section sits between hover details and the poll interval, the switch first.
+        CHECK(Control(frame, SettingsField::ShowDetailsOnHover).rect.bottom < toggle.rect.top &&
+              toggle.rect.bottom < first.rect.top && first.rect.bottom < last.rect.top &&
+              last.rect.bottom < Control(frame, kPoll, 8).rect.top);
+        CHECK(HasText(frame, L"Pace and projection") && HasText(frame, L"Work days only") &&
+              HasText(frame, L"First work day") && HasText(frame, L"Last work day") &&
+              HasText(frame, L"Your work days run from this day through the last one.") &&
+              HasText(frame, L"Language, displays, hover details, work days, polling and notifications."));
+
+        // On, Sunday to Thursday: saved at once, shown and editable, without the reason.
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        CHECK(edits.Commit(0, SettingsField::WorkDays, 1) == 0 && edits.Commit(0, SettingsField::FirstWorkDay, 0) == 0 &&
+              edits.Commit(0, SettingsField::LastWorkDay, 4) == 0);
+        CHECK((store.Applied() == std::vector<std::wstring>{Op(SettingsField::WorkDays, 1), Op(SettingsField::FirstWorkDay, 0),
+                                                            Op(SettingsField::LastWorkDay, 4)}));
+        CHECK(store.settings.workDays && store.settings.firstWorkDay == 0 && store.settings.lastWorkDay == 4 &&
+              edits.drafts.empty());
+        view.settings = edits.Projection();
+        frame = build(view);
+        CHECK(Control(frame, SettingsField::WorkDays).selected && TextCount(frame, reason) == 0);
+        CHECK(Control(frame, SettingsField::FirstWorkDay).enabled && Control(frame, SettingsField::FirstWorkDay).text == L"Sunday");
+        CHECK(Control(frame, SettingsField::LastWorkDay).enabled && Control(frame, SettingsField::LastWorkDay).text == L"Thursday");
+        // Off again keeps the days; the Display reset leaves them, the Behavior reset restores them.
+        CHECK(edits.Commit(0, SettingsField::WorkDays, 0) == 0);
+        CHECK(!store.settings.workDays && store.settings.firstWorkDay == 0 && store.settings.lastWorkDay == 4);
+        CHECK(edits.Reset(SettingsField::ResetDisplay) == 0);
+        CHECK(store.settings.firstWorkDay == 0 && store.settings.lastWorkDay == 4);
+        CHECK(edits.Commit(0, SettingsField::WorkDays, 1) == 0 && edits.Reset(SettingsField::ResetBehavior) == 0);
+        CHECK(!store.settings.workDays && store.settings.firstWorkDay == 1 && store.settings.lastWorkDay == 5);
     });
 
     Run("behavior page: Hidden accounts' choices under the poll interval's cards; its custom box enabled only "
@@ -911,9 +986,9 @@ static void RunPageTests() {
             CHECK(HasText(frame, L"Choose Custom in Hidden accounts to edit.") == !c.enabled);
             // The enabled box is a tab stop after its dropdown.
             std::vector<UiFocusStop> stops = UiFocusStops(frame);
-            CHECK(stops.size() == size_t(6 + 7 + c.enabled));
-            CHECK(stops[6 + 4].ref.id == SettingsControlId(kHidden) &&
-                  (stops[6 + 5].ref.id == SettingsControlId(kHiddenMinutes)) == c.enabled);
+            CHECK(stops.size() == size_t(6 + 8 + c.enabled));
+            CHECK(stops[6 + 5].ref.id == SettingsControlId(kHidden) &&
+                  (stops[6 + 6].ref.id == SettingsControlId(kHiddenMinutes)) == c.enabled);
         }
 
         // A saved custom interval being retyped: "30" projects to a preset, yet Custom stays and

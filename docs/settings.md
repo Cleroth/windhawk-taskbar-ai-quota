@@ -174,6 +174,12 @@ With the same preview:
   per Windows user, as described under [Languages](../README.md#languages)
 - show on: the primary display, all displays, or a detected display with its resolution
 - show details on hover: resting the pointer on a column opens its details flyout (on by default)
+- work days only (off by default), with the **first** and **last work day** (Monday and Friday by
+  default; the days between are work days too, and the run can wrap, as Sunday to Thursday does):
+  pace markers, even-pace lines and projections of quotas whose window is longer than a day count
+  only those days and stay level through the others, as described under
+  [Work days](taskbar.md#work-days). The days stay as set while it is off; a first and last day
+  that cover the whole week count every day
 - cloud poll interval presets plus a custom interval for Anthropic, OpenAI, GitHub Copilot and
   OpenCode Go (Antigravity polls its local server every minute); only the Explorer process that
   runs the taskbar polls, refreshes sign-ins and notifies, so another one (such as folder windows

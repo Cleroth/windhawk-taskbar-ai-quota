@@ -32,6 +32,7 @@ struct SettingsView {
     float previewScroll = 0;            // The preview strip's scroll right of its home, DIPs
                                         // (settings/preview.h)
     ULONGLONG now = 0;                  // Frame time for account countdowns and the preview
+    LocalTimeSource localTime;          // This PC's local time, which tells the preview its work days
     std::optional<bool> versionCopied;  // Copy version info's feedback for a moment: whether it copied
 };
 

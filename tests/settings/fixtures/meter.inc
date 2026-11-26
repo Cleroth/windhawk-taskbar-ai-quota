@@ -3053,7 +3053,7 @@ static void RunSparklineTests() {
         auto day = [&](double d) { return start + (ULONGLONG)std::llround(d * kDay); };
         auto week = [&](double pct) { return WindowUsage{pct, kNow + 36 * 60 * kMinute, kWeeklyWindowMs}; };
         auto project = [&](double pct, std::vector<TileTracePoint> trace, ULONGLONG lookback = kProjectionLookbackMs) {
-            std::optional<UsageProjection> p = ProjectUsage(week(pct), trace, kNow, lookback);
+            std::optional<UsageProjection> p = ProjectUsage(week(pct), WorkClockFor({}, week(pct)), trace, kNow, lookback);
             CHECK(p && p->fromMs == kNow);
             return *p;
         };
@@ -3095,11 +3095,13 @@ static void RunSparklineTests() {
         toReset(project(52, {{day(1), 30, false}, {day(2), 5, true}, {day(3), 40, false}, {day(5), 40, false},
                              {day(5.5), 52, true}}), kNow - kDay, 70);
         // Within the window's first day: its average.
+        const WindowUsage firstDay{20, kNow + kWeeklyWindowMs - 12 * 60 * kMinute, kWeeklyWindowMs};
         std::optional<UsageProjection> early =
-            ProjectUsage({20, kNow + kWeeklyWindowMs - 12 * 60 * kMinute, kWeeklyWindowMs}, {}, kNow, kProjectionLookbackMs);
+            ProjectUsage(firstDay, WorkClockFor({}, firstDay), {}, kNow, kProjectionLookbackMs);
         CHECK(early && early->sinceMs == kNow - 12 * 60 * kMinute && early->limit && early->toMs == kNow + 48 * 60 * kMinute);
         // 5-hour windows: their average, 45% half way reaching 90%.
-        std::optional<UsageProjection> hours = ProjectUsage(Window(45, 9000000), {}, kNow, kProjectionLookbackMs);
+        std::optional<UsageProjection> hours =
+            ProjectUsage(Window(45, 9000000), WorkClockFor({}, Window(45, 9000000)), {}, kNow, kProjectionLookbackMs);
         CHECK(hours && hours->sinceMs == kNow - 9000000 && !hours->limit);
         CHECK_NEAR(hours->toUsed, 90);
 

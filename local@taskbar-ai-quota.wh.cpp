@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.25.2
+// @version         2.26.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -84,7 +84,8 @@ signed-in local app or CLI session, which must remain running.
   provider outages, how the details flyout charts Anthropic extra usage (its month, the
   weekly window, or a bar), and its weekly and monthly charts' spans, at rest and with the
   pointer on a quota's row (the whole window, or 12 to 48 hours each side of now).
-- **Behavior:** Choose the language, displays, hover details, polling (hidden accounts every
+- **Behavior:** Choose the language, displays, hover details, work days (pace and projections
+  skip your days off on weekly and monthly quotas), polling (hidden accounts every
   hour by default, at another interval, as often as visible ones, or not at all), and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
   default) or for a number of days, and choose recording per account independently of taskbar
@@ -782,6 +783,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"{rows, plural, one{# Messwertzeile} other{# Messwertzeilen}} (ausgewähltes Konto) nach {path} "
      L"exportiert. Ohne Bezeichnungen; Zeiten in UTC."},
     {L"", L"Extra usage chart", L"Diagramm der Zusatznutzung"},
+    {L"", L"First work day", L"Erster Arbeitstag"},
     {L"", L"Free to use, modify and share.", L"Frei nutzbar, veränderbar und weitergebbar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -829,8 +831,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Keep history", L"Verlauf aufbewahren"},
     {L"", L"Label", L"Bezeichnung"},
     {L"", L"Label font size", L"Schriftgröße der Bezeichnung"},
-    {L"", L"Language, displays, hover details, polling and notifications.",
-     L"Sprache, Bildschirme, Details beim Daraufzeigen, Abfragen und Benachrichtigungen."},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.",
+     L"Sprache, Bildschirme, Details beim Daraufzeigen, Arbeitstage, Abfragen und Benachrichtigungen."},
+    {L"", L"Last work day", L"Letzter Arbeitstag"},
     {L"", L"License", L"Lizenz"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"Standardmäßig hellgrau, auf einer hellen Taskleiste dunkel. „Anpassen…“ öffnet die Farbauswahl."},
@@ -882,6 +885,11 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Öffnet die Details eines Kontos, wenn der Zeiger darauf verweilt."},
     {L"", L"Orange from", L"Orange ab"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"Tempo und Prognosen zählen nur Ihre Arbeitstage und bleiben an Ihren freien Tagen unverändert, bei "
+     L"Kontingenten mit einem Zeitfenster von mehr als einem Tag. Nutzung an einem freien Tag zählt weiterhin, und "
+     L"die Reset-Zeiten bleiben, wie sie sind."},
     {L"", L"Pace markers", L"Tempomarkierungen"},
     {L"", L"Palette", L"Palette"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -1229,6 +1237,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Turn on Pace markers to change this.", L"Schalten Sie „Tempomarkierungen“ ein, um dies zu ändern."},
     {L"", L"Turn on Record usage history to change this.",
      L"Schalten Sie „Nutzungsverlauf aufzeichnen“ ein, um dies zu ändern."},
+    {L"", L"Turn on Work days only to change this.", L"Schalten Sie „Nur Arbeitstage“ ein, um dies zu ändern."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Nicht verfügbare Kontingente werden automatisch ausgeblendet. Mindestens eines bleibt ausgewählt."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -1282,7 +1291,10 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Weiß, der Standard, folgt der Textfarbe der Taskleiste. „Anpassen…“ öffnet die Farbauswahl."},
     {L"", L"Windows transparency effects are off, so it shows as Solid.",
      L"Die Transparenzeffekte von Windows sind aus, daher erscheint es als „Einfarbig“."},
+    {L"", L"Work days only", L"Nur Arbeitstage"},
     {L"", L"Yellow from", L"Gelb ab"},
+    {L"", L"Your work days run from this day through the last one.",
+     L"Ihre Arbeitstage reichen von diesem Tag bis einschließlich zum letzten."},
     {L"", L"{exported} Includes both elapsed 7-day periods.",
      L"{exported} Enthält beide verstrichenen 7-Tage-Zeiträume."},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
@@ -1773,6 +1785,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"settings-section", L"Language", L"Sprache"},
     {L"settings-section", L"Links", L"Links"},
     {L"settings-section", L"Matrix", L"Matrix"},
+    {L"settings-section", L"Pace and projection", L"Tempo und Prognose"},
     {L"settings-section", L"Pace markers", L"Tempomarkierungen"},
     {L"settings-section", L"Pies", L"Kreisdiagramme"},
     {L"settings-section", L"Placement", L"Platzierung"},
@@ -1888,6 +1901,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Beim Tempo seit {time}: Limit in ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"Beim Durchschnittstempo dieses Zeitfensters: Limit in ~{duration}"},
+    {L"weekday", L"Friday", L"Freitag"},
+    {L"weekday", L"Monday", L"Montag"},
+    {L"weekday", L"Saturday", L"Samstag"},
+    {L"weekday", L"Sunday", L"Sonntag"},
+    {L"weekday", L"Thursday", L"Donnerstag"},
+    {L"weekday", L"Tuesday", L"Dienstag"},
+    {L"weekday", L"Wednesday", L"Mittwoch"},
     {L"window-title", L"{app} — Settings", L"{app} – Einstellungen"},
     {L"window-title", L"{app} — Usage history", L"{app} – Nutzungsverlauf"},
 };
@@ -2101,6 +2121,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"{rows, plural, one{Se exportó # fila de métricas} many{Se exportaron # de filas de métricas} "
      L"other{Se exportaron # filas de métricas}} (cuenta seleccionada) a {path}. Sin etiquetas; horas en UTC."},
     {L"", L"Extra usage chart", L"Gráfico del uso adicional"},
+    {L"", L"First work day", L"Primer día laborable"},
     {L"", L"Free to use, modify and share.", L"Libre para usar, modificar y compartir."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -2147,8 +2168,9 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Keep history", L"Conservar historial"},
     {L"", L"Label", L"Etiqueta"},
     {L"", L"Label font size", L"Tamaño de fuente de la etiqueta"},
-    {L"", L"Language, displays, hover details, polling and notifications.",
-     L"Idioma, pantallas, detalles al pasar el puntero, consultas y notificaciones."},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.",
+     L"Idioma, pantallas, detalles al pasar el puntero, días laborables, consultas y notificaciones."},
+    {L"", L"Last work day", L"Último día laborable"},
     {L"", L"License", L"Licencia"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"Gris claro de forma predeterminada, oscuro en una barra de tareas clara. Personalizar… abre el selector de "
@@ -2200,6 +2222,10 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Abre los detalles de una cuenta cuando el puntero se detiene sobre ella."},
     {L"", L"Orange from", L"Naranja desde"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"El ritmo y las proyecciones cuentan solo tus días laborables y no avanzan en tus días libres, en las cuotas "
+     L"cuya ventana dura más de un día. El uso en un día libre sigue contando, y las horas de reinicio no cambian."},
     {L"", L"Pace markers", L"Marcadores de ritmo"},
     {L"", L"Palette", L"Paleta"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -2538,6 +2564,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Turn off Reset countdown to change this.", L"Desactiva Cuenta atrás de reinicio para cambiar esto."},
     {L"", L"Turn on Pace markers to change this.", L"Activa Marcadores de ritmo para cambiar esto."},
     {L"", L"Turn on Record usage history to change this.", L"Activa Registrar historial de uso para cambiar esto."},
+    {L"", L"Turn on Work days only to change this.", L"Activa Solo días laborables para cambiar esto."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Las cuotas no disponibles se ocultan automáticamente. Al menos una queda seleccionada."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -2591,7 +2618,10 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"color."},
     {L"", L"Windows transparency effects are off, so it shows as Solid.",
      L"Los efectos de transparencia de Windows están desactivados, así que se muestra como Sólido."},
+    {L"", L"Work days only", L"Solo días laborables"},
     {L"", L"Yellow from", L"Amarillo desde"},
+    {L"", L"Your work days run from this day through the last one.",
+     L"Tus días laborables van desde este día hasta el último, ambos incluidos."},
     {L"", L"{exported} Includes both elapsed 7-day periods.",
      L"{exported} Incluye los dos periodos de 7 días transcurridos."},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
@@ -3089,6 +3119,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"settings-section", L"Language", L"Idioma"},
     {L"settings-section", L"Links", L"Vínculos"},
     {L"settings-section", L"Matrix", L"Matriz"},
+    {L"settings-section", L"Pace and projection", L"Ritmo y proyección"},
     {L"settings-section", L"Pace markers", L"Marcadores de ritmo"},
     {L"settings-section", L"Pies", L"Sectores"},
     {L"settings-section", L"Placement", L"Ubicación"},
@@ -3203,6 +3234,13 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Al ritmo desde {time}: límite en ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"Al ritmo medio de esta ventana: límite en ~{duration}"},
+    {L"weekday", L"Friday", L"Viernes"},
+    {L"weekday", L"Monday", L"Lunes"},
+    {L"weekday", L"Saturday", L"Sábado"},
+    {L"weekday", L"Sunday", L"Domingo"},
+    {L"weekday", L"Thursday", L"Jueves"},
+    {L"weekday", L"Tuesday", L"Martes"},
+    {L"weekday", L"Wednesday", L"Miércoles"},
     {L"window-title", L"{app} — Settings", L"{app} — Configuración"},
     {L"window-title", L"{app} — Usage history", L"{app} — Historial de uso"},
 };
@@ -3427,6 +3465,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"{rows, plural, one{# ligne d’indicateur exportée} many{# de lignes d’indicateurs exportées} other{# lignes "
      L"d’indicateurs exportées}} (compte sélectionné) vers {path}. Libellés omis\u202F; heures en UTC."},
     {L"", L"Extra usage chart", L"Graphique de l’utilisation supplémentaire"},
+    {L"", L"First work day", L"Premier jour de travail"},
     {L"", L"Free to use, modify and share.", L"Libre d’utilisation, de modification et de partage."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -3474,8 +3513,9 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Keep history", L"Conserver l’historique"},
     {L"", L"Label", L"Libellé"},
     {L"", L"Label font size", L"Taille de police du libellé"},
-    {L"", L"Language, displays, hover details, polling and notifications.",
-     L"Langue, écrans, détails au survol, interrogations et notifications."},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.",
+     L"Langue, écrans, détails au survol, jours de travail, interrogations et notifications."},
+    {L"", L"Last work day", L"Dernier jour de travail"},
     {L"", L"License", L"Licence"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"Gris clair par défaut, foncé sur une barre des tâches claire. Personnaliser… ouvre le sélecteur de couleurs."},
@@ -3526,6 +3566,11 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Ouvre les détails d’un compte quand le pointeur s’y arrête."},
     {L"", L"Orange from", L"Orange à partir de"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"Le rythme et les projections ne comptent que vos jours de travail et n’avancent pas pendant vos jours de "
+     L"repos, pour les quotas dont la fenêtre dépasse un jour. L’utilisation un jour de repos compte toujours, et "
+     L"les heures de réinitialisation ne changent pas."},
     {L"", L"Pace markers", L"Repères de rythme"},
     {L"", L"Palette", L"Palette"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -3869,6 +3914,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Turn on Pace markers to change this.", L"Activez Repères de rythme pour modifier ce paramètre."},
     {L"", L"Turn on Record usage history to change this.",
      L"Activez Enregistrer l’historique d’utilisation pour modifier ce paramètre."},
+    {L"", L"Turn on Work days only to change this.",
+     L"Activez Jours de travail uniquement pour modifier ce paramètre."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Les quotas indisponibles sont masqués automatiquement. Au moins un reste sélectionné."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -3920,7 +3967,10 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"couleurs."},
     {L"", L"Windows transparency effects are off, so it shows as Solid.",
      L"Les effets de transparence de Windows sont désactivés\u202F: le matériau s’affiche donc comme Opaque."},
+    {L"", L"Work days only", L"Jours de travail uniquement"},
     {L"", L"Yellow from", L"Jaune à partir de"},
+    {L"", L"Your work days run from this day through the last one.",
+     L"Vos jours de travail vont de ce jour au dernier, inclus."},
     {L"", L"{exported} Includes both elapsed 7-day periods.",
      L"{exported} Comprend les deux périodes écoulées de 7\u00A0jours."},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
@@ -4424,6 +4474,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"settings-section", L"Language", L"Langue"},
     {L"settings-section", L"Links", L"Liens"},
     {L"settings-section", L"Matrix", L"Matrice"},
+    {L"settings-section", L"Pace and projection", L"Rythme et projection"},
     {L"settings-section", L"Pace markers", L"Repères de rythme"},
     {L"settings-section", L"Pies", L"Secteurs"},
     {L"settings-section", L"Placement", L"Emplacement"},
@@ -4538,6 +4589,13 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Au rythme observé depuis {time}\u202F: limite dans ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"Au rythme moyen de cette fenêtre\u202F: limite dans ~{duration}"},
+    {L"weekday", L"Friday", L"Vendredi"},
+    {L"weekday", L"Monday", L"Lundi"},
+    {L"weekday", L"Saturday", L"Samedi"},
+    {L"weekday", L"Sunday", L"Dimanche"},
+    {L"weekday", L"Thursday", L"Jeudi"},
+    {L"weekday", L"Tuesday", L"Mardi"},
+    {L"weekday", L"Wednesday", L"Mercredi"},
     {L"window-title", L"{app} — Settings", L"{app} — Paramètres"},
     {L"window-title", L"{app} — Usage history", L"{app} — Historique d’utilisation"},
 };
@@ -4709,6 +4767,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"Labels omitted; times UTC.",
      L"{rows, plural, other{メーター # 行}} (選択したアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
     {L"", L"Extra usage chart", L"追加使用量のグラフ"},
+    {L"", L"First work day", L"最初の勤務日"},
     {L"", L"Free to use, modify and share.", L"自由に使用、変更、共有できます。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -4748,8 +4807,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Keep history", L"履歴の保持"},
     {L"", L"Label", L"ラベル"},
     {L"", L"Label font size", L"ラベルのフォント サイズ"},
-    {L"", L"Language, displays, hover details, polling and notifications.",
-     L"言語、ディスプレイ、ホバー時の詳細、ポーリング、通知。"},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.",
+     L"言語、ディスプレイ、ホバー時の詳細、勤務日、ポーリング、通知。"},
+    {L"", L"Last work day", L"最後の勤務日"},
     {L"", L"License", L"ライセンス"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"既定では薄い灰色、明るいタスク バーでは暗い色です。［カスタム…］でカラー ピッカーを開きます。"},
@@ -4793,6 +4853,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"ポインターを合わせたままにすると、アカウントの詳細を開きます。"},
     {L"", L"Orange from", L"オレンジのしきい値"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"ペースと予測は勤務日だけを数え、休みの日は進みません。期間が 1 日より長いクォータが対象です。休みの日の使用量も加算され、リセット時刻は変わりません。"},
     {L"", L"Pace markers", L"ペース マーカー"},
     {L"", L"Palette", L"パレット"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -5052,6 +5115,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Turn off Reset countdown to change this.", L"変更するには、［リセットまでの残り時間］をオフにしてください。"},
     {L"", L"Turn on Pace markers to change this.", L"変更するには、［ペース マーカー］をオンにしてください。"},
     {L"", L"Turn on Record usage history to change this.", L"変更するには、［使用履歴を記録］をオンにしてください。"},
+    {L"", L"Turn on Work days only to change this.", L"変更するには、［勤務日のみ］をオンにしてください。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"利用できないクォータは自動的に非表示になります。少なくとも 1 つは選択されたままです。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -5091,7 +5155,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"White, the default, follows the taskbar’s text color. Custom... opens the color picker.",
      L"既定の白は、タスク バーの文字色に従います。［カスタム…］でカラー ピッカーを開きます。"},
     {L"", L"Windows transparency effects are off, so it shows as Solid.", L"Windows の透明効果がオフのため、［単色］として表示されます。"},
+    {L"", L"Work days only", L"勤務日のみ"},
     {L"", L"Yellow from", L"黄色のしきい値"},
+    {L"", L"Your work days run from this day through the last one.", L"勤務日は、この曜日から最後の勤務日までです。"},
     {L"", L"{exported} Includes both elapsed 7-day periods.", L"{exported}経過した 2 つの 7 日間を両方とも含みます。"},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
@@ -5555,6 +5621,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"settings-section", L"Language", L"言語"},
     {L"settings-section", L"Links", L"リンク"},
     {L"settings-section", L"Matrix", L"マトリックス"},
+    {L"settings-section", L"Pace and projection", L"ペースと予測"},
     {L"settings-section", L"Pace markers", L"ペース マーカー"},
     {L"settings-section", L"Pies", L"円グラフ"},
     {L"settings-section", L"Placement", L"表示位置"},
@@ -5658,6 +5725,13 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}", L"直近 24 時間のペース: 約 {duration}後に上限"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"{time} 以降のペース: 約 {duration}後に上限"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"この期間の平均ペース: 約 {duration}後に上限"},
+    {L"weekday", L"Friday", L"金曜日"},
+    {L"weekday", L"Monday", L"月曜日"},
+    {L"weekday", L"Saturday", L"土曜日"},
+    {L"weekday", L"Sunday", L"日曜日"},
+    {L"weekday", L"Thursday", L"木曜日"},
+    {L"weekday", L"Tuesday", L"火曜日"},
+    {L"weekday", L"Wednesday", L"水曜日"},
     {L"window-title", L"{app} — Settings", L"{app} — 設定"},
     {L"window-title", L"{app} — Usage history", L"{app} — 使用履歴"},
 };
@@ -5873,6 +5947,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"other{# linhas de medidores exportadas}} (conta selecionada) para {path}. Rótulos omitidos; horários em "
      L"UTC."},
     {L"", L"Extra usage chart", L"Gráfico do uso adicional"},
+    {L"", L"First work day", L"Primeiro dia de trabalho"},
     {L"", L"Free to use, modify and share.", L"Livre para usar, modificar e compartilhar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -5919,8 +5994,9 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Keep history", L"Manter histórico"},
     {L"", L"Label", L"Rótulo"},
     {L"", L"Label font size", L"Tamanho da fonte do rótulo"},
-    {L"", L"Language, displays, hover details, polling and notifications.",
-     L"Idioma, telas, detalhes ao passar o mouse, consultas e notificações."},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.",
+     L"Idioma, telas, detalhes ao passar o mouse, dias de trabalho, consultas e notificações."},
+    {L"", L"Last work day", L"Último dia de trabalho"},
     {L"", L"License", L"Licença"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"Cinza-claro por padrão, escuro em uma barra de tarefas clara. Personalizar… abre o seletor de cores."},
@@ -5969,6 +6045,11 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Abre os detalhes de uma conta quando o ponteiro para sobre ela."},
     {L"", L"Orange from", L"Laranja a partir de"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"O ritmo e as projeções contam apenas seus dias de trabalho e não avançam nos seus dias de folga, para cotas "
+     L"cuja janela é maior que um dia. O uso em um dia de folga continua contando, e os horários de reinício não "
+     L"mudam."},
     {L"", L"Pace markers", L"Marcadores de ritmo"},
     {L"", L"Palette", L"Paleta"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -6301,6 +6382,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Turn off Reset countdown to change this.", L"Desative Contagem até o reinício para alterar isto."},
     {L"", L"Turn on Pace markers to change this.", L"Ative Marcadores de ritmo para alterar isto."},
     {L"", L"Turn on Record usage history to change this.", L"Ative Registrar histórico de uso para alterar isto."},
+    {L"", L"Turn on Work days only to change this.", L"Ative Somente dias de trabalho para alterar isto."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Cotas indisponíveis são ocultadas automaticamente. Pelo menos uma fica selecionada."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -6351,7 +6433,10 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Branco, o padrão, segue a cor do texto da barra de tarefas. Personalizar… abre o seletor de cores."},
     {L"", L"Windows transparency effects are off, so it shows as Solid.",
      L"Os efeitos de transparência do Windows estão desativados, então ele aparece como Sólido."},
+    {L"", L"Work days only", L"Somente dias de trabalho"},
     {L"", L"Yellow from", L"Amarelo a partir de"},
+    {L"", L"Your work days run from this day through the last one.",
+     L"Seus dias de trabalho vão deste dia até o último, inclusive."},
     {L"", L"{exported} Includes both elapsed 7-day periods.",
      L"{exported} Inclui os dois períodos de 7 dias já decorridos."},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
@@ -6844,6 +6929,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"settings-section", L"Language", L"Idioma"},
     {L"settings-section", L"Links", L"Links"},
     {L"settings-section", L"Matrix", L"Matriz"},
+    {L"settings-section", L"Pace and projection", L"Ritmo e projeção"},
     {L"settings-section", L"Pace markers", L"Marcadores de ritmo"},
     {L"settings-section", L"Pies", L"Pizzas"},
     {L"settings-section", L"Placement", L"Posicionamento"},
@@ -6957,6 +7043,13 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"No ritmo desde {time}: limite em ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"No ritmo médio desta janela: limite em ~{duration}"},
+    {L"weekday", L"Friday", L"Sexta-feira"},
+    {L"weekday", L"Monday", L"Segunda-feira"},
+    {L"weekday", L"Saturday", L"Sábado"},
+    {L"weekday", L"Sunday", L"Domingo"},
+    {L"weekday", L"Thursday", L"Quinta-feira"},
+    {L"weekday", L"Tuesday", L"Terça-feira"},
+    {L"weekday", L"Wednesday", L"Quarta-feira"},
     {L"window-title", L"{app} — Settings", L"{app} — Configurações"},
     {L"window-title", L"{app} — Usage history", L"{app} — Histórico de uso"},
 };
@@ -7171,6 +7264,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"many{Экспортировано # строк показателей} other{Экспортировано # строки показателей}} (выбранный "
      L"аккаунт) в {path}. Метки не включены; время в UTC."},
     {L"", L"Extra usage chart", L"График доп. использования"},
+    {L"", L"First work day", L"Первый рабочий день"},
     {L"", L"Free to use, modify and share.", L"Можно свободно использовать, изменять и распространять."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -7217,8 +7311,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Keep history", L"Хранить историю"},
     {L"", L"Label", L"Метка"},
     {L"", L"Label font size", L"Размер шрифта метки"},
-    {L"", L"Language, displays, hover details, polling and notifications.",
-     L"Язык, дисплеи, сведения при наведении, опрос и уведомления."},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.",
+     L"Язык, дисплеи, сведения при наведении, рабочие дни, опрос и уведомления."},
+    {L"", L"Last work day", L"Последний рабочий день"},
     {L"", L"License", L"Лицензия"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"По умолчанию светло-серый, тёмный на светлой панели задач. «Другой…» открывает выбор цвета."},
@@ -7267,6 +7362,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Открывает сведения об аккаунте, когда указатель задерживается на нём."},
     {L"", L"Orange from", L"Оранжевый от"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"Темп и прогнозы учитывают только ваши рабочие дни и не растут в выходные — для квот с окном длиннее суток. "
+     L"Использование в выходной день по-прежнему учитывается, а время сброса не меняется."},
     {L"", L"Pace markers", L"Метки темпа"},
     {L"", L"Palette", L"Палитра"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -7597,6 +7696,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Turn on Pace markers to change this.", L"Чтобы изменить, включите «Метки темпа»."},
     {L"", L"Turn on Record usage history to change this.",
      L"Чтобы изменить, включите «Записывать историю использования»."},
+    {L"", L"Turn on Work days only to change this.", L"Чтобы изменить, включите «Только рабочие дни»."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Недоступные квоты скрываются автоматически. Хотя бы одна остаётся выбранной."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -7647,7 +7747,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Белый (по умолчанию) следует цвету текста панели задач. «Другой…» открывает выбор цвета."},
     {L"", L"Windows transparency effects are off, so it shows as Solid.",
      L"Эффекты прозрачности Windows выключены, поэтому он отображается как «Сплошной»."},
+    {L"", L"Work days only", L"Только рабочие дни"},
     {L"", L"Yellow from", L"Жёлтый от"},
+    {L"", L"Your work days run from this day through the last one.",
+     L"Ваши рабочие дни идут с этого дня по последний включительно."},
     {L"", L"{exported} Includes both elapsed 7-day periods.", L"{exported} Включает оба прошедших 7-дневных периода."},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
@@ -8138,6 +8241,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"settings-section", L"Language", L"Язык"},
     {L"settings-section", L"Links", L"Ссылки"},
     {L"settings-section", L"Matrix", L"Матрица"},
+    {L"settings-section", L"Pace and projection", L"Темп и прогноз"},
     {L"settings-section", L"Pace markers", L"Метки темпа"},
     {L"settings-section", L"Pies", L"Диаграммы"},
     {L"settings-section", L"Placement", L"Размещение"},
@@ -8251,6 +8355,13 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"При темпе с {time}: лимит через ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"При среднем темпе этого окна: лимит через ~{duration}"},
+    {L"weekday", L"Friday", L"Пятница"},
+    {L"weekday", L"Monday", L"Понедельник"},
+    {L"weekday", L"Saturday", L"Суббота"},
+    {L"weekday", L"Sunday", L"Воскресенье"},
+    {L"weekday", L"Thursday", L"Четверг"},
+    {L"weekday", L"Tuesday", L"Вторник"},
+    {L"weekday", L"Wednesday", L"Среда"},
     {L"window-title", L"{app} — Settings", L"{app} — Параметры"},
     {L"window-title", L"{app} — Usage history", L"{app} — История использования"},
 };
@@ -8416,6 +8527,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"Labels omitted; times UTC.",
      L"已将 {rows, plural, other{# 行指标数据}}（所选账户）导出到 {path}。已省略标签；时间为 UTC。"},
     {L"", L"Extra usage chart", L"额外用量图表"},
+    {L"", L"First work day", L"首个工作日"},
     {L"", L"Free to use, modify and share.", L"可自由使用、修改和分享。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -8453,7 +8565,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Keep history", L"保留历史"},
     {L"", L"Label", L"标签"},
     {L"", L"Label font size", L"标签字号"},
-    {L"", L"Language, displays, hover details, polling and notifications.", L"语言、显示器、悬停详情、轮询和通知。"},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.", L"语言、显示器、悬停详情、工作日、轮询和通知。"},
+    {L"", L"Last work day", L"最后一个工作日"},
     {L"", L"License", L"许可证"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"默认为浅灰色，在浅色任务栏上为深色。“自定义…”会打开颜色选择器。"},
@@ -8494,6 +8607,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"打开 AI 配额设置。无法读取已保存的设置；已保留备份。"},
     {L"", L"Opens an account’s details after the pointer rests on it.", L"指针停留在账户上时打开其详情。"},
     {L"", L"Orange from", L"橙色起点"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"节奏和预测只计入工作日，在休息日保持不变，适用于时段超过一天的配额。休息日的用量仍会计入，重置时间不变。"},
     {L"", L"Pace markers", L"节奏标记"},
     {L"", L"Palette", L"调色板"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -8743,6 +8859,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Turn off Reset countdown to change this.", L"关闭“重置倒计时”后即可更改。"},
     {L"", L"Turn on Pace markers to change this.", L"开启“节奏标记”后即可更改。"},
     {L"", L"Turn on Record usage history to change this.", L"开启“记录使用历史”后即可更改。"},
+    {L"", L"Turn on Work days only to change this.", L"开启“仅工作日”后即可更改。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.", L"不可用的配额会自动隐藏。至少保留一个选中。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
           L"on the {key7d} chart.",
@@ -8779,7 +8896,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"White, the default, follows the taskbar’s text color. Custom... opens the color picker.",
      L"默认的白色跟随任务栏文字颜色。“自定义…”会打开颜色选择器。"},
     {L"", L"Windows transparency effects are off, so it shows as Solid.", L"Windows 透明效果已关闭，因此显示为“纯色”。"},
+    {L"", L"Work days only", L"仅工作日"},
     {L"", L"Yellow from", L"黄色起点"},
+    {L"", L"Your work days run from this day through the last one.", L"工作日从这一天开始，到最后一个工作日为止。"},
     {L"", L"{exported} Includes both elapsed 7-day periods.", L"{exported}包含两个已过去的 7 天时段。"},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
@@ -9237,6 +9356,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"settings-section", L"Language", L"语言"},
     {L"settings-section", L"Links", L"链接"},
     {L"settings-section", L"Matrix", L"矩阵"},
+    {L"settings-section", L"Pace and projection", L"节奏和预测"},
     {L"settings-section", L"Pace markers", L"节奏标记"},
     {L"settings-section", L"Pies", L"饼图"},
     {L"settings-section", L"Placement", L"放置位置"},
@@ -9337,6 +9457,13 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}", L"按过去 24 小时的速率：约 {duration}后达到上限"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"按自 {time} 以来的速率：约 {duration}后达到上限"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"按此窗口的平均速率：约 {duration}后达到上限"},
+    {L"weekday", L"Friday", L"星期五"},
+    {L"weekday", L"Monday", L"星期一"},
+    {L"weekday", L"Saturday", L"星期六"},
+    {L"weekday", L"Sunday", L"星期日"},
+    {L"weekday", L"Thursday", L"星期四"},
+    {L"weekday", L"Tuesday", L"星期二"},
+    {L"weekday", L"Wednesday", L"星期三"},
     {L"window-title", L"{app} — Settings", L"{app} — 设置"},
     {L"window-title", L"{app} — Usage history", L"{app} — 使用历史"},
 };
@@ -10160,6 +10287,12 @@ struct Settings {
     // rests on (none: as the others).
     SparklineSpan flyoutChartSpan = SparklineSpan::Window;
     std::optional<SparklineSpan> flyoutChartHoverSpan = SparklineSpan::Hours24;
+    // Quotas whose window is longer than a day pace and project over the week's work days only:
+    // every weekday from the first through the last (SYSTEMTIME::wDayOfWeek, 0: Sunday), wrapping
+    // past Saturday. The days stay while it is off.
+    bool workDays = false;
+    int firstWorkDay = 1;
+    int lastWorkDay = 5;
     UsagePalette usagePalette = UsagePalette::Default;
     // The Custom palette's colors, kept while another palette is chosen.
     std::array<COLORREF, 4> customUsageColors = kDefaultUsageColors;
@@ -10991,10 +11124,10 @@ struct FlyoutChartShape {
     std::vector<std::vector<winrt::Windows::Foundation::Point>> lines;  // Runs of 2+ readings.
     std::vector<winrt::Windows::Foundation::Point> dots;                // Isolated readings.
     winrt::Windows::Foundation::Point now{-1.f, -1.f};    // Current point; X is the now line.
-    winrt::Windows::Foundation::Point projectionEnd{-1.f, -1.f};  // X < 0 without a projection.
-    // The even-pace line's ends; X < 0 without one.
-    winrt::Windows::Foundation::Point paceFrom{-1.f, -1.f};
-    winrt::Windows::Foundation::Point paceTo{-1.f, -1.f};
+    // The projection from the current point on and the even-pace line, each with a corner where
+    // a day off starts or ends; empty without one.
+    std::vector<winrt::Windows::Foundation::Point> projection;
+    std::vector<winrt::Windows::Foundation::Point> pace;
     uint32_t color = 0;
 
     bool operator==(const FlyoutChartShape&) const = default;
@@ -11024,11 +11157,11 @@ struct FlyoutQuotaRow {
 
     // Usage chart, shown instead of the bar while the row has a recorded curve.
     FrameworkElement chart{nullptr};
-    wuxs::Line chartPace{nullptr};
+    wuxs::Polyline chartPace{nullptr};
     wuxs::Path chartArea{nullptr};
     wuxs::Path chartLines{nullptr};
     wuxs::Path chartDots{nullptr};
-    wuxs::Line chartProjection{nullptr};
+    wuxs::Polyline chartProjection{nullptr};
     wuxs::Line chartNow{nullptr};
     wuxs::Ellipse chartMarker{nullptr};
     FlyoutChartShape chartShape;
@@ -19792,6 +19925,121 @@ static FlyoutTheme LoadFlyoutTheme() {
     return theme;
 }
 
+// src/taskbar/work-clock.h
+// Work days: the working time of a quota window whose pace and projection skip the user's days
+// off, as plain values from explicit inputs. Pure: local time comes through its source.
+
+// A time's local date and time on this PC; false when it has none.
+using LocalTimeSource = std::function<bool(ULONGLONG unixMs, SYSTEMTIME* local)>;
+
+// The week's work days: every weekday from `first` through `last` (SYSTEMTIME::wDayOfWeek, 0:
+// Sunday), wrapping past Saturday. Without `local`, every day is one.
+struct WorkDays {
+    int first = 1, last = 5;
+    LocalTimeSource local;
+};
+
+// The settings' work days by `local`'s calendar: every day while the setting is off or its days
+// cover the week.
+static WorkDays WorkDaysFor(const Settings& settings, const LocalTimeSource& local) {
+    int first = std::clamp(settings.firstWorkDay, 0, 6), last = std::clamp(settings.lastWorkDay, 0, 6);
+    if (!settings.workDays || (last - first + 7) % 7 == 6) return {};
+    return {first, last, local};
+}
+
+// A quota window's working time: its span (WorkClockFor) without the days off in it.
+struct WorkClock {
+    ULONGLONG start = 0, reset = 0;
+    // The days off in the window, by local date: in order and apart, each run of them from its
+    // first instant to the first of the work day after it, inside the window.
+    std::vector<std::pair<ULONGLONG, ULONGLONG>> off;
+    ULONGLONG total = 0;  // Working time from start to reset; 0 without a window or a work day in it.
+
+    // Working time from `from` to `to`; outside the window every time counts.
+    ULONGLONG Work(ULONGLONG from, ULONGLONG to) const {
+        if (to <= from) return 0;
+        ULONGLONG work = to - from;
+        for (const auto& [begin, end] : off) {
+            ULONGLONG first = std::max(begin, from), last = std::min(end, to);
+            if (first < last) work -= last - first;
+        }
+        return work;
+    }
+
+    // The share of the window's working time passed at `time`: even use's share of the quota then.
+    double Elapsed(ULONGLONG time) const { return total ? double(Work(start, time)) / double(total) : 0; }
+
+    // Where a line from `from` to `to` that is straight in working time turns: both, and between
+    // them each day off's start and end.
+    std::vector<ULONGLONG> Corners(ULONGLONG from, ULONGLONG to) const {
+        std::vector<ULONGLONG> corners{from};
+        for (const auto& [begin, end] : off) {
+            for (ULONGLONG edge : {begin, end}) {
+                if (edge > from && edge < to) corners.push_back(edge);
+            }
+        }
+        corners.push_back(to);
+        return corners;
+    }
+};
+
+// The working time of `window`: all of it, less `days`' days off when it is longer than a day
+// (a shorter one runs whatever the day). A day off is every time `days.local` puts on its date:
+// the window is cut where a date ends and where the local clock is set forward or back, so a day
+// the clock changes on is as long as it was. A source that fails leaves every day a work day.
+static WorkClock WorkClockFor(const WorkDays& days, const WindowUsage& window) {
+    static constexpr long long kDayMs = 24LL * 60 * 60 * 1000;
+    WorkClock clock;
+    if (!window.windowDurationMs || window.resetUnixMs <= window.windowDurationMs) return clock;
+    clock.start = window.resetUnixMs - window.windowDurationMs;
+    clock.reset = window.resetUnixMs;
+    clock.total = window.windowDurationMs;
+    if (!days.local || window.windowDurationMs <= (ULONGLONG)kDayMs) return clock;
+
+    // A time on the local clock: milliseconds from 1970 by its date (the civil calendar's days,
+    // counted in years from March and 400-year eras) and time of day.
+    auto localMs = [&](ULONGLONG time) -> std::optional<long long> {
+        SYSTEMTIME local;
+        if (!days.local(time, &local) || local.wMonth < 1 || local.wMonth > 12) return std::nullopt;
+        int year = local.wYear - (local.wMonth < 3), ofEra = year % 400;
+        int ofYear = (153 * ((local.wMonth + 9) % 12) + 2) / 5 + local.wDay - 1;
+        long long day = year / 400 * 146097LL + ofEra * 365 + ofEra / 4 - ofEra / 100 + ofYear - 719468;
+        return day * kDayMs + ((local.wHour * 60 + local.wMinute) * 60 + local.wSecond) * 1000 + local.wMilliseconds;
+    };
+    std::vector<std::pair<ULONGLONG, ULONGLONG>> off;
+    for (ULONGLONG time = clock.start; time < clock.reset;) {
+        std::optional<long long> local = localMs(time);
+        if (!local || *local < 0) return clock;
+        // One stretch on one date: to the date's end as the local clock runs from here, or the
+        // reset; when the clock is set before then (its offset differs at the stretch's end), to
+        // that change, found between a time before it and one from it on.
+        const long long offset = *local - (long long)time;
+        ULONGLONG next = time + std::min<ULONGLONG>(kDayMs - *local % kDayMs, clock.reset - time);
+        std::optional<long long> last = localMs(next - 1);
+        if (!last) return clock;
+        if (*last - (long long)(next - 1) != offset) {
+            ULONGLONG before = time;
+            next--;
+            while (next - before > 1) {
+                ULONGLONG middle = before + (next - before) / 2;
+                std::optional<long long> probe = localMs(middle);
+                if (!probe) return clock;
+                (*probe - (long long)middle == offset ? before : next) = middle;
+            }
+        }
+        // 1970 started on a Thursday.
+        int weekday = int((*local / kDayMs + 4) % 7);
+        if ((weekday - days.first + 7) % 7 > (days.last - days.first + 7) % 7) {
+            if (!off.empty() && off.back().second == time) off.back().second = next;
+            else off.push_back({time, next});
+        }
+        time = next;
+    }
+    clock.off = std::move(off);
+    clock.total = clock.Work(clock.start, clock.reset);
+    return clock;
+}
+
 // src/taskbar/meter-model.h
 // Meter model: what every quota meter shows (fill, usage color, pace mark, text) and the tile,
 // ring, bar and pace tick geometry and colors, as plain values from explicit inputs. Pure: no XAML, WinRT,
@@ -20442,6 +20690,7 @@ struct MeterDisplay {
     bool showPaceTicks;
     PaceTickStyle paceTickStyle;
     COLORREF paceTickColor;   // RGB only.
+    WorkDays workDays;        // The days pace and projections count (WorkDaysFor).
     PercentTextAlignment percentTextAlignment;
     bool showExtraBarAmounts;
     bool showStaleWarning;
@@ -20457,10 +20706,12 @@ struct MeterDisplay {
 
 // `locale`: the frame's language, `measure` its text widths. `taskbarHeight`: the taskbar's height
 // in DIPs, 0 if unknown (or on a side); tiles leave 4 DIPs above and below them. `sideWidth`:
-// MeterDisplay::sideWidth.
+// MeterDisplay::sideWidth. `localTime`: this PC's, which tells the work days; without it every day
+// is one.
 static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& locale,
                                     const TileTextMeasure& measure, ULONGLONG now, double rasterizationScale,
-                                    double taskbarHeight, double sideWidth = 0) {
+                                    double taskbarHeight, double sideWidth = 0,
+                                    const LocalTimeSource& localTime = {}) {
     int yellow = std::clamp(settings.yellowThreshold, 0, 100);
     int orange = std::clamp(settings.orangeThreshold, yellow, 100);
     sideWidth = std::isfinite(sideWidth) ? std::max(sideWidth, 0.0) : 0.0;
@@ -20527,6 +20778,7 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& 
         .showPaceTicks = settings.showPaceTicks,
         .paceTickStyle = settings.paceTickStyle,
         .paceTickColor = settings.paceTickColor & 0x00FFFFFF,
+        .workDays = WorkDaysFor(settings, localTime),
         .percentTextAlignment = settings.percentTextAlignment,
         .showExtraBarAmounts = settings.showExtraBarAmounts,
         .showStaleWarning = settings.showStaleWarning,
@@ -20715,14 +20967,14 @@ static std::vector<TileTracePoint> VisualTestTrace(const AccountConfig& account,
     return trace;
 }
 
-// How far back a quota's projection measures its rate: a day, so it follows a start late in a
-// weekly window while sleep and breaks stay in the average. 5-hour windows (and a window's first
-// day) get their window's average; monthly extra usage passes 0 for it, since its percentage
-// moves with its budget.
+// How far back a quota's projection measures its rate: a day of its window's working time, so it
+// follows a start late in a weekly window while sleep and breaks stay in the average, and a day
+// off doesn't. 5-hour windows (and a window's first day) get their window's average; monthly
+// extra usage passes 0 for it, since its percentage moves with its budget.
 static constexpr ULONGLONG kProjectionLookbackMs = 24ULL * 60 * 60 * 1000;
 
 // A quota's projection from its current reading, to the reset or, reaching 100% before it, to
-// the limit.
+// the limit: straight in its window's working time, so level through a day off.
 struct UsageProjection {
     ULONGLONG fromMs = 0;   // The current reading's time: now, or the newest recorded reading if later.
     // The rate's span start: the window's start (its average), the lookback's cutoff, or the
@@ -20731,31 +20983,46 @@ struct UsageProjection {
     ULONGLONG toMs = 0;     // The reset, or the limit's time.
     double toUsed = 0;      // Used % at toMs; 100 at the limit.
     bool limit = false;
+
+    // Used % at `time` on the way from `fromUsed` at fromMs to toMs, by the window's `clock`.
+    double UsedAt(const WorkClock& clock, double fromUsed, ULONGLONG time) const {
+        ULONGLONG work = clock.Work(fromMs, toMs);
+        return work ? fromUsed + (toUsed - fromUsed) * double(clock.Work(fromMs, time)) / double(work) : fromUsed;
+    }
 };
 
-// Projects `reading` (fresh: the caller's check) above 0% and short of 100%, from 5% of its window
-// on and before its reset, at the average rate since its window started at 0%, or with a
-// `lookbackMs` ending after that, since the cutoff it gives. `trace` (oldest first) places the
-// cutoff's usage: interpolated between connected readings, across a recording gap only between
-// equal ones, else the span starts at the reading before the gap. Any decrease from there to the
-// current reading (a reset, a changed budget) falls back to the window's average.
-static std::optional<UsageProjection> ProjectUsage(const WindowUsage& reading,
+// Projects `reading` (fresh: the caller's check) above 0% and short of 100%, from 5% of its
+// window's working time (`clock`: its WorkClockFor) on and before its reset, at the average rate
+// over the working time since its window started at 0%, or with a `lookbackMs` of working time
+// ending after that, since the cutoff it gives. `trace` (oldest first) places the cutoff's usage:
+// interpolated between connected readings, across a recording gap only between equal ones, else
+// the span starts at the reading before the gap. Any decrease from there to the current reading
+// (a reset, a changed budget) falls back to the window's average. Usage on a day off counts in the
+// rise, not in the time it took. The limit is the first time the projection reaches 100%, which a
+// day off before the reset can follow.
+static std::optional<UsageProjection> ProjectUsage(const WindowUsage& reading, const WorkClock& clock,
                                                    const std::vector<TileTracePoint>& trace,
                                                    ULONGLONG now, ULONGLONG lookbackMs) {
     double pct = reading.pct;
-    if (pct <= 0 || pct >= 100 || !reading.windowDurationMs || reading.resetUnixMs <= reading.windowDurationMs) {
-        return std::nullopt;
-    }
-    ULONGLONG start = reading.resetUnixMs - reading.windowDurationMs;
+    if (pct <= 0 || pct >= 100 || !clock.total) return std::nullopt;
+    ULONGLONG start = clock.start;
     ULONGLONG from = trace.empty() ? now : std::max(now, trace.back().timeMs);
-    double elapsed = ((double)from - (double)start) / reading.windowDurationMs;
-    if (elapsed < 0.05 || from >= reading.resetUnixMs) return std::nullopt;
+    if (clock.Elapsed(from) < 0.05 || from >= clock.reset) return std::nullopt;
 
     TileTracePoint base{start, 0, false};
-    if (lookbackMs && from - start > lookbackMs) {
+    if (lookbackMs && clock.Work(start, from) > lookbackMs) {
+        // The cutoff: the latest time with the lookback's working time before the reading.
+        ULONGLONG cutoff = from, missing = lookbackMs;
+        for (auto dayOff = clock.off.rbegin(); dayOff != clock.off.rend(); ++dayOff) {
+            if (dayOff->first >= cutoff) continue;
+            ULONGLONG worked = cutoff - std::min(dayOff->second, cutoff);
+            if (worked >= missing) break;
+            missing -= worked;
+            cutoff = dayOff->first;
+        }
+        cutoff -= missing;
         // The readings around the cutoff: the window's start before the first, the current
         // reading after the last.
-        ULONGLONG cutoff = from - lookbackMs;
         auto next = std::upper_bound(trace.begin(), trace.end(), cutoff,
                                      [](ULONGLONG time, const TileTracePoint& point) { return time < point.timeMs; });
         TileTracePoint before = next == trace.begin() ? base : next[-1];
@@ -20778,13 +21045,31 @@ static std::optional<UsageProjection> ProjectUsage(const WindowUsage& reading,
 
     // Products before quotients keep exact cases exact (even use reaching 100% at the reset).
     double rise = pct - base.used;
-    double span = double(from - base.timeMs);
-    UsageProjection projection{from, base.timeMs, reading.resetUnixMs,
-                               pct + rise * double(reading.resetUnixMs - from) / span, false};
-    if (projection.toUsed > 100) {
-        projection.toMs = from + (ULONGLONG)std::llround((100 - pct) * span / rise);
+    double span = double(clock.Work(base.timeMs, from));
+    double left = double(clock.Work(from, clock.reset));
+    UsageProjection projection{from, base.timeMs, clock.reset, pct + rise * left / span, false};
+    // 100% to within the arithmetic's noise is reached: a limit met as a work day ends comes
+    // before the days off that follow, not after them.
+    static constexpr double kReached = 100 - 1e-9;
+    if (rise > 0 && projection.toUsed >= kReached) {
+        // The limit lies in the working time before the first day off that starts with it
+        // reached, else before the reset: that stretch starts at `at`, `worked` from the reading,
+        // and ends `room` from it.
+        double worked = 0, room = left;
+        ULONGLONG at = from;
+        for (const auto& [begin, end] : clock.off) {
+            if (end <= at) continue;
+            double stretch = begin > at ? double(begin - at) : 0;
+            if (pct + rise * (worked + stretch) / span >= kReached) {
+                room = worked + stretch;
+                break;
+            }
+            worked += stretch;
+            at = end;
+        }
+        projection.toMs = at + (ULONGLONG)std::llround(std::clamp((100 - pct) * span / rise, worked, room) - worked);
         projection.toUsed = 100;
-        projection.limit = true;
+        projection.limit = projection.toMs < clock.reset;
     }
     return projection;
 }
@@ -21186,7 +21471,8 @@ struct AccountMeters {
     // display.sparklineAroundMs, a window longer than twice it spans only that much each side of
     // now, kept inside the window: earlier readings drop out, the diagonal is the
     // window's even use across that span, and the projection stops at its end (with the limit mark
-    // only when it reaches the limit before then).
+    // only when it reaches the limit before then). In a window with days off (WorkClockFor), the
+    // diagonal and the projection are level through each of them.
     uint32_t sparkLimitColor = 0;
     double sparkChartHeight = 0;
     double sparkKeyFont = 0;  // The key and extra usage text, display.sparklineTextSize.
@@ -21449,11 +21735,10 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         // Color stays keyed to actual usage so depleting quota still reds out.
         m.color = UsageColor(wu.pct, meters.stale, yellow, orange, red, display.usageColors);
         m.key = QuotaKey(display.locale, account.provider, w);
-        m.paceVisible = paceMarks && !meters.stale && wu.pct >= 0 &&
-                        wu.resetUnixMs > wu.windowDurationMs && wu.windowDurationMs > 0 &&
-                        display.now >= wu.resetUnixMs - wu.windowDurationMs;
-        double remainingFraction = m.paceVisible ?
-            ((double)wu.resetUnixMs - (double)display.now) / wu.windowDurationMs : 0.0;
+        // The pace: the share of the window's working time passed; none without any.
+        const WorkClock clock = WorkClockFor(display.workDays, wu);
+        m.paceVisible = paceMarks && !meters.stale && wu.pct >= 0 && clock.total > 0 && display.now >= clock.start;
+        double remainingFraction = m.paceVisible ? 1.0 - clock.Elapsed(display.now) : 0.0;
 
         if (!tiles) {
             // Remaining mode shows the quota left (100 - used); n/a (pct < 0) stays unchanged
@@ -21727,14 +22012,16 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 return {std::move(figure)};
             };
             if (timed(w)) {
-                // The window's even use, 0% to 100% across the whole window, over the part of it in
-                // the span.
+                // The window's even use, 0% to 100% across its working time, over the part of it in
+                // the span: level through each day off.
                 const ULONGLONG paceFrom = std::max(start, windowStart), paceTo = std::min(start + span, wu.resetUnixMs);
-                if (display.showPaceTicks && paceFrom < paceTo) {
-                    auto even = [&](ULONGLONG time) {
-                        return 100.0 * double(time - windowStart) / double(wu.windowDurationMs);
-                    };
-                    shapes[kSparkPace] = {{xAt(paceFrom), yAt(even(paceFrom)), {{xAt(paceTo), yAt(even(paceTo))}}}};
+                if (display.showPaceTicks && paceFrom < paceTo && clock.total) {
+                    const std::vector<ULONGLONG> corners = clock.Corners(paceFrom, paceTo);
+                    TileOutlineFigure even{xAt(paceFrom), yAt(100 * clock.Elapsed(paceFrom)), {}};
+                    for (size_t c = 1; c < corners.size(); c++) {
+                        even.segments.push_back({xAt(corners[c]), yAt(100 * clock.Elapsed(corners[c]))});
+                    }
+                    shapes[kSparkPace] = {std::move(even)};
                 }
                 // Readings before a span starting inside the window drop out.
                 const std::vector<TileTracePoint> drawn = start > windowStart ? TraceFrom(trace, start) : trace;
@@ -21765,22 +22052,24 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                     // None for a window its provider reports at its limit, whatever its percentage.
                     std::optional<UsageProjection> projection;
                     if (!meters.stale && !data.opencodeLimited[w]) {
-                        projection = ProjectUsage(wu, trace, display.now,
+                        projection = ProjectUsage(wu, clock, trace, display.now,
                                                   w == kExtraUsageBar ? 0 : kProjectionLookbackMs);
                     }
                     if (projection) {
-                        // Cut at the span's end, before a later reset or limit.
+                        // Level through each day off; cut at the span's end, before a later reset
+                        // or limit.
                         ULONGLONG toMs = std::min(projection->toMs, start + span);
-                        double toUsed = projection->toUsed;
-                        if (toMs < projection->toMs) {
-                            toUsed = wu.pct + (toUsed - wu.pct) * ((double)toMs - (double)projection->fromMs) /
-                                                  ((double)projection->toMs - (double)projection->fromMs);
+                        const std::vector<ULONGLONG> corners = clock.Corners(projection->fromMs, toMs);
+                        TileOutlineFigure ahead{x, y, {}};
+                        for (size_t c = 1; c < corners.size(); c++) {
+                            ahead.segments.push_back(
+                                {xAt(corners[c]), yAt(projection->UsedAt(clock, wu.pct, corners[c]))});
                         }
-                        double endX = xAt(toMs), endY = yAt(toUsed);
-                        shapes[kSparkProjection] = {{x, y, {{endX, endY}}}};
                         if (projection->limit && toMs == projection->toMs) {
-                            shapes[kSparkLimit] = {circle(endX, endY, kSparkLimitRadius)};
+                            shapes[kSparkLimit] = {circle(ahead.segments.back().x, ahead.segments.back().y,
+                                                          kSparkLimitRadius)};
                         }
+                        shapes[kSparkProjection] = {std::move(ahead)};
                     }
                 }
             } else {
@@ -23277,6 +23566,7 @@ struct FlyoutDisplay {
     // whose quota row the pointer rests on (none: as the others).
     ULONGLONG chartAroundMs = 0;
     std::optional<ULONGLONG> chartHoverAroundMs;
+    WorkDays workDays;  // MeterDisplay::workDays
     // What the provider's status page shows, and the taskbar mark's color for it (0: none).
     ProviderOutage outage;
     uint32_t outageColor = 0;
@@ -23326,8 +23616,8 @@ static std::wstring LimitProjectionText(const I18nLocale& locale, const std::opt
 }
 
 // Fetch thread: the flyout's projection text for a fresh reading of a taskbar slot, from the
-// account's published curve (the flyout row's) and its lookback, in the notification's language.
-// Takes the settings and data locks; call holding neither.
+// account's published curve (the flyout row's), its lookback and the current work days, in the
+// notification's language. Takes the settings and data locks; call holding neither.
 static std::wstring NotificationProjectionText(const I18nLocale& locale, uint64_t historyId, int slot,
                                                const WindowUsage& reading) {
     static constexpr int kRows[kQuotaBarCount] = {kFlyoutFiveHourRow, kFlyoutWeeklyRow, kFlyoutFableRow,
@@ -23336,9 +23626,15 @@ static std::wstring NotificationProjectionText(const I18nLocale& locale, uint64_
     if (std::optional<BurnUpCurve> curve = CopyBurnUpCurve(historyId, kRows[slot], reading)) {
         for (const BurnUpPoint& point : curve->points) trace.push_back({point.timeMs, point.used, point.connect});
     }
-    return LimitProjectionText(
-        locale, ProjectUsage(reading, trace, NowUnixMs(), slot == kExtraUsageBar ? 0 : kProjectionLookbackMs),
-        reading);
+    WorkDays workDays;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        workDays = WorkDaysFor(g_settings, UnixMsToLocalSystemTime);
+    }
+    return LimitProjectionText(locale,
+                               ProjectUsage(reading, WorkClockFor(workDays, reading), trace, NowUnixMs(),
+                                            slot == kExtraUsageBar ? 0 : kProjectionLookbackMs),
+                               reading);
 }
 
 // Finds the main quota row under the pointer (FlyoutPopup::hoverRow) from its last position over
@@ -23421,12 +23717,12 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         pattern.Append(gap);
         return pattern;
     };
-    auto paceStroke = [&](wuxs::Line const& line) {
+    auto paceStroke = [&](wuxs::Shape const& line) {
         line.Stroke(theme.chartGuide);
         line.StrokeThickness(1);
         line.StrokeDashArray(dashes(3, 3));
     };
-    auto projectionStroke = [&](wuxs::Line const& line) {
+    auto projectionStroke = [&](wuxs::Shape const& line) {
         line.StrokeThickness(1.4);
         line.StrokeDashArray(dashes(1.5 / 1.4, 2.5 / 1.4));
         line.StrokeDashCap(PenLineCap::Round);
@@ -23779,10 +24075,10 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
             RectangleGeometry bounds;
             bounds.Rect({0, 0, (float)kFlyoutChartWidth, (float)kFlyoutChartHeight});
             canvas.Clip(bounds);
-            wuxs::Line pace;
-            paceStroke(pace);
-            canvas.Children().Append(pace);
-            row.chartPace = pace;
+            row.chartPace = wuxs::Polyline{};
+            paceStroke(row.chartPace);
+            collapsed(row.chartPace);
+            canvas.Children().Append(row.chartPace);
             row.chartArea = wuxs::Path{};
             canvas.Children().Append(row.chartArea);
             row.chartLines = wuxs::Path{};
@@ -23793,7 +24089,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
             canvas.Children().Append(row.chartLines);
             row.chartDots = wuxs::Path{};
             canvas.Children().Append(row.chartDots);
-            row.chartProjection = wuxs::Line{};
+            row.chartProjection = wuxs::Polyline{};
             projectionStroke(row.chartProjection);
             collapsed(row.chartProjection);
             canvas.Children().Append(row.chartProjection);
@@ -24204,12 +24500,10 @@ static void UpdateAccountFlyout(
                 row.fillColor = colorValue;
             }
 
-            bool paced = !display.stale && wu.windowDurationMs > 0 &&
-                         wu.resetUnixMs > wu.windowDurationMs &&
-                         display.now >= wu.resetUnixMs - wu.windowDurationMs;
-            double elapsed = paced ?
-                std::clamp(1.0 - ((double)wu.resetUnixMs - (double)display.now) /
-                                     wu.windowDurationMs, 0.0, 1.0) : 0.0;
+            // The pace: the share of the window's working time passed; none without any.
+            const WorkClock clock = WorkClockFor(display.workDays, wu);
+            bool paced = !display.stale && clock.total > 0 && display.now >= clock.start;
+            double elapsed = paced ? std::clamp(clock.Elapsed(display.now), 0.0, 1.0) : 0.0;
             show(row.paceTick, paced);
             if (paced) {
                 double pacePct = (remainingMode ? 1.0 - elapsed : elapsed) * 100.0;
@@ -24229,7 +24523,7 @@ static void UpdateAccountFlyout(
             const std::vector<TileTracePoint>& trace = r >= 0 ? traces[r] : kNoTrace;
             std::optional<UsageProjection> projected;
             if (r >= 0 && !display.stale && !limited) {
-                projected = ProjectUsage(wu, trace, display.now,
+                projected = ProjectUsage(wu, clock, trace, display.now,
                                          r == kFlyoutExtraRow ? 0 : kProjectionLookbackMs);
             }
             std::wstring projection = LimitProjectionText(locale, projected, wu);
@@ -24283,34 +24577,31 @@ static void UpdateAccountFlyout(
                 }
                 shape.now = {xAt(now), yAt(wu.pct)};
                 if (projected) {
-                    // Cut at the span's end, before a later reset or limit.
-                    ULONGLONG toMs = std::min(projected->toMs, start + span);
-                    double toUsed = projected->toUsed;
-                    if (toMs < projected->toMs) {
-                        toUsed = wu.pct + (toUsed - wu.pct) * ((double)toMs - (double)projected->fromMs) /
-                                              ((double)projected->toMs - (double)projected->fromMs);
+                    // Level through each day off; cut at the span's end, before a later reset or
+                    // limit.
+                    for (ULONGLONG time : clock.Corners(projected->fromMs, std::min(projected->toMs, start + span))) {
+                        shape.projection.push_back({xAt(time), yAt(projected->UsedAt(clock, wu.pct, time))});
                     }
-                    shape.projectionEnd = {xAt(toMs), yAt(toUsed)};
                 }
-                // The window's even use, 0% at its start to 100% at its reset, over the part of
-                // it in the span.
+                // The window's even use, 0% at its start to 100% at its reset across its working
+                // time, over the part of it in the span: level through each day off.
                 const ULONGLONG paceFrom = std::max(start, windowStart), paceTo = std::min(start + span, wu.resetUnixMs);
-                if (paceFrom < paceTo) {
-                    auto even = [&](ULONGLONG time) {
-                        return 100.0 * double(time - windowStart) / double(wu.windowDurationMs);
-                    };
-                    shape.paceFrom = {xAt(paceFrom), yAt(even(paceFrom))};
-                    shape.paceTo = {xAt(paceTo), yAt(even(paceTo))};
+                if (paceFrom < paceTo && clock.total) {
+                    for (ULONGLONG time : clock.Corners(paceFrom, paceTo)) {
+                        shape.pace.push_back({xAt(time), yAt(100 * clock.Elapsed(time))});
+                    }
                 }
                 shape.color = colorValue;
 
                 FlyoutChartShape& drawn = row.chartShape;
-                if (shape.paceFrom != drawn.paceFrom || shape.paceTo != drawn.paceTo) {
-                    show(row.chartPace, shape.paceFrom.X >= 0);
-                    row.chartPace.X1(shape.paceFrom.X);
-                    row.chartPace.Y1(shape.paceFrom.Y);
-                    row.chartPace.X2(shape.paceTo.X);
-                    row.chartPace.Y2(shape.paceTo.Y);
+                auto points = [](const std::vector<Point>& line) {
+                    PointCollection collection;
+                    for (Point point : line) collection.Append(point);
+                    return collection;
+                };
+                if (shape.pace != drawn.pace) {
+                    show(row.chartPace, !shape.pace.empty());
+                    row.chartPace.Points(points(shape.pace));
                 }
                 if (shape.lines != drawn.lines || shape.dots != drawn.dots) {
                     // Each run is a stroked figure over a filled one closed to the plot bottom.
@@ -24347,19 +24638,15 @@ static void UpdateAccountFlyout(
                     row.chartLines.Data(lines);
                     row.chartDots.Data(dots);
                 }
-                if (shape.now != drawn.now || shape.projectionEnd != drawn.projectionEnd) {
+                if (shape.now != drawn.now) {
                     row.chartNow.X1(shape.now.X);
                     row.chartNow.X2(shape.now.X);
                     Canvas::SetLeft(row.chartMarker, shape.now.X - 3.0);
                     Canvas::SetTop(row.chartMarker, shape.now.Y - 3.0);
-                    bool projectionShown = shape.projectionEnd.X >= 0;
-                    show(row.chartProjection, projectionShown);
-                    if (projectionShown) {
-                        row.chartProjection.X1(shape.now.X);
-                        row.chartProjection.Y1(shape.now.Y);
-                        row.chartProjection.X2(shape.projectionEnd.X);
-                        row.chartProjection.Y2(shape.projectionEnd.Y);
-                    }
+                }
+                if (shape.projection != drawn.projection) {
+                    show(row.chartProjection, !shape.projection.empty());
+                    row.chartProjection.Points(points(shape.projection));
                 }
                 if (shape.color != drawn.color) {
                     Brush usage = FlyoutShapeBrush(color);
@@ -25934,7 +26221,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     state.buildLocale = I18nLocale(state.buildLocale.Language(), ReadNumberFormat());
     MeterDisplay display = MeterDisplayFor(settings, state.buildLocale, XamlTileTextMeasure(state.buildLocale),
                                            NowUnixMs(), state.rasterizationScale, state.taskbarHeight,
-                                           state.sideWidth);
+                                           state.sideWidth, UnixMsToLocalSystemTime);
     ULONGLONG now = display.now;
     if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, &data);
     if (data.size() != accounts.size()) return;
@@ -26226,6 +26513,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     if (settings.flyoutChartHoverSpan) {
                         flyoutDisplay.chartHoverAroundMs = SparklineAroundMs(*settings.flyoutChartHoverSpan);
                     }
+                    flyoutDisplay.workDays = display.workDays;
                     flyoutDisplay.outage = outage;
                     flyoutDisplay.outageColor = meters.mark == IdentityMark::Outage ? meters.markColor : 0;
                     flyoutDisplay.locale = display.locale;
@@ -27188,11 +27476,11 @@ static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARA
 
 // After a settings change: whether every taskbar keeps its bars, each repainted and taken as built
 // from the current settings. A grid stays when the settings it was built from differ from them
-// only in what no built grid holds: the poll intervals, which each update rereads for the stale
-// mark, and what only polling, notifications and history read. A difference in any other field,
-// one added later included, rebuilds, and so do bars on a taskbar the settings don't show them on
-// (an injection under way as they changed) and the setup tile, whose tooltip holds the stored
-// settings' load state.
+// only in what no built grid holds: the poll intervals and the work days, which each update
+// rereads for the stale mark, the pace and the projections, and what only polling, notifications
+// and history read. A difference in any other field, one added later included, rebuilds, and so
+// do bars on a taskbar the settings don't show them on (an injection under way as they changed)
+// and the setup tile, whose tooltip holds the stored settings' load state.
 static bool KeepQuotaGrids() {
     std::vector<std::pair<HWND, DWORD>> windows;
     {
@@ -27228,6 +27516,8 @@ static bool KeepQuotaGrids() {
             }
             auto held = [](Settings s) {
                 s.pollMinutes = s.hiddenPollMinutes = s.historyRetentionDays = 0;
+                s.workDays = false;
+                s.firstWorkDay = s.lastWorkDay = 0;
                 s.notificationLevel = {};
                 s.historyEnabled = false;
                 s.historyDefaultRange = {};
@@ -33044,6 +33334,8 @@ static bool NormalizeSettings(Settings* s) {
         (*s->flyoutChartHoverSpan < SparklineSpan::Window || *s->flyoutChartHoverSpan > SparklineSpan::Hours48)) {
         s->flyoutChartHoverSpan = SparklineSpan::Hours24;
     }
+    if (s->firstWorkDay < 0 || s->firstWorkDay > 6) s->firstWorkDay = Settings().firstWorkDay;
+    if (s->lastWorkDay < 0 || s->lastWorkDay > 6) s->lastWorkDay = Settings().lastWorkDay;
     s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
     s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 13, kBadgeSizeMin, kBadgeSizeMax);
     s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
@@ -33240,6 +33532,9 @@ static std::wstring SerializeSettings(const Settings& s) {
                                       s.extraUsageChart == ExtraUsageChart::Week ? L"week" : L"month");
         setString(L"flyoutChartSpan", spanName(s.flyoutChartSpan));
         setString(L"flyoutChartHoverSpan", s.flyoutChartHoverSpan ? spanName(*s.flyoutChartHoverSpan) : L"off");
+        setBool(L"workDays", s.workDays);
+        setNumber(L"firstWorkDay", s.firstWorkDay);
+        setNumber(L"lastWorkDay", s.lastWorkDay);
         setNumber(L"yellowThreshold", s.yellowThreshold);
         setNumber(L"orangeThreshold", s.orangeThreshold);
         setNumber(L"redThreshold", s.redThreshold);
@@ -33509,6 +33804,12 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         s.flyoutChartHoverSpan = GetStr(root, L"flyoutChartHoverSpan") == L"off" ?
                                      std::nullopt :
                                      std::optional(spanOf(L"flyoutChartHoverSpan", SparklineSpan::Hours24));
+        s.workDays = getBoolDefault(L"workDays", false);
+        // A weekday that is missing or isn't one keeps its default.
+        double firstWorkDay = GetNum(root, L"firstWorkDay", s.firstWorkDay);
+        double lastWorkDay = GetNum(root, L"lastWorkDay", s.lastWorkDay);
+        if (firstWorkDay >= 0 && firstWorkDay <= 6 && firstWorkDay == (int)firstWorkDay) s.firstWorkDay = (int)firstWorkDay;
+        if (lastWorkDay >= 0 && lastWorkDay <= 6 && lastWorkDay == (int)lastWorkDay) s.lastWorkDay = (int)lastWorkDay;
         s.yellowThreshold = (int)GetNum(root, L"yellowThreshold", 50);
         s.orangeThreshold = (int)GetNum(root, L"orangeThreshold", 75);
         s.redThreshold = (int)GetNum(root, L"redThreshold", 90);
@@ -34203,6 +34504,9 @@ enum class SettingsField : uint8_t {
     // Behavior
     ShowOn,  // Monitor mode and number: 0 primary, -1 all, N display N
     ShowDetailsOnHover,
+    WorkDays,       // Pace and projections over work days only
+    FirstWorkDay,   // A weekday: 0 Sunday to 6 Saturday
+    LastWorkDay,
     PollMinutes,
     HiddenPolling,      // Hidden accounts' polls: an interval in minutes, kHiddenPollNever or kHiddenPollAsShown
     HiddenPollMinutes,  // Their interval's custom minutes
@@ -34368,7 +34672,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
         case SettingsField::ResetBehavior:
             return {SettingsField::ShowOn,        SettingsField::ShowDetailsOnHover, SettingsField::PollMinutes,
                     SettingsField::HiddenPolling, SettingsField::HiddenPollMinutes,  SettingsField::Notifications,
-                    SettingsField::Language};
+                    SettingsField::Language,      SettingsField::WorkDays,           SettingsField::FirstWorkDay,
+                    SettingsField::LastWorkDay};
         case SettingsField::ResetHistory:
             return {SettingsField::RecordHistory, SettingsField::KeepHistory, SettingsField::RetentionDays,
                     SettingsField::HistoryRange};
@@ -34419,6 +34724,9 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
                    s.taskbarMonitorMode == TaskbarMonitorMode::All     ? -1 :
                                                                          s.taskbarMonitorNumber;
         case SettingsField::ShowDetailsOnHover: return s.showDetailsOnHover;
+        case SettingsField::WorkDays: return s.workDays;
+        case SettingsField::FirstWorkDay: return s.firstWorkDay;
+        case SettingsField::LastWorkDay: return s.lastWorkDay;
         case SettingsField::PollMinutes: return s.pollMinutes;
         case SettingsField::HiddenPolling: return s.hiddenPollMinutes;
         case SettingsField::HiddenPollMinutes:
@@ -34515,6 +34823,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             if (value > 0) s.taskbarMonitorNumber = value;
             break;
         case SettingsField::ShowDetailsOnHover: s.showDetailsOnHover = value != 0; break;
+        case SettingsField::WorkDays: s.workDays = value != 0; break;
+        case SettingsField::FirstWorkDay: s.firstWorkDay = std::clamp(value, 0, 6); break;
+        case SettingsField::LastWorkDay: s.lastWorkDay = std::clamp(value, 0, 6); break;
         case SettingsField::PollMinutes: s.pollMinutes = value; break;
         case SettingsField::HiddenPolling:
             s.hiddenPollMinutes = value < 0 ? kHiddenPollAsShown :
@@ -34707,6 +35018,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.taskbarMonitorMode = defaults.taskbarMonitorMode;
             s.taskbarMonitorNumber = defaults.taskbarMonitorNumber;
             s.showDetailsOnHover = defaults.showDetailsOnHover;
+            s.workDays = defaults.workDays;
+            s.firstWorkDay = defaults.firstWorkDay;
+            s.lastWorkDay = defaults.lastWorkDay;
             s.pollMinutes = defaults.pollMinutes;
             s.hiddenPollMinutes = defaults.hiddenPollMinutes;
             s.notificationLevel = defaults.notificationLevel;
@@ -36182,6 +36496,7 @@ struct SettingsView {
     float previewScroll = 0;            // The preview strip's scroll right of its home, DIPs
                                         // (settings/preview.h)
     ULONGLONG now = 0;                  // Frame time for account countdowns and the preview
+    LocalTimeSource localTime;          // This PC's local time, which tells the preview its work days
     std::optional<bool> versionCopied;  // Copy version info's feedback for a moment: whether it copied
 };
 
@@ -36525,13 +36840,14 @@ static SettingsPreviewRow SettingsPreviewRowAt(const SettingsPreviewStrip& strip
 // color the tile chrome and the taskbar's text (logos without brand colors, labels, keys, tray).
 // Tests may pass accounts with their data (and their providers' outage levels, none without) to
 // lay out instead of the samples, whose outage is VisualTestOutage's; either shows only while
-// outage marks are on.
+// outage marks are on. `localTime`: MeterDisplayFor's.
 static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings, const I18nLocale& locale,
                                                   double taskbarHeight, float scale, ULONGLONG now,
                                                   bool gallery, bool light, uint32_t text,
                                                   const std::vector<AccountConfig>* testAccounts = nullptr,
                                                   const std::vector<AccountData>* testData = nullptr,
-                                                  const std::vector<OutageLevel>* testOutages = nullptr) {
+                                                  const std::vector<OutageLevel>* testOutages = nullptr,
+                                                  const LocalTimeSource& localTime = {}) {
     using Op = SettingsPreviewOp;
     SettingsPreviewStrip strip;
     // Text as XAML lays it out: natural line height, width rounded up to device pixels.
@@ -36554,7 +36870,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                                       font == TileFont::Text ? DWRITE_FONT_WEIGHT_NORMAL : DWRITE_FONT_WEIGHT_SEMI_BOLD})
                               .width);
         },
-        now, scale, taskbarHeight);
+        now, scale, taskbarHeight, 0, localTime);
     std::vector<AccountConfig> accounts;
     std::vector<AccountData> data;
     BuildVisualTestSnapshot(display, &accounts, &data);
@@ -37252,7 +37568,8 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
     Settings settings = view.settings;
     if (gallery) settings.barLayout = BarLayout(item.action.value);
     SettingsPreviewStrip strip = SettingsPreviewLayout(g, settings, view.locale, view.status.taskbarHeight, scale,
-                                                       view.now, gallery, light, text);
+                                                       view.now, gallery, light, text, nullptr, nullptr, nullptr,
+                                                       view.localTime);
 
     D2D1_MATRIX_3X2_F base{};
     target->GetTransform(&base);
@@ -37485,7 +37802,8 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
                                     uint32_t& id, float x, float y, float width) {
     constexpr float kPadX = 1 + 14, kPadTop = 1 + 12, kRow = 20, kGap = 10, kPadBottom = 14 + 1;
     SettingsPreviewStrip strip = SettingsPreviewLayout(g, view.settings, view.locale, view.status.taskbarHeight,
-                                                       view.scale, view.now, false, false, 0);
+                                                       view.scale, view.now, false, false, 0, nullptr, nullptr,
+                                                       nullptr, view.localTime);
     float stripWidth = std::max(width - 2 * kPadX, 1.0f);
     const SettingsPreviewRow home = SettingsPreviewRowAt(strip, stripWidth, 0);
     const bool cut = home.tiles < 0 || home.tiles + strip.width > stripWidth;
@@ -37776,8 +38094,9 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
 }
 
 // src/settings/page-behavior.h
-// Settings > Behavior: this user's language, where the bars show, hover details, polling (hidden
-// accounts' too) and notifications (approved mockup behavior.png). Pure builder.
+// Settings > Behavior: this user's language, where the bars show, hover details, the work days of
+// pace and projections, polling (hidden accounts' too) and notifications (approved mockup
+// behavior.png, the work days aside). Pure builder.
 
 static constexpr int kSettingsPollPresets[] = {2, 5, 10, 15, 30, 60};
 // Hidden accounts' intervals, in minutes, and the dropdown's value for Custom.
@@ -37849,6 +38168,38 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
         spec.description = {{I18nText(locale, Tr(L"Opens an account\u2019s details after the pointer rests on it."))}};
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec,
                                   SettingsField::ShowDetailsOnHover);
+    }
+
+    // Pace and projection: the week's work days, Monday first. The days need the switch on.
+    y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Pace and projection")));
+    {
+        UiCardSpec spec;
+        spec.title = I18nText(locale, Tr(L"Work days only"));
+        spec.description = {{I18nText(locale, Tr(L"Pace and projections count only your work days and stay level "
+                                                 L"through your days off, for quotas whose window is longer than a "
+                                                 L"day. Usage on a day off still counts, and reset times stay as "
+                                                 L"they are."))}};
+        y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::WorkDays);
+    }
+    const std::vector<UiOption> weekdays = {{I18nText(locale, TrCtx(L"weekday", L"Monday")), 1},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Tuesday")), 2},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Wednesday")), 3},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Thursday")), 4},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Friday")), 5},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Saturday")), 6},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Sunday")), 0}};
+    for (SettingsField field : {SettingsField::FirstWorkDay, SettingsField::LastWorkDay}) {
+        UiCardSpec spec;
+        if (field == SettingsField::FirstWorkDay) {
+            spec.title = I18nText(locale, Tr(L"First work day"));
+            spec.description = {{I18nText(locale, Tr(L"Your work days run from this day through the last one."))}};
+        } else {
+            spec.title = I18nText(locale, Tr(L"Last work day"));
+        }
+        spec.enabled = s.workDays;
+        if (!s.workDays) spec.reason = I18nText(locale, Tr(L"Turn on Work days only to change this."));
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, field, 200, weekdays,
+                                    SettingsFieldValue(s, field));
     }
 
     // Updates: a preset interval, or Custom with its own number. Text typed into the custom box
@@ -37947,7 +38298,8 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
 
     UiCardSpec reset;
     reset.title = I18nText(locale, Tr(L"Reset Behavior to defaults"));
-    reset.description = {{I18nText(locale, Tr(L"Language, displays, hover details, polling and notifications."))}};
+    reset.description = {
+        {I18nText(locale, Tr(L"Language, displays, hover details, work days, polling and notifications."))}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset,
                                  SettingsField::ResetBehavior, I18nText(locale, TrCtx(L"button", L"Reset")));
 }
@@ -39897,6 +40249,7 @@ struct SettingsUiClient final : UiHostClient {
         if (std::exchange(previewPlacement, view.settings.placement) != view.settings.placement) previewScroll = 0;
         view.previewScroll = previewScroll;
         view.now = NowUnixMs();
+        view.localTime = UnixMsToLocalSystemTime;
         view.versionCopied = versionCopied;
         for (size_t i = 0; i < view.settings.accounts.size() && i < edits.keys.size(); i++) {
             SettingsViewAccount account;

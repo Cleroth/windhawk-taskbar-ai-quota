@@ -208,6 +208,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"other{# linhas de medidores exportadas}} (conta selecionada) para {path}. Rótulos omitidos; horários em "
      L"UTC."},
     {L"", L"Extra usage chart", L"Gráfico do uso adicional"},
+    {L"", L"First work day", L"Primeiro dia de trabalho"},
     {L"", L"Free to use, modify and share.", L"Livre para usar, modificar e compartilhar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -254,8 +255,9 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Keep history", L"Manter histórico"},
     {L"", L"Label", L"Rótulo"},
     {L"", L"Label font size", L"Tamanho da fonte do rótulo"},
-    {L"", L"Language, displays, hover details, polling and notifications.",
-     L"Idioma, telas, detalhes ao passar o mouse, consultas e notificações."},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.",
+     L"Idioma, telas, detalhes ao passar o mouse, dias de trabalho, consultas e notificações."},
+    {L"", L"Last work day", L"Último dia de trabalho"},
     {L"", L"License", L"Licença"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"Cinza-claro por padrão, escuro em uma barra de tarefas clara. Personalizar… abre o seletor de cores."},
@@ -304,6 +306,11 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Abre os detalhes de uma conta quando o ponteiro para sobre ela."},
     {L"", L"Orange from", L"Laranja a partir de"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"O ritmo e as projeções contam apenas seus dias de trabalho e não avançam nos seus dias de folga, para cotas "
+     L"cuja janela é maior que um dia. O uso em um dia de folga continua contando, e os horários de reinício não "
+     L"mudam."},
     {L"", L"Pace markers", L"Marcadores de ritmo"},
     {L"", L"Palette", L"Paleta"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -636,6 +643,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Turn off Reset countdown to change this.", L"Desative Contagem até o reinício para alterar isto."},
     {L"", L"Turn on Pace markers to change this.", L"Ative Marcadores de ritmo para alterar isto."},
     {L"", L"Turn on Record usage history to change this.", L"Ative Registrar histórico de uso para alterar isto."},
+    {L"", L"Turn on Work days only to change this.", L"Ative Somente dias de trabalho para alterar isto."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Cotas indisponíveis são ocultadas automaticamente. Pelo menos uma fica selecionada."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -686,7 +694,10 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Branco, o padrão, segue a cor do texto da barra de tarefas. Personalizar… abre o seletor de cores."},
     {L"", L"Windows transparency effects are off, so it shows as Solid.",
      L"Os efeitos de transparência do Windows estão desativados, então ele aparece como Sólido."},
+    {L"", L"Work days only", L"Somente dias de trabalho"},
     {L"", L"Yellow from", L"Amarelo a partir de"},
+    {L"", L"Your work days run from this day through the last one.",
+     L"Seus dias de trabalho vão deste dia até o último, inclusive."},
     {L"", L"{exported} Includes both elapsed 7-day periods.",
      L"{exported} Inclui os dois períodos de 7 dias já decorridos."},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
@@ -1179,6 +1190,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"settings-section", L"Language", L"Idioma"},
     {L"settings-section", L"Links", L"Links"},
     {L"settings-section", L"Matrix", L"Matriz"},
+    {L"settings-section", L"Pace and projection", L"Ritmo e projeção"},
     {L"settings-section", L"Pace markers", L"Marcadores de ritmo"},
     {L"settings-section", L"Pies", L"Pizzas"},
     {L"settings-section", L"Placement", L"Posicionamento"},
@@ -1292,6 +1304,13 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"No ritmo desde {time}: limite em ~{duration}"},
     {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
      L"No ritmo médio desta janela: limite em ~{duration}"},
+    {L"weekday", L"Friday", L"Sexta-feira"},
+    {L"weekday", L"Monday", L"Segunda-feira"},
+    {L"weekday", L"Saturday", L"Sábado"},
+    {L"weekday", L"Sunday", L"Domingo"},
+    {L"weekday", L"Thursday", L"Quinta-feira"},
+    {L"weekday", L"Tuesday", L"Terça-feira"},
+    {L"weekday", L"Wednesday", L"Quarta-feira"},
     {L"window-title", L"{app} — Settings", L"{app} — Configurações"},
     {L"window-title", L"{app} — Usage history", L"{app} — Histórico de uso"},
 };

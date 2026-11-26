@@ -11,8 +11,8 @@ Each file opens with a comment naming what it holds.
 - `net/`: WinHTTP with handle tracking. `providers/`: each provider's usage requests and parsing.
 - `auth/`: OAuth clients, the token store, the sign-in thread and window.
 - `fetch/`: the polling loop, threshold notifications, provider status pages.
-- `taskbar/`: XAML injection and placement, quota grids and tiles, the meter model, the details
-  flyout, logos, marshaling.
+- `taskbar/`: XAML injection and placement, quota grids and tiles, the meter model and the work
+  days its pace and projections count, the details flyout, logos, marshaling.
 - `settings/`: the settings window (pages, edit controller, store, account commands, preview).
 - `history/`: the journal, series model, burn-up curves and the usage history window.
 - `ui/`: the custom-drawn window toolkit ([ui/AGENTS.md](ui/AGENTS.md)); `i18n/`: localization

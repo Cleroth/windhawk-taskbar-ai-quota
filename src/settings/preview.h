@@ -129,13 +129,14 @@ static SettingsPreviewRow SettingsPreviewRowAt(const SettingsPreviewStrip& strip
 // color the tile chrome and the taskbar's text (logos without brand colors, labels, keys, tray).
 // Tests may pass accounts with their data (and their providers' outage levels, none without) to
 // lay out instead of the samples, whose outage is VisualTestOutage's; either shows only while
-// outage marks are on.
+// outage marks are on. `localTime`: MeterDisplayFor's.
 static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings, const I18nLocale& locale,
                                                   double taskbarHeight, float scale, ULONGLONG now,
                                                   bool gallery, bool light, uint32_t text,
                                                   const std::vector<AccountConfig>* testAccounts = nullptr,
                                                   const std::vector<AccountData>* testData = nullptr,
-                                                  const std::vector<OutageLevel>* testOutages = nullptr) {
+                                                  const std::vector<OutageLevel>* testOutages = nullptr,
+                                                  const LocalTimeSource& localTime = {}) {
     using Op = SettingsPreviewOp;
     SettingsPreviewStrip strip;
     // Text as XAML lays it out: natural line height, width rounded up to device pixels.
@@ -158,7 +159,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                                       font == TileFont::Text ? DWRITE_FONT_WEIGHT_NORMAL : DWRITE_FONT_WEIGHT_SEMI_BOLD})
                               .width);
         },
-        now, scale, taskbarHeight);
+        now, scale, taskbarHeight, 0, localTime);
     std::vector<AccountConfig> accounts;
     std::vector<AccountData> data;
     BuildVisualTestSnapshot(display, &accounts, &data);
@@ -856,7 +857,8 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
     Settings settings = view.settings;
     if (gallery) settings.barLayout = BarLayout(item.action.value);
     SettingsPreviewStrip strip = SettingsPreviewLayout(g, settings, view.locale, view.status.taskbarHeight, scale,
-                                                       view.now, gallery, light, text);
+                                                       view.now, gallery, light, text, nullptr, nullptr, nullptr,
+                                                       view.localTime);
 
     D2D1_MATRIX_3X2_F base{};
     target->GetTransform(&base);
@@ -1089,7 +1091,8 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
                                     uint32_t& id, float x, float y, float width) {
     constexpr float kPadX = 1 + 14, kPadTop = 1 + 12, kRow = 20, kGap = 10, kPadBottom = 14 + 1;
     SettingsPreviewStrip strip = SettingsPreviewLayout(g, view.settings, view.locale, view.status.taskbarHeight,
-                                                       view.scale, view.now, false, false, 0);
+                                                       view.scale, view.now, false, false, 0, nullptr, nullptr,
+                                                       nullptr, view.localTime);
     float stripWidth = std::max(width - 2 * kPadX, 1.0f);
     const SettingsPreviewRow home = SettingsPreviewRowAt(strip, stripWidth, 0);
     const bool cut = home.tiles < 0 || home.tiles + strip.width > stripWidth;

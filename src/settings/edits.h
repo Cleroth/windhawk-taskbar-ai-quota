@@ -17,6 +17,9 @@ enum class SettingsField : uint8_t {
     // Behavior
     ShowOn,  // Monitor mode and number: 0 primary, -1 all, N display N
     ShowDetailsOnHover,
+    WorkDays,       // Pace and projections over work days only
+    FirstWorkDay,   // A weekday: 0 Sunday to 6 Saturday
+    LastWorkDay,
     PollMinutes,
     HiddenPolling,      // Hidden accounts' polls: an interval in minutes, kHiddenPollNever or kHiddenPollAsShown
     HiddenPollMinutes,  // Their interval's custom minutes
@@ -182,7 +185,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
         case SettingsField::ResetBehavior:
             return {SettingsField::ShowOn,        SettingsField::ShowDetailsOnHover, SettingsField::PollMinutes,
                     SettingsField::HiddenPolling, SettingsField::HiddenPollMinutes,  SettingsField::Notifications,
-                    SettingsField::Language};
+                    SettingsField::Language,      SettingsField::WorkDays,           SettingsField::FirstWorkDay,
+                    SettingsField::LastWorkDay};
         case SettingsField::ResetHistory:
             return {SettingsField::RecordHistory, SettingsField::KeepHistory, SettingsField::RetentionDays,
                     SettingsField::HistoryRange};
@@ -233,6 +237,9 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
                    s.taskbarMonitorMode == TaskbarMonitorMode::All     ? -1 :
                                                                          s.taskbarMonitorNumber;
         case SettingsField::ShowDetailsOnHover: return s.showDetailsOnHover;
+        case SettingsField::WorkDays: return s.workDays;
+        case SettingsField::FirstWorkDay: return s.firstWorkDay;
+        case SettingsField::LastWorkDay: return s.lastWorkDay;
         case SettingsField::PollMinutes: return s.pollMinutes;
         case SettingsField::HiddenPolling: return s.hiddenPollMinutes;
         case SettingsField::HiddenPollMinutes:
@@ -329,6 +336,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             if (value > 0) s.taskbarMonitorNumber = value;
             break;
         case SettingsField::ShowDetailsOnHover: s.showDetailsOnHover = value != 0; break;
+        case SettingsField::WorkDays: s.workDays = value != 0; break;
+        case SettingsField::FirstWorkDay: s.firstWorkDay = std::clamp(value, 0, 6); break;
+        case SettingsField::LastWorkDay: s.lastWorkDay = std::clamp(value, 0, 6); break;
         case SettingsField::PollMinutes: s.pollMinutes = value; break;
         case SettingsField::HiddenPolling:
             s.hiddenPollMinutes = value < 0 ? kHiddenPollAsShown :
@@ -521,6 +531,9 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.taskbarMonitorMode = defaults.taskbarMonitorMode;
             s.taskbarMonitorNumber = defaults.taskbarMonitorNumber;
             s.showDetailsOnHover = defaults.showDetailsOnHover;
+            s.workDays = defaults.workDays;
+            s.firstWorkDay = defaults.firstWorkDay;
+            s.lastWorkDay = defaults.lastWorkDay;
             s.pollMinutes = defaults.pollMinutes;
             s.hiddenPollMinutes = defaults.hiddenPollMinutes;
             s.notificationLevel = defaults.notificationLevel;

@@ -224,10 +224,10 @@ struct FlyoutChartShape {
     std::vector<std::vector<winrt::Windows::Foundation::Point>> lines;  // Runs of 2+ readings.
     std::vector<winrt::Windows::Foundation::Point> dots;                // Isolated readings.
     winrt::Windows::Foundation::Point now{-1.f, -1.f};    // Current point; X is the now line.
-    winrt::Windows::Foundation::Point projectionEnd{-1.f, -1.f};  // X < 0 without a projection.
-    // The even-pace line's ends; X < 0 without one.
-    winrt::Windows::Foundation::Point paceFrom{-1.f, -1.f};
-    winrt::Windows::Foundation::Point paceTo{-1.f, -1.f};
+    // The projection from the current point on and the even-pace line, each with a corner where
+    // a day off starts or ends; empty without one.
+    std::vector<winrt::Windows::Foundation::Point> projection;
+    std::vector<winrt::Windows::Foundation::Point> pace;
     uint32_t color = 0;
 
     bool operator==(const FlyoutChartShape&) const = default;
@@ -257,11 +257,11 @@ struct FlyoutQuotaRow {
 
     // Usage chart, shown instead of the bar while the row has a recorded curve.
     FrameworkElement chart{nullptr};
-    wuxs::Line chartPace{nullptr};
+    wuxs::Polyline chartPace{nullptr};
     wuxs::Path chartArea{nullptr};
     wuxs::Path chartLines{nullptr};
     wuxs::Path chartDots{nullptr};
-    wuxs::Line chartProjection{nullptr};
+    wuxs::Polyline chartProjection{nullptr};
     wuxs::Line chartNow{nullptr};
     wuxs::Ellipse chartMarker{nullptr};
     FlyoutChartShape chartShape;
