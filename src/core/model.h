@@ -93,8 +93,8 @@ enum class SparklineExtra {
     Percent,  // Of the limit; the amount without one.
 };
 
-// How much of a window longer than its span a sparkline's chart shows: the whole window, or the
-// hours before and after now.
+// How much of a window longer than its span a chart shows (a sparkline's, the details flyout's):
+// the whole window, or the hours before and after now.
 enum class SparklineSpan {
     Window,
     Hours12,
@@ -310,6 +310,10 @@ struct Settings {
     // additional_rate_limits lines (Codex Spark, gpt-reserve, ...) and the Spark plan name.
     bool showOpenAiExtraLimits = false;
     ExtraUsageChart extraUsageChart = ExtraUsageChart::Month;
+    // The details flyout's charts of long windows, and the chart's whose quota row the pointer
+    // rests on (none: as the others).
+    SparklineSpan flyoutChartSpan = SparklineSpan::Window;
+    std::optional<SparklineSpan> flyoutChartHoverSpan = SparklineSpan::Hours24;
     UsagePalette usagePalette = UsagePalette::Default;
     // The Custom palette's colors, kept while another palette is chosen.
     std::array<COLORREF, 4> customUsageColors = kDefaultUsageColors;

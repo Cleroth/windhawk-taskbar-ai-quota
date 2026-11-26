@@ -21,6 +21,10 @@ struct FlyoutDisplay {
     bool refreshing = false;
     bool visualTestMode = false;
     ExtraUsageChart extraUsageChart = ExtraUsageChart::Month;  // MeterDisplay::extraUsageChart
+    // How far each side of now a long window's chart spans (SparklineAroundMs), and the chart's
+    // whose quota row the pointer rests on (none: as the others).
+    ULONGLONG chartAroundMs = 0;
+    std::optional<ULONGLONG> chartHoverAroundMs;
     // What the provider's status page shows, and the taskbar mark's color for it (0: none).
     ProviderOutage outage;
     uint32_t outageColor = 0;
@@ -85,8 +89,35 @@ static std::wstring NotificationProjectionText(const I18nLocale& locale, uint64_
         reading);
 }
 
-// Builds the card for `provider` into state.flyout.popup, registering its button delegates there
-// as they are created, in the grid's language. Values are filled by UpdateAccountFlyout.
+// Finds the main quota row under the pointer (FlyoutPopup::hoverRow) from its last position over
+// the rows, against their current layout: scrolling or a relayout can put another row under a
+// resting pointer. That row's chart takes the span on hover: a change updates the card while that
+// span differs from the charts' own, which may close the flyout. XAML calls may throw.
+static void UpdateFlyoutHoverRow(QuotaUiInstance& state) {
+    FlyoutPopup& popup = state.flyout.popup;
+    int row = -1;
+    if (popup.rowsPointer && popup.rowsGrid && popup.card) {
+        // The main rows come first, in FlyoutRowIndex order (the extra quotas' have no chart);
+        // a collapsed row has no height.
+        double y = popup.card.TransformToVisual(popup.rowsGrid).TransformPoint(*popup.rowsPointer).Y;
+        auto definitions = popup.rowsGrid.RowDefinitions();
+        for (uint32_t index = 0; index < std::min<uint32_t>(definitions.Size(), kFlyoutRowCount); index++) {
+            double height = definitions.GetAt(index).ActualHeight();
+            if (y >= 0 && y < height) {
+                row = (int)index;
+                break;
+            }
+            y -= height;
+        }
+    }
+    if (popup.hoverRow == row) return;
+    popup.hoverRow = row;
+    if (popup.chartHoverSwap) UpdateQuotaUi(state);
+}
+
+// Builds the card for `provider` into state.flyout.popup, registering its button and pointer
+// delegates there as they are created, in the grid's language. Values are filled by
+// UpdateAccountFlyout.
 static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provider,
                               bool visualTestMode) {
     FlyoutPopup& popup = state.flyout.popup;
@@ -298,6 +329,38 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     Grid rowsGrid;
     popup.namesColumn = addColumn(rowsGrid, kAuto);
     popup.detailsColumn = addColumn(rowsGrid, kStar);
+    // The pointer over the rows, for the span on hover of the chart in its row: the grid takes the
+    // pointer anywhere over it. XAML can miss the pointer leaving the popup, and reports no move
+    // when the rows move under it; the popup's poll (EnsureFlyoutTimers) covers both.
+    rowsGrid.Background(transparent);
+    popup.rowsGrid = rowsGrid;
+    popup.rowsMovedToken = rowsGrid.PointerMoved(
+        [hWnd, generation](winrt::Windows::Foundation::IInspectable const&,
+                           wuxi::PointerRoutedEventArgs const& e) {
+            if (g_unloading) return;
+            try {
+                auto* uiState = FindUiState(hWnd);
+                if (!uiState) return;
+                FlyoutPopup& popup = uiState->flyout.popup;
+                if (!popup.flyout || popup.generation != generation || !popup.card) return;
+                popup.rowsPointer = e.GetCurrentPoint(popup.card).Position();
+                UpdateFlyoutHoverRow(*uiState);
+            } catch (...) {}
+        });
+    auto rowsExited = [hWnd, generation](winrt::Windows::Foundation::IInspectable const&,
+                                         wuxi::PointerRoutedEventArgs const&) {
+        if (g_unloading) return;
+        try {
+            auto* uiState = FindUiState(hWnd);
+            if (!uiState) return;
+            FlyoutPopup& popup = uiState->flyout.popup;
+            if (!popup.flyout || popup.generation != generation) return;
+            popup.rowsPointer.reset();
+            UpdateFlyoutHoverRow(*uiState);
+        } catch (...) {}
+    };
+    popup.rowsExitedToken = rowsGrid.PointerExited(rowsExited);
+    popup.rowsCanceledToken = rowsGrid.PointerCanceled(rowsExited);
     ScrollViewer rowsScroller;
     rowsScroller.HorizontalScrollMode(ScrollMode::Disabled);
     rowsScroller.HorizontalScrollBarVisibility(ScrollBarVisibility::Disabled);
@@ -695,6 +758,7 @@ static void UpdateAccountFlyout(
     bool copilot = account.provider == L"copilot";
     bool opencode = account.provider == L"opencode";
     const I18nLocale& locale = display.locale;
+    popup.chartHoverSwap = display.chartHoverAroundMs && *display.chartHoverAroundMs != display.chartAroundMs;
     wchar_t text[128];
     try {
         popup.title.Text(account.label);
@@ -934,11 +998,16 @@ static void UpdateAccountFlyout(
                 using winrt::Windows::Foundation::Point;
                 // A rolled-back clock can put now before the newest reading.
                 ULONGLONG now = std::max(display.now, trace.back().timeMs);
-                // The span drawn: the window; extra usage, its chart's (ExtraUsageChartSpan).
+                // The span drawn: the window (extra usage: its chart's, ExtraUsageChartSpan), or a long
+                // one's hours each side of now, kept inside it; the row under the pointer takes the
+                // span on hover.
                 const ULONGLONG windowStart = wu.resetUnixMs - wu.windowDurationMs;
                 const WindowUsage& over = r == kFlyoutExtraRow ?
                     ExtraUsageChartSpan(display.extraUsageChart, account, d, now) : wu;
-                const ULONGLONG start = over.resetUnixMs - over.windowDurationMs, span = over.windowDurationMs;
+                ULONGLONG start = over.resetUnixMs - over.windowDurationMs, span = over.windowDurationMs;
+                NarrowChartSpan(r == popup.hoverRow && display.chartHoverAroundMs ? *display.chartHoverAroundMs :
+                                                                                  display.chartAroundMs,
+                                now, start, span);
                 auto snap = [](double dip) { return (float)(std::round(dip * 4) / 4); };
                 auto xAt = [&](ULONGLONG timeMs) {
                     return snap(std::clamp(((double)timeMs - (double)start) / (double)span, 0.0, 1.0) *

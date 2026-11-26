@@ -97,6 +97,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Systemdialoge können nicht sicher verfolgt werden; Vorgang abgebrochen."},
     {L"", L"Chart height", L"Diagrammhöhe"},
     {L"", L"Chart outline", L"Diagrammrahmen"},
+    {L"", L"Chart time span", L"Diagrammzeitraum"},
+    {L"", L"Chart time span on hover", L"Diagrammzeitraum beim Daraufzeigen"},
     {L"", L"Chart width", L"Diagrammbreite"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Diagramme, Statistiken und CSV-Export aus lokalen Messwerten, auch wenn die Aufzeichnung aus ist."},
@@ -696,6 +698,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"hours before and after now.",
      L"Wöchentliche und monatliche Diagramme ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): das ganze Zeitfenster "
      L"oder 12 bis 48 Stunden vor und nach dem aktuellen Zeitpunkt."},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"Wöchentliche und monatliche Diagramme in der Detailansicht: das ganze Zeitfenster oder 12 bis 48 Stunden vor "
+     L"und nach dem aktuellen Zeitpunkt."},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"Was eines dieser Diagramme zeigt, während der Zeiger in der Detailansicht auf der Zeile seines Kontingents "
+     L"verweilt."},
     {L"", L"What those charts show while the pointer rests on the account.",
      L"Was diese Diagramme zeigen, während der Zeiger auf dem Konto verweilt."},
     {L"", L"Where each account’s identity sits next to its bars.",

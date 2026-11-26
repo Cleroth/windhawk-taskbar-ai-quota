@@ -659,6 +659,15 @@ static void RunI18nSettingsTests() {
         CHECK(std::any_of(frame.content.begin(), frame.content.end(), [&](const UiItem& item) {
             return item.kind == UiItemKind::Text && item.font == UiFont::BodyStrong && UiRunsText(item.runs) == graph;
         }));
+        // The details flyout's charts offer the same spans on the Display page, titled Период графиков
+        // and Период графиков при наведении.
+        view.page = SettingsUiPage::Display;
+        UiFrame display = DisplayFrame(view);
+        CHECK(TestOptionTexts(Control(display, SettingsField::FlyoutChartSpan)) == spans);
+        CHECK(TestOptionTexts(Control(display, SettingsField::FlyoutChartHoverSpan)) == hover);
+        CHECK(HasText(display, L"\u041F\u0435\u0440\u0438\u043E\u0434 \u0433\u0440\u0430\u0444\u0438\u043A\u043E\u0432") &&
+              HasText(display, L"\u041F\u0435\u0440\u0438\u043E\u0434 \u0433\u0440\u0430\u0444\u0438\u043A\u043E\u0432 "
+                               L"\u043F\u0440\u0438 \u043D\u0430\u0432\u0435\u0434\u0435\u043D\u0438\u0438"));
     });
 
     Run("display page in Chinese: the threshold that threshold notifications use reads as one whole text with its "

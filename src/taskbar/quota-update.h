@@ -312,6 +312,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                 meters.stale, meters.warn, accountRefreshing,
                                                 visualTestMode};
                     flyoutDisplay.extraUsageChart = display.extraUsageChart;
+                    flyoutDisplay.chartAroundMs = SparklineAroundMs(settings.flyoutChartSpan);
+                    if (settings.flyoutChartHoverSpan) {
+                        flyoutDisplay.chartHoverAroundMs = SparklineAroundMs(*settings.flyoutChartHoverSpan);
+                    }
                     flyoutDisplay.outage = outage;
                     flyoutDisplay.outageColor = meters.mark == IdentityMark::Outage ? meters.markColor : 0;
                     flyoutDisplay.locale = display.locale;

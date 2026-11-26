@@ -90,6 +90,8 @@ enum class SettingsField : uint8_t {
     ShowProviderOutages,
     ShowOpenAiExtraLimits,
     ExtraUsageChart,        // An ExtraUsageChart
+    FlyoutChartSpan,        // A SparklineSpan
+    FlyoutChartHoverSpan,   // A SparklineSpan, or -1: none
     // Accounts: fields of the account a draft's key names
     AccountLabel,         // Text, trimmed; unique per provider
     AccountTileIdentity,  // A TileIdentity
@@ -218,7 +220,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::YellowThreshold,     SettingsField::OrangeThreshold,
                     SettingsField::RedThreshold,        SettingsField::ShowStaleWarning,
                     SettingsField::ShowProviderOutages, SettingsField::ShowOpenAiExtraLimits,
-                    SettingsField::ExtraUsageChart};
+                    SettingsField::ExtraUsageChart,     SettingsField::FlyoutChartSpan,
+                    SettingsField::FlyoutChartHoverSpan};
         default: return {};
     }
 }
@@ -305,6 +308,8 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::ShowProviderOutages: return s.showProviderOutages;
         case SettingsField::ShowOpenAiExtraLimits: return s.showOpenAiExtraLimits;
         case SettingsField::ExtraUsageChart: return int(s.extraUsageChart);
+        case SettingsField::FlyoutChartSpan: return int(s.flyoutChartSpan);
+        case SettingsField::FlyoutChartHoverSpan: return s.flyoutChartHoverSpan ? int(*s.flyoutChartHoverSpan) : -1;
         default: return 0;
     }
 }
@@ -378,11 +383,14 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::SparklineRing: s.sparklineRing = value != 0; break;
         case SettingsField::SparklineReadingScale: s.sparklineReadingScale = value; break;
         case SettingsField::SparklineSpan:
-            s.sparklineSpan = SparklineSpan(std::clamp(value, int(SparklineSpan::Window), int(SparklineSpan::Hours48)));
+        case SettingsField::FlyoutChartSpan:
+            (field == SettingsField::SparklineSpan ? s.sparklineSpan : s.flyoutChartSpan) =
+                SparklineSpan(std::clamp(value, int(SparklineSpan::Window), int(SparklineSpan::Hours48)));
             break;
         case SettingsField::SparklineHoverSpan:
-            s.sparklineHoverSpan = value < 0 ? std::nullopt :
-                                   std::optional(SparklineSpan(std::min(value, int(SparklineSpan::Hours48))));
+        case SettingsField::FlyoutChartHoverSpan:
+            (field == SettingsField::SparklineHoverSpan ? s.sparklineHoverSpan : s.flyoutChartHoverSpan) =
+                value < 0 ? std::nullopt : std::optional(SparklineSpan(std::min(value, int(SparklineSpan::Hours48))));
             break;
         case SettingsField::LogoScale: s.logoScale = value; break;
         case SettingsField::ClaudeLogoBrand: s.logoBrands.claude = value != 0; break;
@@ -459,6 +467,8 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.showProviderOutages = defaults.showProviderOutages;
             s.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
             s.extraUsageChart = defaults.extraUsageChart;
+            s.flyoutChartSpan = defaults.flyoutChartSpan;
+            s.flyoutChartHoverSpan = defaults.flyoutChartHoverSpan;
             break;
         case SettingsField::ResetLayout:
             s.barLayout = defaults.barLayout;

@@ -96,6 +96,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Impossible de suivre les boîtes de dialogue natives en toute sécurité\u202F; opération annulée."},
     {L"", L"Chart height", L"Hauteur des graphiques"},
     {L"", L"Chart outline", L"Contour des graphiques"},
+    {L"", L"Chart time span", L"Période des graphiques"},
+    {L"", L"Chart time span on hover", L"Période des graphiques au survol"},
     {L"", L"Chart width", L"Largeur des graphiques"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Graphiques, statistiques et export CSV à partir des échantillons locaux, même quand l’enregistrement est "
@@ -689,6 +691,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"hours before and after now.",
      L"Graphiques hebdomadaires et mensuels ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo})\u202F: la fenêtre entière, ou de "
      L"12 à 48\u00A0heures avant et après l’instant présent."},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"Graphiques hebdomadaires et mensuels du volet des détails\u202F: la fenêtre entière, ou de 12 à 48\u00A0heures "
+     L"avant et après l’instant présent."},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"Ce que l’un de ces graphiques affiche quand le pointeur s’arrête sur la ligne de son quota dans le volet."},
     {L"", L"What those charts show while the pointer rests on the account.",
      L"Ce que ces graphiques affichent quand le pointeur s’arrête sur le compte."},
     {L"", L"Where each account’s identity sits next to its bars.",

@@ -122,6 +122,13 @@ static bool NormalizeSettings(Settings* s) {
         (*s->sparklineHoverSpan < SparklineSpan::Window || *s->sparklineHoverSpan > SparklineSpan::Hours48)) {
         s->sparklineHoverSpan = SparklineSpan::Hours24;
     }
+    if (s->flyoutChartSpan < SparklineSpan::Window || s->flyoutChartSpan > SparklineSpan::Hours48) {
+        s->flyoutChartSpan = SparklineSpan::Window;
+    }
+    if (s->flyoutChartHoverSpan &&
+        (*s->flyoutChartHoverSpan < SparklineSpan::Window || *s->flyoutChartHoverSpan > SparklineSpan::Hours48)) {
+        s->flyoutChartHoverSpan = SparklineSpan::Hours24;
+    }
     s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
     s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 13, kBadgeSizeMin, kBadgeSizeMax);
     s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
@@ -316,6 +323,8 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"openAiExtraLimits", s.showOpenAiExtraLimits);
         setString(L"extraUsageChart", s.extraUsageChart == ExtraUsageChart::Off ? L"off" :
                                       s.extraUsageChart == ExtraUsageChart::Week ? L"week" : L"month");
+        setString(L"flyoutChartSpan", spanName(s.flyoutChartSpan));
+        setString(L"flyoutChartHoverSpan", s.flyoutChartHoverSpan ? spanName(*s.flyoutChartHoverSpan) : L"off");
         setNumber(L"yellowThreshold", s.yellowThreshold);
         setNumber(L"orangeThreshold", s.orangeThreshold);
         setNumber(L"redThreshold", s.redThreshold);
@@ -581,6 +590,10 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         std::wstring extraUsageChart = GetStr(root, L"extraUsageChart");
         s.extraUsageChart = extraUsageChart == L"off" ? ExtraUsageChart::Off :
                             extraUsageChart == L"week" ? ExtraUsageChart::Week : ExtraUsageChart::Month;
+        s.flyoutChartSpan = spanOf(L"flyoutChartSpan", SparklineSpan::Window);
+        s.flyoutChartHoverSpan = GetStr(root, L"flyoutChartHoverSpan") == L"off" ?
+                                     std::nullopt :
+                                     std::optional(spanOf(L"flyoutChartHoverSpan", SparklineSpan::Hours24));
         s.yellowThreshold = (int)GetNum(root, L"yellowThreshold", 50);
         s.orangeThreshold = (int)GetNum(root, L"orangeThreshold", 75);
         s.redThreshold = (int)GetNum(root, L"redThreshold", 90);

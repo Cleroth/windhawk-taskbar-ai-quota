@@ -71,6 +71,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Cannot track native dialogs safely; operation cancelled.", L"无法安全地跟踪原生对话框；操作已取消。"},
     {L"", L"Chart height", L"图表高度"},
     {L"", L"Chart outline", L"图表轮廓"},
+    {L"", L"Chart time span", L"图表时间范围"},
+    {L"", L"Chart time span on hover", L"悬停时的图表时间范围"},
     {L"", L"Chart width", L"图表宽度"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"基于本地样本的图表、统计和 CSV 导出，记录关闭时也可使用。"},
@@ -506,6 +508,11 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
           L"hours before and after now.",
      L"每周和每月图表（{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyMo}）：显示整个时段，或当前时刻前后 12 至 48 小时。"},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"详情浮窗中的每周和每月图表：显示整个时段，或当前时刻前后 12 至 48 小时。"},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"指针停留在浮窗中某个配额所在的行上时，该配额图表显示的范围。"},
     {L"", L"What those charts show while the pointer rests on the account.", L"指针停留在账户上时，这些图表显示的范围。"},
     {L"", L"Where each account’s identity sits next to its bars.", L"每个账户的标识相对其条形的位置。"},
     {L"", L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the taskbar’s buttons "

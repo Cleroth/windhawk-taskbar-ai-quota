@@ -53,7 +53,7 @@ to `<target>.cpp` with a `.manifest.json`.
   the mock taskbar and every Position), the Layout page per tile style.
 - `display.inc`: Display fields and reset group (every scalar setting in exactly one page reset),
   Material, usage palettes and Custom colors, threshold ordering, the extra usage chart choice,
-  the Display page and what it changes in the preview.
+  the flyout charts' spans, the Display page and what it changes in the preview.
 - `i18n-settings.inc`: the settings window on the production catalogs (localized runs bound to
   actions, plurals, notices, draft errors, per-page language cases).
 - `i18n-taskbar.inc`: the meter model's localized text, measured taskbar text on synthetic measures

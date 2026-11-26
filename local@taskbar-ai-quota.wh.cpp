@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.24.6
+// @version         2.25.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -81,8 +81,9 @@ signed-in local app or CLI session, which must remain running.
 - **Display:** Material of the details flyout and the settings and history windows (Acrylic,
   Mica, Mica Alt, Tinted wallpaper or Solid; needs Windows transparency effects), used or
   remaining, usage colors (default, colorblind or your own) and thresholds, stale marker,
-  provider outages, and how the details flyout charts Anthropic extra usage (its month, the
-  weekly window, or a bar).
+  provider outages, how the details flyout charts Anthropic extra usage (its month, the
+  weekly window, or a bar), and its weekly and monthly charts' spans, at rest and with the
+  pointer on a quota's row (the whole window, or 12 to 48 hours each side of now).
 - **Behavior:** Choose the language, displays, hover details, polling (hidden accounts every
   hour by default, at another interval, as often as visible ones, or not at all), and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
@@ -661,6 +662,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Systemdialoge können nicht sicher verfolgt werden; Vorgang abgebrochen."},
     {L"", L"Chart height", L"Diagrammhöhe"},
     {L"", L"Chart outline", L"Diagrammrahmen"},
+    {L"", L"Chart time span", L"Diagrammzeitraum"},
+    {L"", L"Chart time span on hover", L"Diagrammzeitraum beim Daraufzeigen"},
     {L"", L"Chart width", L"Diagrammbreite"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Diagramme, Statistiken und CSV-Export aus lokalen Messwerten, auch wenn die Aufzeichnung aus ist."},
@@ -1260,6 +1263,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"hours before and after now.",
      L"Wöchentliche und monatliche Diagramme ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): das ganze Zeitfenster "
      L"oder 12 bis 48 Stunden vor und nach dem aktuellen Zeitpunkt."},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"Wöchentliche und monatliche Diagramme in der Detailansicht: das ganze Zeitfenster oder 12 bis 48 Stunden vor "
+     L"und nach dem aktuellen Zeitpunkt."},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"Was eines dieser Diagramme zeigt, während der Zeiger in der Detailansicht auf der Zeile seines Kontingents "
+     L"verweilt."},
     {L"", L"What those charts show while the pointer rests on the account.",
      L"Was diese Diagramme zeigen, während der Zeiger auf dem Konto verweilt."},
     {L"", L"Where each account’s identity sits next to its bars.",
@@ -1979,6 +1989,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"No se pueden supervisar con seguridad los cuadros de diálogo nativos; se canceló la operación."},
     {L"", L"Chart height", L"Alto del gráfico"},
     {L"", L"Chart outline", L"Contorno del gráfico"},
+    {L"", L"Chart time span", L"Intervalo de los gráficos"},
+    {L"", L"Chart time span on hover", L"Intervalo de los gráficos al pasar el puntero"},
     {L"", L"Chart width", L"Ancho del gráfico"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Gráficos, estadísticas y exportación CSV a partir de muestras locales, también con el registro desactivado."},
@@ -2560,6 +2572,12 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"hours before and after now.",
      L"Gráficos semanales y mensuales ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): la ventana completa, o de 12 a "
      L"48 horas antes y después de ahora."},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"Gráficos semanales y mensuales del panel de detalles: la ventana completa, o de 12 a 48 horas antes y después "
+     L"de ahora."},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"Lo que muestra uno de esos gráficos mientras el puntero se detiene sobre la fila de su cuota en el panel."},
     {L"", L"What those charts show while the pointer rests on the account.",
      L"Lo que muestran esos gráficos mientras el puntero se detiene sobre la cuenta."},
     {L"", L"Where each account’s identity sits next to its bars.",
@@ -3288,6 +3306,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Impossible de suivre les boîtes de dialogue natives en toute sécurité\u202F; opération annulée."},
     {L"", L"Chart height", L"Hauteur des graphiques"},
     {L"", L"Chart outline", L"Contour des graphiques"},
+    {L"", L"Chart time span", L"Période des graphiques"},
+    {L"", L"Chart time span on hover", L"Période des graphiques au survol"},
     {L"", L"Chart width", L"Largeur des graphiques"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Graphiques, statistiques et export CSV à partir des échantillons locaux, même quand l’enregistrement est "
@@ -3881,6 +3901,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"hours before and after now.",
      L"Graphiques hebdomadaires et mensuels ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo})\u202F: la fenêtre entière, ou de "
      L"12 à 48\u00A0heures avant et après l’instant présent."},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"Graphiques hebdomadaires et mensuels du volet des détails\u202F: la fenêtre entière, ou de 12 à 48\u00A0heures "
+     L"avant et après l’instant présent."},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"Ce que l’un de ces graphiques affiche quand le pointeur s’arrête sur la ligne de son quota dans le volet."},
     {L"", L"What those charts show while the pointer rests on the account.",
      L"Ce que ces graphiques affichent quand le pointeur s’arrête sur le compte."},
     {L"", L"Where each account’s identity sits next to its bars.",
@@ -4594,6 +4620,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Cannot track native dialogs safely; operation cancelled.", L"ネイティブ ダイアログを安全に追跡できないため、操作をキャンセルしました。"},
     {L"", L"Chart height", L"グラフの高さ"},
     {L"", L"Chart outline", L"グラフの枠線"},
+    {L"", L"Chart time span", L"グラフの表示期間"},
+    {L"", L"Chart time span on hover", L"ホバー時のグラフの表示期間"},
     {L"", L"Chart width", L"グラフの幅"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"ローカルのサンプルからのグラフ、統計、CSV エクスポート。記録がオフでも使えます。"},
@@ -5050,6 +5078,11 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
           L"hours before and after now.",
      L"週間と月間のグラフ ({key7d}、{keyFa}、{keyAr}、{keyEx}、{keyMo}): 期間全体、または現在の前後 12～48 時間。"},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"詳細フライアウトの週間と月間のグラフ: 期間全体、または現在の前後 12～48 時間。"},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"詳細フライアウトでポインターをクォータの行に合わせている間、そのグラフに表示する範囲。"},
     {L"", L"What those charts show while the pointer rests on the account.", L"ポインターをアカウントに合わせている間、それらのグラフに表示する範囲。"},
     {L"", L"Where each account’s identity sits next to its bars.", L"バーに対する各アカウントの識別表示の位置。"},
     {L"", L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the taskbar’s buttons "
@@ -5727,6 +5760,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Não é possível acompanhar as caixas de diálogo nativas com segurança; operação cancelada."},
     {L"", L"Chart height", L"Altura do gráfico"},
     {L"", L"Chart outline", L"Contorno do gráfico"},
+    {L"", L"Chart time span", L"Período dos gráficos"},
+    {L"", L"Chart time span on hover", L"Período dos gráficos ao passar o mouse"},
     {L"", L"Chart width", L"Largura do gráfico"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Gráficos, estatísticas e exportação CSV a partir de amostras locais, mesmo com o registro desativado."},
@@ -6298,6 +6333,12 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"hours before and after now.",
      L"Gráficos semanais e mensais ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): a janela inteira, ou de 12 a 48 "
      L"horas antes e depois do momento atual."},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"Gráficos semanais e mensais do painel de detalhes: a janela inteira, ou de 12 a 48 horas antes e depois do "
+     L"momento atual."},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"O que um desses gráficos mostra enquanto o ponteiro para sobre a linha da sua cota no painel."},
     {L"", L"What those charts show while the pointer rests on the account.",
      L"O que esses gráficos mostram enquanto o ponteiro para sobre a conta."},
     {L"", L"Where each account’s identity sits next to its bars.",
@@ -7017,6 +7058,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Не удаётся безопасно отслеживать системные диалоговые окна; операция отменена."},
     {L"", L"Chart height", L"Высота графика"},
     {L"", L"Chart outline", L"Контур графика"},
+    {L"", L"Chart time span", L"Период графиков"},
+    {L"", L"Chart time span on hover", L"Период графиков при наведении"},
     {L"", L"Chart width", L"Ширина графика"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Графики, статистика и экспорт в CSV по локальным замерам, даже когда запись выключена."},
@@ -7587,6 +7630,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"hours before and after now.",
      L"Недельные и месячные графики ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): всё окно или от 12 до 48 часов до "
      L"и после текущего момента."},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"Недельные и месячные графики в панели сведений: всё окно или от 12 до 48 часов до и после текущего момента."},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"Что показывает один из этих графиков, пока указатель задерживается на строке его квоты в панели."},
     {L"", L"What those charts show while the pointer rests on the account.",
      L"Что эти графики показывают, пока указатель задерживается на аккаунте."},
     {L"", L"Where each account’s identity sits next to its bars.",
@@ -8281,6 +8329,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Cannot track native dialogs safely; operation cancelled.", L"无法安全地跟踪原生对话框；操作已取消。"},
     {L"", L"Chart height", L"图表高度"},
     {L"", L"Chart outline", L"图表轮廓"},
+    {L"", L"Chart time span", L"图表时间范围"},
+    {L"", L"Chart time span on hover", L"悬停时的图表时间范围"},
     {L"", L"Chart width", L"图表宽度"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"基于本地样本的图表、统计和 CSV 导出，记录关闭时也可使用。"},
@@ -8716,6 +8766,11 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
           L"hours before and after now.",
      L"每周和每月图表（{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyMo}）：显示整个时段，或当前时刻前后 12 至 48 小时。"},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"详情浮窗中的每周和每月图表：显示整个时段，或当前时刻前后 12 至 48 小时。"},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"指针停留在浮窗中某个配额所在的行上时，该配额图表显示的范围。"},
     {L"", L"What those charts show while the pointer rests on the account.", L"指针停留在账户上时，这些图表显示的范围。"},
     {L"", L"Where each account’s identity sits next to its bars.", L"每个账户的标识相对其条形的位置。"},
     {L"", L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the taskbar’s buttons "
@@ -9884,8 +9939,8 @@ enum class SparklineExtra {
     Percent,  // Of the limit; the amount without one.
 };
 
-// How much of a window longer than its span a sparkline's chart shows: the whole window, or the
-// hours before and after now.
+// How much of a window longer than its span a chart shows (a sparkline's, the details flyout's):
+// the whole window, or the hours before and after now.
 enum class SparklineSpan {
     Window,
     Hours12,
@@ -10101,6 +10156,10 @@ struct Settings {
     // additional_rate_limits lines (Codex Spark, gpt-reserve, ...) and the Spark plan name.
     bool showOpenAiExtraLimits = false;
     ExtraUsageChart extraUsageChart = ExtraUsageChart::Month;
+    // The details flyout's charts of long windows, and the chart's whose quota row the pointer
+    // rests on (none: as the others).
+    SparklineSpan flyoutChartSpan = SparklineSpan::Window;
+    std::optional<SparklineSpan> flyoutChartHoverSpan = SparklineSpan::Hours24;
     UsagePalette usagePalette = UsagePalette::Default;
     // The Custom palette's colors, kept while another palette is chosen.
     std::array<COLORREF, 4> customUsageColors = kDefaultUsageColors;
@@ -11009,6 +11068,17 @@ struct FlyoutPopup {
     // Quota grid columns: name/number and details. Charts give details a fixed width.
     ColumnDefinition namesColumn{nullptr};
     ColumnDefinition detailsColumn{nullptr};
+    // The quota rows' grid and its pointer delegates, which keep the pointer's last position over
+    // it, in the card's coordinates (none off it). `hoverRow`: the main row there (a
+    // FlyoutRowIndex; -1: none), whose chart takes the span on hover. `chartHoverSwap`: that span
+    // differs from the charts' own, so a change of row updates the card.
+    Grid rowsGrid{nullptr};
+    winrt::event_token rowsMovedToken{};
+    winrt::event_token rowsExitedToken{};
+    winrt::event_token rowsCanceledToken{};
+    std::optional<winrt::Windows::Foundation::Point> rowsPointer;
+    int hoverRow = -1;
+    bool chartHoverSwap = false;
     // Chart legend, shown while a row shows a chart.
     FrameworkElement legend{nullptr};
     FrameworkElement notes{nullptr};
@@ -19796,8 +19866,8 @@ static constexpr double kSparkNowLineWidth = 1, kSparkCaretHalfWidth = 2.4, kSpa
 static constexpr double kSparkInset = 2, kSparkPlotRadius = 3, kSparkChartGap = 4, kSparkOutlineStroke = 1;
 // Room for sparkline shapes past the plot: the largest ring around a point on its edge.
 static constexpr double kSparkOverflow = kSparkRingOuter * kSparklineReadingScaleMax / 100 + 0.4;
-// How far before and after now a long window's chart spans (MeterDisplay::sparklineAroundMs); 0:
-// the whole window.
+// How far before and after now a long window's chart spans (MeterDisplay::sparklineAroundMs, the
+// details flyout's FlyoutDisplay::chartAroundMs); 0: the whole window.
 static ULONGLONG SparklineAroundMs(SparklineSpan span) {
     static constexpr ULONGLONG kHourMs = 60 * 60 * 1000;
     switch (span) {
@@ -20700,6 +20770,14 @@ static const WindowUsage& ExtraUsageChartSpan(ExtraUsageChart chart, const Accou
     return chart == ExtraUsageChart::Week && account.provider == L"anthropic" && running ? week : data.extraUsage;
 }
 
+// A chart's span (from `start`, `span` long) cut to `around` each side of `now` (SparklineAroundMs)
+// and kept inside it; one no longer than twice `around`, or with `around` 0, stays whole.
+static void NarrowChartSpan(ULONGLONG around, ULONGLONG now, ULONGLONG& start, ULONGLONG& span) {
+    if (!around || span <= 2 * around) return;
+    start = std::min(now > start + around ? now - around : start, start + span - 2 * around);
+    span = 2 * around;
+}
+
 // Bar layouts' corners, thin rail, pace tick and percent text placement, in DIPs along and across
 // the bar. Pixel details scale with 1 / rasterizationScale.
 struct BarGeometry {
@@ -21542,11 +21620,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 start = over.resetUnixMs - over.windowDurationMs;
                 span = over.windowDurationMs;
             }
-            const ULONGLONG around = display.sparklineAroundMs;
-            if (timed(w) && around && span > 2 * around) {
-                start = std::min(now > start + around ? now - around : start, start + span - 2 * around);
-                span = 2 * around;
-            }
+            if (timed(w)) NarrowChartSpan(display.sparklineAroundMs, now, start, span);
             auto xAt = [&](ULONGLONG timeMs) {
                 return snap(std::clamp(((double)timeMs - (double)start) / (double)span, 0.0, 1.0) * width);
             };
@@ -23152,6 +23226,10 @@ struct FlyoutDisplay {
     bool refreshing = false;
     bool visualTestMode = false;
     ExtraUsageChart extraUsageChart = ExtraUsageChart::Month;  // MeterDisplay::extraUsageChart
+    // How far each side of now a long window's chart spans (SparklineAroundMs), and the chart's
+    // whose quota row the pointer rests on (none: as the others).
+    ULONGLONG chartAroundMs = 0;
+    std::optional<ULONGLONG> chartHoverAroundMs;
     // What the provider's status page shows, and the taskbar mark's color for it (0: none).
     ProviderOutage outage;
     uint32_t outageColor = 0;
@@ -23216,8 +23294,35 @@ static std::wstring NotificationProjectionText(const I18nLocale& locale, uint64_
         reading);
 }
 
-// Builds the card for `provider` into state.flyout.popup, registering its button delegates there
-// as they are created, in the grid's language. Values are filled by UpdateAccountFlyout.
+// Finds the main quota row under the pointer (FlyoutPopup::hoverRow) from its last position over
+// the rows, against their current layout: scrolling or a relayout can put another row under a
+// resting pointer. That row's chart takes the span on hover: a change updates the card while that
+// span differs from the charts' own, which may close the flyout. XAML calls may throw.
+static void UpdateFlyoutHoverRow(QuotaUiInstance& state) {
+    FlyoutPopup& popup = state.flyout.popup;
+    int row = -1;
+    if (popup.rowsPointer && popup.rowsGrid && popup.card) {
+        // The main rows come first, in FlyoutRowIndex order (the extra quotas' have no chart);
+        // a collapsed row has no height.
+        double y = popup.card.TransformToVisual(popup.rowsGrid).TransformPoint(*popup.rowsPointer).Y;
+        auto definitions = popup.rowsGrid.RowDefinitions();
+        for (uint32_t index = 0; index < std::min<uint32_t>(definitions.Size(), kFlyoutRowCount); index++) {
+            double height = definitions.GetAt(index).ActualHeight();
+            if (y >= 0 && y < height) {
+                row = (int)index;
+                break;
+            }
+            y -= height;
+        }
+    }
+    if (popup.hoverRow == row) return;
+    popup.hoverRow = row;
+    if (popup.chartHoverSwap) UpdateQuotaUi(state);
+}
+
+// Builds the card for `provider` into state.flyout.popup, registering its button and pointer
+// delegates there as they are created, in the grid's language. Values are filled by
+// UpdateAccountFlyout.
 static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provider,
                               bool visualTestMode) {
     FlyoutPopup& popup = state.flyout.popup;
@@ -23429,6 +23534,38 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     Grid rowsGrid;
     popup.namesColumn = addColumn(rowsGrid, kAuto);
     popup.detailsColumn = addColumn(rowsGrid, kStar);
+    // The pointer over the rows, for the span on hover of the chart in its row: the grid takes the
+    // pointer anywhere over it. XAML can miss the pointer leaving the popup, and reports no move
+    // when the rows move under it; the popup's poll (EnsureFlyoutTimers) covers both.
+    rowsGrid.Background(transparent);
+    popup.rowsGrid = rowsGrid;
+    popup.rowsMovedToken = rowsGrid.PointerMoved(
+        [hWnd, generation](winrt::Windows::Foundation::IInspectable const&,
+                           wuxi::PointerRoutedEventArgs const& e) {
+            if (g_unloading) return;
+            try {
+                auto* uiState = FindUiState(hWnd);
+                if (!uiState) return;
+                FlyoutPopup& popup = uiState->flyout.popup;
+                if (!popup.flyout || popup.generation != generation || !popup.card) return;
+                popup.rowsPointer = e.GetCurrentPoint(popup.card).Position();
+                UpdateFlyoutHoverRow(*uiState);
+            } catch (...) {}
+        });
+    auto rowsExited = [hWnd, generation](winrt::Windows::Foundation::IInspectable const&,
+                                         wuxi::PointerRoutedEventArgs const&) {
+        if (g_unloading) return;
+        try {
+            auto* uiState = FindUiState(hWnd);
+            if (!uiState) return;
+            FlyoutPopup& popup = uiState->flyout.popup;
+            if (!popup.flyout || popup.generation != generation) return;
+            popup.rowsPointer.reset();
+            UpdateFlyoutHoverRow(*uiState);
+        } catch (...) {}
+    };
+    popup.rowsExitedToken = rowsGrid.PointerExited(rowsExited);
+    popup.rowsCanceledToken = rowsGrid.PointerCanceled(rowsExited);
     ScrollViewer rowsScroller;
     rowsScroller.HorizontalScrollMode(ScrollMode::Disabled);
     rowsScroller.HorizontalScrollBarVisibility(ScrollBarVisibility::Disabled);
@@ -23826,6 +23963,7 @@ static void UpdateAccountFlyout(
     bool copilot = account.provider == L"copilot";
     bool opencode = account.provider == L"opencode";
     const I18nLocale& locale = display.locale;
+    popup.chartHoverSwap = display.chartHoverAroundMs && *display.chartHoverAroundMs != display.chartAroundMs;
     wchar_t text[128];
     try {
         popup.title.Text(account.label);
@@ -24065,11 +24203,16 @@ static void UpdateAccountFlyout(
                 using winrt::Windows::Foundation::Point;
                 // A rolled-back clock can put now before the newest reading.
                 ULONGLONG now = std::max(display.now, trace.back().timeMs);
-                // The span drawn: the window; extra usage, its chart's (ExtraUsageChartSpan).
+                // The span drawn: the window (extra usage: its chart's, ExtraUsageChartSpan), or a long
+                // one's hours each side of now, kept inside it; the row under the pointer takes the
+                // span on hover.
                 const ULONGLONG windowStart = wu.resetUnixMs - wu.windowDurationMs;
                 const WindowUsage& over = r == kFlyoutExtraRow ?
                     ExtraUsageChartSpan(display.extraUsageChart, account, d, now) : wu;
-                const ULONGLONG start = over.resetUnixMs - over.windowDurationMs, span = over.windowDurationMs;
+                ULONGLONG start = over.resetUnixMs - over.windowDurationMs, span = over.windowDurationMs;
+                NarrowChartSpan(r == popup.hoverRow && display.chartHoverAroundMs ? *display.chartHoverAroundMs :
+                                                                                  display.chartAroundMs,
+                                now, start, span);
                 auto snap = [](double dip) { return (float)(std::round(dip * 4) / 4); };
                 auto xAt = [&](ULONGLONG timeMs) {
                     return snap(std::clamp(((double)timeMs - (double)start) / (double)span, 0.0, 1.0) *
@@ -24406,6 +24549,11 @@ static void CloseAccountFlyout(QuotaUiInstance& state) {
         try { handler.button.Click(handler.token); } catch (...) {}
     }
     popup.buttonHandlers.clear();
+    if (popup.rowsGrid) {
+        try { popup.rowsGrid.PointerMoved(popup.rowsMovedToken); } catch (...) {}
+        try { popup.rowsGrid.PointerExited(popup.rowsExitedToken); } catch (...) {}
+        try { popup.rowsGrid.PointerCanceled(popup.rowsCanceledToken); } catch (...) {}
+    }
     if (popup.flyout) {
         try { popup.flyout.Hide(); } catch (...) {}
     }
@@ -24518,6 +24666,14 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
                             Wh_Log(L"Flyout popup window class: %s", className);
                         }
                     }
+                    // The pointer's quota row, against the rows' current layout; off the popup's
+                    // window it is on none, whatever XAML last reported. A change can update the
+                    // card, which may close it; a failure leaves the dismissal below as it is.
+                    if (overTaskbar || !inside) popup.rowsPointer.reset();
+                    try {
+                        UpdateFlyoutHoverRow(*uiState);
+                    } catch (...) {}
+                    if (!popup.flyout) return;
                     if (inside) {
                         fo.pointerOutsideTick = 0;
                         return;
@@ -26018,6 +26174,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                 meters.stale, meters.warn, accountRefreshing,
                                                 visualTestMode};
                     flyoutDisplay.extraUsageChart = display.extraUsageChart;
+                    flyoutDisplay.chartAroundMs = SparklineAroundMs(settings.flyoutChartSpan);
+                    if (settings.flyoutChartHoverSpan) {
+                        flyoutDisplay.chartHoverAroundMs = SparklineAroundMs(*settings.flyoutChartHoverSpan);
+                    }
                     flyoutDisplay.outage = outage;
                     flyoutDisplay.outageColor = meters.mark == IdentityMark::Outage ? meters.markColor : 0;
                     flyoutDisplay.locale = display.locale;
@@ -32771,6 +32931,13 @@ static bool NormalizeSettings(Settings* s) {
         (*s->sparklineHoverSpan < SparklineSpan::Window || *s->sparklineHoverSpan > SparklineSpan::Hours48)) {
         s->sparklineHoverSpan = SparklineSpan::Hours24;
     }
+    if (s->flyoutChartSpan < SparklineSpan::Window || s->flyoutChartSpan > SparklineSpan::Hours48) {
+        s->flyoutChartSpan = SparklineSpan::Window;
+    }
+    if (s->flyoutChartHoverSpan &&
+        (*s->flyoutChartHoverSpan < SparklineSpan::Window || *s->flyoutChartHoverSpan > SparklineSpan::Hours48)) {
+        s->flyoutChartHoverSpan = SparklineSpan::Hours24;
+    }
     s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
     s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 13, kBadgeSizeMin, kBadgeSizeMax);
     s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
@@ -32965,6 +33132,8 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"openAiExtraLimits", s.showOpenAiExtraLimits);
         setString(L"extraUsageChart", s.extraUsageChart == ExtraUsageChart::Off ? L"off" :
                                       s.extraUsageChart == ExtraUsageChart::Week ? L"week" : L"month");
+        setString(L"flyoutChartSpan", spanName(s.flyoutChartSpan));
+        setString(L"flyoutChartHoverSpan", s.flyoutChartHoverSpan ? spanName(*s.flyoutChartHoverSpan) : L"off");
         setNumber(L"yellowThreshold", s.yellowThreshold);
         setNumber(L"orangeThreshold", s.orangeThreshold);
         setNumber(L"redThreshold", s.redThreshold);
@@ -33230,6 +33399,10 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         std::wstring extraUsageChart = GetStr(root, L"extraUsageChart");
         s.extraUsageChart = extraUsageChart == L"off" ? ExtraUsageChart::Off :
                             extraUsageChart == L"week" ? ExtraUsageChart::Week : ExtraUsageChart::Month;
+        s.flyoutChartSpan = spanOf(L"flyoutChartSpan", SparklineSpan::Window);
+        s.flyoutChartHoverSpan = GetStr(root, L"flyoutChartHoverSpan") == L"off" ?
+                                     std::nullopt :
+                                     std::optional(spanOf(L"flyoutChartHoverSpan", SparklineSpan::Hours24));
         s.yellowThreshold = (int)GetNum(root, L"yellowThreshold", 50);
         s.orangeThreshold = (int)GetNum(root, L"orangeThreshold", 75);
         s.redThreshold = (int)GetNum(root, L"redThreshold", 90);
@@ -33995,6 +34168,8 @@ enum class SettingsField : uint8_t {
     ShowProviderOutages,
     ShowOpenAiExtraLimits,
     ExtraUsageChart,        // An ExtraUsageChart
+    FlyoutChartSpan,        // A SparklineSpan
+    FlyoutChartHoverSpan,   // A SparklineSpan, or -1: none
     // Accounts: fields of the account a draft's key names
     AccountLabel,         // Text, trimmed; unique per provider
     AccountTileIdentity,  // A TileIdentity
@@ -34123,7 +34298,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::YellowThreshold,     SettingsField::OrangeThreshold,
                     SettingsField::RedThreshold,        SettingsField::ShowStaleWarning,
                     SettingsField::ShowProviderOutages, SettingsField::ShowOpenAiExtraLimits,
-                    SettingsField::ExtraUsageChart};
+                    SettingsField::ExtraUsageChart,     SettingsField::FlyoutChartSpan,
+                    SettingsField::FlyoutChartHoverSpan};
         default: return {};
     }
 }
@@ -34210,6 +34386,8 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::ShowProviderOutages: return s.showProviderOutages;
         case SettingsField::ShowOpenAiExtraLimits: return s.showOpenAiExtraLimits;
         case SettingsField::ExtraUsageChart: return int(s.extraUsageChart);
+        case SettingsField::FlyoutChartSpan: return int(s.flyoutChartSpan);
+        case SettingsField::FlyoutChartHoverSpan: return s.flyoutChartHoverSpan ? int(*s.flyoutChartHoverSpan) : -1;
         default: return 0;
     }
 }
@@ -34283,11 +34461,14 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::SparklineRing: s.sparklineRing = value != 0; break;
         case SettingsField::SparklineReadingScale: s.sparklineReadingScale = value; break;
         case SettingsField::SparklineSpan:
-            s.sparklineSpan = SparklineSpan(std::clamp(value, int(SparklineSpan::Window), int(SparklineSpan::Hours48)));
+        case SettingsField::FlyoutChartSpan:
+            (field == SettingsField::SparklineSpan ? s.sparklineSpan : s.flyoutChartSpan) =
+                SparklineSpan(std::clamp(value, int(SparklineSpan::Window), int(SparklineSpan::Hours48)));
             break;
         case SettingsField::SparklineHoverSpan:
-            s.sparklineHoverSpan = value < 0 ? std::nullopt :
-                                   std::optional(SparklineSpan(std::min(value, int(SparklineSpan::Hours48))));
+        case SettingsField::FlyoutChartHoverSpan:
+            (field == SettingsField::SparklineHoverSpan ? s.sparklineHoverSpan : s.flyoutChartHoverSpan) =
+                value < 0 ? std::nullopt : std::optional(SparklineSpan(std::min(value, int(SparklineSpan::Hours48))));
             break;
         case SettingsField::LogoScale: s.logoScale = value; break;
         case SettingsField::ClaudeLogoBrand: s.logoBrands.claude = value != 0; break;
@@ -34364,6 +34545,8 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.showProviderOutages = defaults.showProviderOutages;
             s.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
             s.extraUsageChart = defaults.extraUsageChart;
+            s.flyoutChartSpan = defaults.flyoutChartSpan;
+            s.flyoutChartHoverSpan = defaults.flyoutChartHoverSpan;
             break;
         case SettingsField::ResetLayout:
             s.barLayout = defaults.barLayout;
@@ -35933,6 +36116,26 @@ static std::vector<UiRun> SettingsStatusRuns(const std::vector<I18nRun>& runs, U
         out.push_back(run.link == L"status" ? UiRun{run.text, UiRunStyle::Normal, ink} : UiRun{run.text});
     }
     return out;
+}
+
+// A long window's chart spans as a dropdown's options (usage graph tiles', the details flyout's),
+// after Off for a span on hover.
+static std::vector<UiOption> SettingsSpanOptions(const I18nLocale& locale, bool off) {
+    std::vector<UiOption> options;
+    if (off) options.push_back({I18nText(locale, TrCtx(L"sparkline-span", L"Off")), -1});
+    options.push_back({I18nText(locale, TrCtx(L"sparkline-span", L"Whole window")), int(SparklineSpan::Window)});
+    const std::pair<int, SparklineSpan> hours[] = {{12, SparklineSpan::Hours12},
+                                                   {24, SparklineSpan::Hours24},
+                                                   {36, SparklineSpan::Hours36},
+                                                   {48, SparklineSpan::Hours48}};
+    for (auto [count, span] : hours) {
+        options.push_back(
+            {I18nText(locale,
+                      TrCtx(L"sparkline-span", L"{hours, plural, one{# hour each side} other{# hours each side}}"),
+                      {{L"hours", count}}),
+             int(span)});
+    }
+    return options;
 }
 
 // Shared cards; each returns its bottom.
@@ -38192,24 +38395,6 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {text(TrCtx(L"sparkline-extra", L"Percent")), int(SparklineExtra::Percent)}},
                                         int(s.sparklineExtra));
         }
-        // The long windows' spans, after Off on hover.
-        auto spans = [&](bool off) {
-            std::vector<UiOption> options;
-            if (off) options.push_back({text(TrCtx(L"sparkline-span", L"Off")), -1});
-            options.push_back({text(TrCtx(L"sparkline-span", L"Whole window")), int(SparklineSpan::Window)});
-            const std::pair<int, SparklineSpan> hours[] = {{12, SparklineSpan::Hours12},
-                                                           {24, SparklineSpan::Hours24},
-                                                           {36, SparklineSpan::Hours36},
-                                                           {48, SparklineSpan::Hours48}};
-            for (auto [count, span] : hours) {
-                options.push_back(
-                    {I18nText(locale,
-                              TrCtx(L"sparkline-span", L"{hours, plural, one{# hour each side} other{# hours each side}}"),
-                              {{L"hours", count}}),
-                     int(span)});
-            }
-            return options;
-        };
         y = section(y + 20, TrCtx(L"settings-section", L"Time span"));
         {
             UiCardSpec spec;
@@ -38220,14 +38405,15 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                           {{L"key7d", key(1)}, {L"keyFa", key(2)}, {L"keyAr", key(4)},
                                            {L"keyEx", key(3)}, {L"keyMo", key(6)}})}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::SparklineSpan, 200,
-                                        spans(false), int(s.sparklineSpan));
+                                        SettingsSpanOptions(locale, false), int(s.sparklineSpan));
         }
         {
             UiCardSpec spec;
             spec.title = text(Tr(L"On hover"));
             spec.description = {{text(Tr(L"What those charts show while the pointer rests on the account."))}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineHoverSpan, 200,
-                                        spans(true), SettingsFieldValue(s, SettingsField::SparklineHoverSpan));
+                                        SettingsSpanOptions(locale, true),
+                                        SettingsFieldValue(s, SettingsField::SparklineHoverSpan));
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Current position"));
         struct Cue {
@@ -38388,9 +38574,9 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
 
 // src/settings/page-display.h
 // Settings > Display: the material of the details flyout and the windows, the bar mode, the
-// meters' usage colors and thresholds, the stale and outage marks, the OpenAI details and the
-// extra usage chart (approved mockup display.png, Appearance aside). The preview card is in the
-// shell's pinned header (settings/preview.h). Pure builder.
+// meters' usage colors and thresholds, the stale and outage marks, the OpenAI details, the extra
+// usage chart and the flyout charts' time spans (approved mockup display.png, Appearance aside).
+// The preview card is in the shell's pinned header (settings/preview.h). Pure builder.
 
 // Lays out the page from content y; returns the bottom of the last card.
 static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
@@ -38534,6 +38720,23 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
                                      {text(TrCtx(L"extra-usage-chart", L"Month")), int(ExtraUsageChart::Month)},
                                      {text(TrCtx(L"extra-usage-chart", L"Week")), int(ExtraUsageChart::Week)}},
                                     int(s.extraUsageChart));
+    }
+    {
+        UiCardSpec spec;
+        spec.title = text(Tr(L"Chart time span"));
+        spec.description = {{text(Tr(L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 "
+                                     L"hours before and after now."))}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::FlyoutChartSpan, 200,
+                                    SettingsSpanOptions(locale, false), int(s.flyoutChartSpan));
+    }
+    {
+        UiCardSpec spec;
+        spec.title = text(Tr(L"Chart time span on hover"));
+        spec.description = {{text(Tr(L"What one of those charts shows while the pointer rests on its quota\u2019s row "
+                                     L"in the flyout."))}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::FlyoutChartHoverSpan, 200,
+                                    SettingsSpanOptions(locale, true),
+                                    SettingsFieldValue(s, SettingsField::FlyoutChartHoverSpan));
     }
 
     UiCardSpec reset;

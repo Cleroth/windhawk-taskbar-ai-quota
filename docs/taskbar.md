@@ -83,6 +83,11 @@ Fable, weekly, full), each kind with its own next expiry, the Claude plan (Pro, 
 ...), and "Not yet started" for a Claude window that hasn't begun; past the screen's height its
 quota list scrolls.
 
+A quota with recorded usage shows a chart across its window in place of its bar. Rest the pointer
+on a weekly or monthly quota's row and its chart zooms to 24 hours each side of now, until the
+pointer leaves the row; **Settings > Display > Chart time span** and **Chart time span on hover**
+set both spans, or turn the zoom off.
+
 ## Provider outages
 
 While a provider's public status page reports a problem with a service the mod watches, every

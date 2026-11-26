@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.24.6
+// @version         2.25.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -78,8 +78,9 @@ signed-in local app or CLI session, which must remain running.
 - **Display:** Material of the details flyout and the settings and history windows (Acrylic,
   Mica, Mica Alt, Tinted wallpaper or Solid; needs Windows transparency effects), used or
   remaining, usage colors (default, colorblind or your own) and thresholds, stale marker,
-  provider outages, and how the details flyout charts Anthropic extra usage (its month, the
-  weekly window, or a bar).
+  provider outages, how the details flyout charts Anthropic extra usage (its month, the
+  weekly window, or a bar), and its weekly and monthly charts' spans, at rest and with the
+  pointer on a quota's row (the whole window, or 12 to 48 hours each side of now).
 - **Behavior:** Choose the language, displays, hover details, polling (hidden accounts every
   hour by default, at another interval, as often as visible ones, or not at all), and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the

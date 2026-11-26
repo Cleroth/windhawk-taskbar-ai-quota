@@ -76,6 +76,26 @@ static std::vector<UiRun> SettingsStatusRuns(const std::vector<I18nRun>& runs, U
     return out;
 }
 
+// A long window's chart spans as a dropdown's options (usage graph tiles', the details flyout's),
+// after Off for a span on hover.
+static std::vector<UiOption> SettingsSpanOptions(const I18nLocale& locale, bool off) {
+    std::vector<UiOption> options;
+    if (off) options.push_back({I18nText(locale, TrCtx(L"sparkline-span", L"Off")), -1});
+    options.push_back({I18nText(locale, TrCtx(L"sparkline-span", L"Whole window")), int(SparklineSpan::Window)});
+    const std::pair<int, SparklineSpan> hours[] = {{12, SparklineSpan::Hours12},
+                                                   {24, SparklineSpan::Hours24},
+                                                   {36, SparklineSpan::Hours36},
+                                                   {48, SparklineSpan::Hours48}};
+    for (auto [count, span] : hours) {
+        options.push_back(
+            {I18nText(locale,
+                      TrCtx(L"sparkline-span", L"{hours, plural, one{# hour each side} other{# hours each side}}"),
+                      {{L"hours", count}}),
+             int(span)});
+    }
+    return options;
+}
+
 // Shared cards; each returns its bottom.
 
 static float SettingsAddToggleCard(UiGraphics& g, const SettingsView& view,

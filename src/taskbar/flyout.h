@@ -47,6 +47,11 @@ static void CloseAccountFlyout(QuotaUiInstance& state) {
         try { handler.button.Click(handler.token); } catch (...) {}
     }
     popup.buttonHandlers.clear();
+    if (popup.rowsGrid) {
+        try { popup.rowsGrid.PointerMoved(popup.rowsMovedToken); } catch (...) {}
+        try { popup.rowsGrid.PointerExited(popup.rowsExitedToken); } catch (...) {}
+        try { popup.rowsGrid.PointerCanceled(popup.rowsCanceledToken); } catch (...) {}
+    }
     if (popup.flyout) {
         try { popup.flyout.Hide(); } catch (...) {}
     }
@@ -159,6 +164,14 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
                             Wh_Log(L"Flyout popup window class: %s", className);
                         }
                     }
+                    // The pointer's quota row, against the rows' current layout; off the popup's
+                    // window it is on none, whatever XAML last reported. A change can update the
+                    // card, which may close it; a failure leaves the dismissal below as it is.
+                    if (overTaskbar || !inside) popup.rowsPointer.reset();
+                    try {
+                        UpdateFlyoutHoverRow(*uiState);
+                    } catch (...) {}
+                    if (!popup.flyout) return;
                     if (inside) {
                         fo.pointerOutsideTick = 0;
                         return;

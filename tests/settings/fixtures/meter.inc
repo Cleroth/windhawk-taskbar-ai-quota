@@ -3103,6 +3103,21 @@ static void RunSparklineTests() {
         CHECK(SparklineAroundMs(SparklineSpan::Window) == 0 && SparklineAroundMs(SparklineSpan::Hours12) == 12 * kHour &&
               SparklineAroundMs(SparklineSpan::Hours24) == 24 * kHour && SparklineAroundMs(SparklineSpan::Hours36) == 36 * kHour &&
               SparklineAroundMs(SparklineSpan::Hours48) == 48 * kHour && SparklineAroundMs(SparklineSpan(9)) == 0);
+        // The span itself, which the details flyout's charts share, in hours: a week from hour 100
+        // (to 268), whole without a span; three days in, the hours each side of now; on its first
+        // and last day, and with now outside it, its first or last twice that. A window no longer
+        // than twice the span stays whole.
+        auto narrowed = [&](int around, double now, double start, double span) {
+            ULONGLONG from = (ULONGLONG)(start * kHour), length = (ULONGLONG)(span * kHour);
+            NarrowChartSpan(around * kHour, (ULONGLONG)(now * kHour), from, length);
+            return std::pair{double(from) / kHour, double(length) / kHour};
+        };
+        CHECK((narrowed(0, 172, 100, 168) == std::pair{100.0, 168.0}));
+        CHECK((narrowed(24, 172, 100, 168) == std::pair{148.0, 48.0} && narrowed(12, 172, 100, 168) == std::pair{160.0, 24.0} &&
+               narrowed(48, 172, 100, 168) == std::pair{124.0, 96.0}));
+        CHECK((narrowed(24, 110, 100, 168) == std::pair{100.0, 48.0} && narrowed(24, 266, 100, 168) == std::pair{220.0, 48.0}));
+        CHECK((narrowed(24, 90, 100, 168) == std::pair{100.0, 48.0} && narrowed(24, 300, 100, 168) == std::pair{220.0, 48.0}));
+        CHECK((narrowed(24, 120, 100, 48) == std::pair{100.0, 48.0} && narrowed(24, 102, 100, 5) == std::pair{100.0, 5.0}));
         // A week resetting `left` hours after kNow; readings `hours` before kNow. On the 100 x 24 plot
         // the span's 48 hours put kNow half way, 2.08 DIPs an hour; y = 22 - used / 5.
         auto week = [&](double pct, double left) {

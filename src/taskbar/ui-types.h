@@ -311,6 +311,17 @@ struct FlyoutPopup {
     // Quota grid columns: name/number and details. Charts give details a fixed width.
     ColumnDefinition namesColumn{nullptr};
     ColumnDefinition detailsColumn{nullptr};
+    // The quota rows' grid and its pointer delegates, which keep the pointer's last position over
+    // it, in the card's coordinates (none off it). `hoverRow`: the main row there (a
+    // FlyoutRowIndex; -1: none), whose chart takes the span on hover. `chartHoverSwap`: that span
+    // differs from the charts' own, so a change of row updates the card.
+    Grid rowsGrid{nullptr};
+    winrt::event_token rowsMovedToken{};
+    winrt::event_token rowsExitedToken{};
+    winrt::event_token rowsCanceledToken{};
+    std::optional<winrt::Windows::Foundation::Point> rowsPointer;
+    int hoverRow = -1;
+    bool chartHoverSwap = false;
     // Chart legend, shown while a row shows a chart.
     FrameworkElement legend{nullptr};
     FrameworkElement notes{nullptr};

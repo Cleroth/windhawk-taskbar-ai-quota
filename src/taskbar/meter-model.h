@@ -118,8 +118,8 @@ static constexpr double kSparkNowLineWidth = 1, kSparkCaretHalfWidth = 2.4, kSpa
 static constexpr double kSparkInset = 2, kSparkPlotRadius = 3, kSparkChartGap = 4, kSparkOutlineStroke = 1;
 // Room for sparkline shapes past the plot: the largest ring around a point on its edge.
 static constexpr double kSparkOverflow = kSparkRingOuter * kSparklineReadingScaleMax / 100 + 0.4;
-// How far before and after now a long window's chart spans (MeterDisplay::sparklineAroundMs); 0:
-// the whole window.
+// How far before and after now a long window's chart spans (MeterDisplay::sparklineAroundMs, the
+// details flyout's FlyoutDisplay::chartAroundMs); 0: the whole window.
 static ULONGLONG SparklineAroundMs(SparklineSpan span) {
     static constexpr ULONGLONG kHourMs = 60 * 60 * 1000;
     switch (span) {
@@ -1022,6 +1022,14 @@ static const WindowUsage& ExtraUsageChartSpan(ExtraUsageChart chart, const Accou
     return chart == ExtraUsageChart::Week && account.provider == L"anthropic" && running ? week : data.extraUsage;
 }
 
+// A chart's span (from `start`, `span` long) cut to `around` each side of `now` (SparklineAroundMs)
+// and kept inside it; one no longer than twice `around`, or with `around` 0, stays whole.
+static void NarrowChartSpan(ULONGLONG around, ULONGLONG now, ULONGLONG& start, ULONGLONG& span) {
+    if (!around || span <= 2 * around) return;
+    start = std::min(now > start + around ? now - around : start, start + span - 2 * around);
+    span = 2 * around;
+}
+
 // Bar layouts' corners, thin rail, pace tick and percent text placement, in DIPs along and across
 // the bar. Pixel details scale with 1 / rasterizationScale.
 struct BarGeometry {
@@ -1864,11 +1872,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 start = over.resetUnixMs - over.windowDurationMs;
                 span = over.windowDurationMs;
             }
-            const ULONGLONG around = display.sparklineAroundMs;
-            if (timed(w) && around && span > 2 * around) {
-                start = std::min(now > start + around ? now - around : start, start + span - 2 * around);
-                span = 2 * around;
-            }
+            if (timed(w)) NarrowChartSpan(display.sparklineAroundMs, now, start, span);
             auto xAt = [&](ULONGLONG timeMs) {
                 return snap(std::clamp(((double)timeMs - (double)start) / (double)span, 0.0, 1.0) * width);
             };

@@ -94,6 +94,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Не удаётся безопасно отслеживать системные диалоговые окна; операция отменена."},
     {L"", L"Chart height", L"Высота графика"},
     {L"", L"Chart outline", L"Контур графика"},
+    {L"", L"Chart time span", L"Период графиков"},
+    {L"", L"Chart time span on hover", L"Период графиков при наведении"},
     {L"", L"Chart width", L"Ширина графика"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Графики, статистика и экспорт в CSV по локальным замерам, даже когда запись выключена."},
@@ -664,6 +666,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"hours before and after now.",
      L"Недельные и месячные графики ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): всё окно или от 12 до 48 часов до "
      L"и после текущего момента."},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"Недельные и месячные графики в панели сведений: всё окно или от 12 до 48 часов до и после текущего момента."},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"Что показывает один из этих графиков, пока указатель задерживается на строке его квоты в панели."},
     {L"", L"What those charts show while the pointer rests on the account.",
      L"Что эти графики показывают, пока указатель задерживается на аккаунте."},
     {L"", L"Where each account’s identity sits next to its bars.",

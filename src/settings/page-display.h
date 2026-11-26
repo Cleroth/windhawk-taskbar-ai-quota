@@ -1,7 +1,7 @@
 // Settings > Display: the material of the details flyout and the windows, the bar mode, the
-// meters' usage colors and thresholds, the stale and outage marks, the OpenAI details and the
-// extra usage chart (approved mockup display.png, Appearance aside). The preview card is in the
-// shell's pinned header (settings/preview.h). Pure builder.
+// meters' usage colors and thresholds, the stale and outage marks, the OpenAI details, the extra
+// usage chart and the flyout charts' time spans (approved mockup display.png, Appearance aside).
+// The preview card is in the shell's pinned header (settings/preview.h). Pure builder.
 
 // Lays out the page from content y; returns the bottom of the last card.
 static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
@@ -145,6 +145,23 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
                                      {text(TrCtx(L"extra-usage-chart", L"Month")), int(ExtraUsageChart::Month)},
                                      {text(TrCtx(L"extra-usage-chart", L"Week")), int(ExtraUsageChart::Week)}},
                                     int(s.extraUsageChart));
+    }
+    {
+        UiCardSpec spec;
+        spec.title = text(Tr(L"Chart time span"));
+        spec.description = {{text(Tr(L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 "
+                                     L"hours before and after now."))}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::FlyoutChartSpan, 200,
+                                    SettingsSpanOptions(locale, false), int(s.flyoutChartSpan));
+    }
+    {
+        UiCardSpec spec;
+        spec.title = text(Tr(L"Chart time span on hover"));
+        spec.description = {{text(Tr(L"What one of those charts shows while the pointer rests on its quota\u2019s row "
+                                     L"in the flyout."))}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::FlyoutChartHoverSpan, 200,
+                                    SettingsSpanOptions(locale, true),
+                                    SettingsFieldValue(s, SettingsField::FlyoutChartHoverSpan));
     }
 
     UiCardSpec reset;

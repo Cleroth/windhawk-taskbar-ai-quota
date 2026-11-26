@@ -75,6 +75,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Cannot track native dialogs safely; operation cancelled.", L"ネイティブ ダイアログを安全に追跡できないため、操作をキャンセルしました。"},
     {L"", L"Chart height", L"グラフの高さ"},
     {L"", L"Chart outline", L"グラフの枠線"},
+    {L"", L"Chart time span", L"グラフの表示期間"},
+    {L"", L"Chart time span on hover", L"ホバー時のグラフの表示期間"},
     {L"", L"Chart width", L"グラフの幅"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"ローカルのサンプルからのグラフ、統計、CSV エクスポート。記録がオフでも使えます。"},
@@ -531,6 +533,11 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
           L"hours before and after now.",
      L"週間と月間のグラフ ({key7d}、{keyFa}、{keyAr}、{keyEx}、{keyMo}): 期間全体、または現在の前後 12～48 時間。"},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"詳細フライアウトの週間と月間のグラフ: 期間全体、または現在の前後 12～48 時間。"},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"詳細フライアウトでポインターをクォータの行に合わせている間、そのグラフに表示する範囲。"},
     {L"", L"What those charts show while the pointer rests on the account.", L"ポインターをアカウントに合わせている間、それらのグラフに表示する範囲。"},
     {L"", L"Where each account’s identity sits next to its bars.", L"バーに対する各アカウントの識別表示の位置。"},
     {L"", L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the taskbar’s buttons "

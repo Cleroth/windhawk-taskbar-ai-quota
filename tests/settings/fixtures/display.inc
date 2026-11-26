@@ -50,7 +50,8 @@ static void RunDisplayPageTests() {
             {SettingsField::UsageColorBelowYellow, 0x102030}, {SettingsField::UsageColorRed, 0xFFFFFF},
             {kYellow, 30}, {kOrange, 60}, {kRed, 80},
             {SettingsField::ShowStaleWarning, 0}, {SettingsField::ShowProviderOutages, 0},
-            {SettingsField::ShowOpenAiExtraLimits, 1}, {SettingsField::ExtraUsageChart, 2}};
+            {SettingsField::ShowOpenAiExtraLimits, 1}, {SettingsField::ExtraUsageChart, 2},
+            {SettingsField::FlyoutChartSpan, 3}, {SettingsField::FlyoutChartHoverSpan, -1}};
         for (auto [field, value] : values) {
             SettingsAssign(s, field, value);
             CHECK(SettingsFieldValue(s, field) == value);
@@ -58,6 +59,9 @@ static void RunDisplayPageTests() {
         CHECK(s.material == Material::TintedWallpaper && s.barMode == BarMode::Remaining &&
               s.usagePalette == UsagePalette::Custom && !s.showStaleWarning && !s.showProviderOutages &&
               s.showOpenAiExtraLimits && s.extraUsageChart == ExtraUsageChart::Week);
+        // The flyout charts' spans are their own: the usage graph tiles' stay.
+        CHECK(s.flyoutChartSpan == SparklineSpan::Hours36 && !s.flyoutChartHoverSpan &&
+              s.sparklineSpan == SparklineSpan::Window && s.sparklineHoverSpan == SparklineSpan::Hours24);
         // Each color field sets its band's custom color only.
         CHECK((s.customUsageColors == std::array<COLORREF, 4>{0x102030, kDefaultUsageColors[1], kDefaultUsageColors[2],
                                                               0xFFFFFF}));
@@ -68,7 +72,10 @@ static void RunDisplayPageTests() {
             {SettingsField::Material, -1, 0}, {SettingsField::Material, INT_MIN, 0},
             {SettingsField::UsagePalette, 3, 2}, {SettingsField::UsagePalette, -1, 0},
             {SettingsField::UsageColorYellow, int(0xFF123456), 0x123456}, {SettingsField::UsageColorOrange, -1, 0xFFFFFF},
-            {SettingsField::ExtraUsageChart, 3, 2}, {SettingsField::ExtraUsageChart, -1, 0}};
+            {SettingsField::ExtraUsageChart, 3, 2}, {SettingsField::ExtraUsageChart, -1, 0},
+            {SettingsField::FlyoutChartSpan, 7, 4}, {SettingsField::FlyoutChartSpan, -1, 0},
+            {SettingsField::FlyoutChartHoverSpan, 9, 4}, {SettingsField::FlyoutChartHoverSpan, 0, 0},
+            {SettingsField::FlyoutChartHoverSpan, -5, -1}};
         for (auto [field, value, expected] : clamps) {
             SettingsAssign(s, field, value);
             CHECK(SettingsFieldValue(s, field) == expected);
@@ -97,10 +104,11 @@ static void RunDisplayPageTests() {
         }
         CHECK(!SettingsFieldRange(SettingsField::BarMode) && !SettingsFieldRange(SettingsField::Material) &&
               !SettingsFieldRange(SettingsField::UsagePalette) && !SettingsFieldRange(SettingsField::UsageColorRed) &&
-              !SettingsFieldRange(SettingsField::ExtraUsageChart));
+              !SettingsFieldRange(SettingsField::ExtraUsageChart) && !SettingsFieldRange(SettingsField::FlyoutChartSpan) &&
+              !SettingsFieldRange(SettingsField::FlyoutChartHoverSpan));
     });
 
-    Run("display reset: the fourteen Display fields back to defaults; every scalar setting in one page reset", [] {
+    Run("display reset: the sixteen Display fields back to defaults; every scalar setting in one page reset", [] {
         const Settings defaults;
         Settings changed;
         // Any material but the default.
@@ -115,6 +123,8 @@ static void RunDisplayPageTests() {
         changed.showProviderOutages = false;
         changed.showOpenAiExtraLimits = true;
         changed.extraUsageChart = ExtraUsageChart::Week;
+        changed.flyoutChartSpan = SparklineSpan::Hours12;
+        changed.flyoutChartHoverSpan = std::nullopt;
         // Other pages' fields stay, the bar text's included.
         changed.barLength = 220;
         changed.percentTextVisibility = PercentTextVisibility::Always;
@@ -135,17 +145,19 @@ static void RunDisplayPageTests() {
         expected.showProviderOutages = defaults.showProviderOutages;
         expected.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
         expected.extraUsageChart = ExtraUsageChart::Month;
+        expected.flyoutChartSpan = SparklineSpan::Window;
+        expected.flyoutChartHoverSpan = SparklineSpan::Hours24;
         Settings reset = changed;
         SettingsAssign(reset, SettingsField::ResetDisplay, 0);
         CHECK(reset == expected);
         std::vector<SettingsField> display = SettingsGroupFields(SettingsField::ResetDisplay);
-        CHECK(display.size() == 14 && display[0] == SettingsField::Material);
+        CHECK(display.size() == 16 && display[0] == SettingsField::Material);
         for (SettingsField field : display) {
             CHECK(SettingsFieldValue(reset, field) == SettingsFieldValue(defaults, field));
             CHECK(SettingsFieldValue(changed, field) != SettingsFieldValue(defaults, field));
         }
 
-        // Every scalar setting changed: the four page resets' 71 fields restore every one, and no
+        // Every scalar setting changed: the four page resets' 73 fields restore every one, and no
         // field belongs to two groups (Show on holds the monitor mode and number; Keep history and
         // its custom days both set the retention, Hidden accounts and its custom minutes the hidden
         // accounts' interval).
@@ -212,7 +224,7 @@ static void RunDisplayPageTests() {
         fresh.accounts = every.accounts;
         CHECK(restored == fresh);
         std::sort(seen.begin(), seen.end());
-        CHECK(seen.size() == 71 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
+        CHECK(seen.size() == 73 && std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     });
 
     Run("projection: thresholds stay ordered while typing; out-of-range and bad text", [] {
@@ -315,6 +327,32 @@ static void RunDisplayPageTests() {
         CHECK(store.settings.extraUsageChart == ExtraUsageChart::Month);
     });
 
+    Run("controller: the flyout charts' spans save at once and show, apart from the usage graph tiles'; the Display "
+        "reset restores the whole window, 24 hours each side on hover", [] {
+        TestStore store;
+        SettingsEdits edits(store);
+        edits.Reload();
+        CHECK(edits.Commit(0, SettingsField::FlyoutChartSpan, int(SparklineSpan::Hours48)) == 0);
+        CHECK(edits.Commit(0, SettingsField::FlyoutChartHoverSpan, -1) == 0);
+        CHECK((store.Applied() == std::vector<std::wstring>{Op(SettingsField::FlyoutChartSpan, 4),
+                                                            Op(SettingsField::FlyoutChartHoverSpan, -1)}));
+        CHECK(store.settings.flyoutChartSpan == SparklineSpan::Hours48 && !store.settings.flyoutChartHoverSpan &&
+              edits.drafts.empty());
+        CHECK(store.settings.sparklineSpan == SparklineSpan::Window &&
+              store.settings.sparklineHoverSpan == SparklineSpan::Hours24);
+        SettingsView view = TestView(SettingsUiPage::Display);
+        view.settings = edits.Projection();
+        UiFrame frame = DisplayFrame(view);
+        CHECK(Control(frame, SettingsField::FlyoutChartSpan).text == L"48 hours each side" &&
+              Control(frame, SettingsField::FlyoutChartHoverSpan).text == L"Off");
+        // The Layout reset leaves them; the Display reset restores them.
+        CHECK(edits.Reset(SettingsField::ResetLayout) == 0);
+        CHECK(store.settings.flyoutChartSpan == SparklineSpan::Hours48 && !store.settings.flyoutChartHoverSpan);
+        CHECK(edits.Reset(SettingsField::ResetDisplay) == 0);
+        CHECK(store.settings.flyoutChartSpan == SparklineSpan::Window &&
+              store.settings.flyoutChartHoverSpan == SparklineSpan::Hours24);
+    });
+
     Run("controller: the palette and custom colors save at once; the Display reset restores Default", [] {
         TestStore store;
         SettingsEdits edits(store);
@@ -379,6 +417,31 @@ static void RunDisplayPageTests() {
         CHECK_NEAR(chart.rect.right - chart.rect.left, 200);
         CHECK(chart.rect.top > Control(frame, SettingsField::ShowOpenAiExtraLimits).rect.bottom &&
               chart.rect.bottom < Control(frame, SettingsField::ResetDisplay).rect.top && HasText(frame, L"Extra usage chart"));
+        // The flyout charts' spans after it: the whole window by default, or 12 to 48 hours each
+        // side, then the hovered row's chart's, 24 hours each side by default, or off.
+        const UiItem& span = Control(frame, SettingsField::FlyoutChartSpan);
+        const UiItem& hover = Control(frame, SettingsField::FlyoutChartHoverSpan);
+        const std::pair<PCWSTR, SparklineSpan> spans[] = {
+            {L"Whole window", SparklineSpan::Window},         {L"12 hours each side", SparklineSpan::Hours12},
+            {L"24 hours each side", SparklineSpan::Hours24}, {L"36 hours each side", SparklineSpan::Hours36},
+            {L"48 hours each side", SparklineSpan::Hours48}};
+        CHECK(span.kind == UiItemKind::Dropdown && span.enabled && span.text == L"Whole window" &&
+              span.action.value == int(SparklineSpan::Window) && span.options.size() == 5);
+        CHECK(hover.kind == UiItemKind::Dropdown && hover.enabled && hover.text == L"24 hours each side" &&
+              hover.action.value == int(SparklineSpan::Hours24) && hover.options.size() == 6 &&
+              hover.options[0].text == L"Off" && hover.options[0].value == -1);
+        for (size_t k = 0; k < std::size(spans) && span.options.size() == 5 && hover.options.size() == 6; k++) {
+            CHECK(span.options[k].text == spans[k].first && span.options[k].value == int(spans[k].second));
+            CHECK(hover.options[k + 1].text == spans[k].first && hover.options[k + 1].value == int(spans[k].second));
+        }
+        CHECK(chart.rect.bottom < span.rect.top && span.rect.bottom < hover.rect.top &&
+              hover.rect.bottom < Control(frame, SettingsField::ResetDisplay).rect.top);
+        CHECK(HasText(frame, L"Chart time span") &&
+              HasText(frame, L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours "
+                             L"before and after now.") &&
+              HasText(frame, L"Chart time span on hover") &&
+              HasText(frame, L"What one of those charts shows while the pointer rests on its quota\u2019s row in the "
+                             L"flyout."));
         CHECK(Control(frame, SettingsField::ResetDisplay).text == L"Reset");
         for (PCWSTR text : {L"Appearance", L"Values", L"Usage colors", L"Status", L"Details flyout",
                             L"Reset Display to defaults", L"Usage below this is green.",

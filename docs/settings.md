@@ -160,6 +160,13 @@ With the same preview:
   while the account has no running weekly window) or **Off** (the bar). A usage graph tile's own
   extra usage chart follows it; off, extra usage has no chart there (alone on its tile, only its
   current reading). The reset time, pace and projection show either way
+- chart time span: the details flyout's charts whose window is longer than a day (weekly, Fable
+  weekly, Argon weekly, Claude/GPT weekly, monthly extra usage, AI credits and OpenCode Go's
+  monthly) show the whole window (default), or 12, 24, 36 or 48 hours before and after now, as
+  usage graph tiles do under Layout; **on hover**, the chart whose quota row the pointer rests on
+  in the flyout takes any of those (24 hours each side by default) or stays as it is (off). The
+  other rows keep theirs, so a week-aligned extra usage chart doesn't line up with the weekly
+  chart while the pointer is on one of them
 
 ## Behavior
 

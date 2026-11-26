@@ -216,6 +216,9 @@ time near the limit) are estimates from the readings kept and can differ from be
   those that record history. Saving settings there drops the choice, so after updating back it
   is **1 hour** (also where it was **Not polled** or another interval) or **Same as visible
   accounts**.
+- Versions before 2.25.0 always chart the whole window in the details flyout, and saving settings
+  there drops the flyout's chart time spans, so they are the whole window, and 24 hours each side
+  on hover, after updating back.
 - Versions before 2.21.0 have no window for Anthropic extra usage: they show its bar instead of a
   chart and draw its line through a month's start, and saving settings there drops the extra
   usage chart choice, so it is Month after updating back.

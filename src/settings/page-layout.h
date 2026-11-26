@@ -408,24 +408,6 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {text(TrCtx(L"sparkline-extra", L"Percent")), int(SparklineExtra::Percent)}},
                                         int(s.sparklineExtra));
         }
-        // The long windows' spans, after Off on hover.
-        auto spans = [&](bool off) {
-            std::vector<UiOption> options;
-            if (off) options.push_back({text(TrCtx(L"sparkline-span", L"Off")), -1});
-            options.push_back({text(TrCtx(L"sparkline-span", L"Whole window")), int(SparklineSpan::Window)});
-            const std::pair<int, SparklineSpan> hours[] = {{12, SparklineSpan::Hours12},
-                                                           {24, SparklineSpan::Hours24},
-                                                           {36, SparklineSpan::Hours36},
-                                                           {48, SparklineSpan::Hours48}};
-            for (auto [count, span] : hours) {
-                options.push_back(
-                    {I18nText(locale,
-                              TrCtx(L"sparkline-span", L"{hours, plural, one{# hour each side} other{# hours each side}}"),
-                              {{L"hours", count}}),
-                     int(span)});
-            }
-            return options;
-        };
         y = section(y + 20, TrCtx(L"settings-section", L"Time span"));
         {
             UiCardSpec spec;
@@ -436,14 +418,15 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                           {{L"key7d", key(1)}, {L"keyFa", key(2)}, {L"keyAr", key(4)},
                                            {L"keyEx", key(3)}, {L"keyMo", key(6)}})}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::SparklineSpan, 200,
-                                        spans(false), int(s.sparklineSpan));
+                                        SettingsSpanOptions(locale, false), int(s.sparklineSpan));
         }
         {
             UiCardSpec spec;
             spec.title = text(Tr(L"On hover"));
             spec.description = {{text(Tr(L"What those charts show while the pointer rests on the account."))}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineHoverSpan, 200,
-                                        spans(true), SettingsFieldValue(s, SettingsField::SparklineHoverSpan));
+                                        SettingsSpanOptions(locale, true),
+                                        SettingsFieldValue(s, SettingsField::SparklineHoverSpan));
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Current position"));
         struct Cue {
