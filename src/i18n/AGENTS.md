@@ -105,6 +105,9 @@ in `tests/settings/extract.py`'s `I18N`.
   change.
 - Template, never concatenation; translated templates never go through `swprintf`.
 - Add or replace the entry in every `lang-*.h` at its sorted position, then run the checker.
+  `python tests/i18n/insert.py ENTRIES.json` (`--dry-run` lists only) inserts new entries there:
+  `{"<tag>": [["context", "English", "translation"], ...]}`, ASCII English keys only, with `\u`
+  escapes written as `\\u00A0`.
 
 ## Translator notes
 
