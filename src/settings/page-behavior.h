@@ -181,8 +181,8 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
     {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Threshold notifications"));
-        spec.description = {{I18nText(locale, Tr(L"Notifies when a taskbar quota first reaches the chosen threshold. "
-                                                 L"Re-arms after it drops below."))}};
+        spec.description = {{I18nText(locale, Tr(L"Notifies when a taskbar quota first reaches the chosen threshold, "
+                                                 L"and again at its limit. Re-arms after it drops below."))}};
         y = SettingsAddDropdownCard(
             g, view, items, id, x, y, width, spec, SettingsField::Notifications, 200,
             {{I18nText(locale, TrCtx(L"notification-level", L"Off")), int(NotificationLevel::Off)},

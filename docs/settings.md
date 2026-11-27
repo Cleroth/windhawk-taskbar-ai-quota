@@ -206,7 +206,8 @@ With the same preview:
     **1 hour**; with it off, **Same as visible accounts**, which now also polls hidden accounts
     that record no history.
 - threshold notifications: off, or the yellow, orange or red threshold (the default), each listed
-  with its percentage from Display; a selected taskbar quota notifies when it first reaches it
+  with its percentage from Display; a selected taskbar quota notifies when it first reaches it,
+  and again at its limit (see [Notifications](taskbar.md#notifications))
 
 ## History
 

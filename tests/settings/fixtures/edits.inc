@@ -813,7 +813,8 @@ static void RunPageTests() {
                   notifications.options[i].value == int(levels[i].second));
         }
         CHECK(Control(frame, SettingsField::ResetBehavior).text == L"Reset");
-        CHECK(HasText(frame, L"Notifies when a taskbar quota first reaches the chosen threshold."));
+        CHECK(HasText(frame, L"Notifies when a taskbar quota first reaches the chosen threshold, and again at its "
+                             L"limit."));
         // Focus order: language and display dropdowns, the hover toggle, the work days switch (its
         // days hidden), the poll and hidden accounts dropdowns (each one's custom box hidden),
         // notifications dropdown, reset.

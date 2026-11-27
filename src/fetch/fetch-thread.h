@@ -313,9 +313,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     // Each account's rate limits in a row that named no wait (RateLimitWaitSeconds).
     std::vector<int> rateLimitRefusals;
     std::vector<AccountDetailsCache> accountDetails;
-    // Per-account notification arm state at the chosen threshold, indexed by QuotaBarIndex:
-    // -1 unknown (primes without firing), 0 below/armed, 1 above/already notified.
-    std::vector<std::array<int, kQuotaBarCount>> armState;
+    // Per-account notification arm state, indexed by QuotaBarIndex (AdvanceQuotaNotification's).
+    std::vector<std::array<std::pair<int, int>, kQuotaBarCount>> armState;
     // The chosen level's threshold; Off has none to reach, its value only primes.
     auto notificationThresholdOf = [](const Settings& s) {
         return s.notificationLevel == NotificationLevel::Yellow ? s.yellowThreshold :
@@ -497,16 +496,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
 
         if (settingsChanged || armState.size() != accounts.size()) {
-            armState.assign(accounts.size(),
-                            std::array<int, kQuotaBarCount>{-1, -1, -1, -1});
+            // Primed by the published readings, notifying nothing.
+            armState.resize(accounts.size());
             for (size_t i = 0; i < accounts.size(); i++) {
-                const std::array<const WindowUsage*, kQuotaBarCount> usage = {
-                    &results[i].win5h, &results[i].winWeek, &results[i].fableWeek,
-                    &results[i].extraUsage};
+                armState[i].fill({-1, -1});
                 for (int w = 0; w < kQuotaBarCount; w++) {
-                    if (usage[w]->pct >= 0) {
-                        armState[i][w] = usage[w]->pct >= notificationThreshold ? 1 : 0;
-                    }
+                    AdvanceQuotaNotification(armState[i][w], results[i], w, notificationThreshold);
                 }
             }
         }
@@ -589,7 +584,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             // Another sign-in than its last poll's: its notifications and rate limit count start
             // over, as a new account's.
             if (pollSignInGeneration[i] != lastPollGeneration) {
-                armState[i].fill(-1);
+                armState[i].fill({-1, -1});
                 rateLimitRefusals[i] = 0;
             }
             // The journal rejects samples without a known provider code.
@@ -816,9 +811,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             });
         }
         if (published) {
-            // Notify once per upward crossing of the chosen threshold; re-arm when usage
-            // drops back below. A generation-raced result uses current settings and current
-            // pre-publication data so settings edits alone cannot cause a notification.
+            // Notify once per upward crossing of the chosen threshold, and of the quota's limit;
+            // re-arm when usage drops back below. A generation-raced result uses current settings
+            // and current pre-publication data so settings edits alone cannot cause a notification.
             const auto& publishedAccounts = generationRaced ? currentAccounts : accounts;
             const auto& publishedResults = generationRaced ? remappedResults : results;
             const auto& publishedFetchedOk = generationRaced ? remappedFetchedOk : fetchedOk;
@@ -827,31 +822,16 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 const std::array<const WindowUsage*, kQuotaBarCount> usage = {
                     &publishedResults[i].win5h, &publishedResults[i].winWeek,
                     &publishedResults[i].fableWeek, &publishedResults[i].extraUsage};
-                const std::array<const WindowUsage*, kQuotaBarCount> previousUsage = {
-                    generationRaced ? &previousCurrentResults[i].win5h : nullptr,
-                    generationRaced ? &previousCurrentResults[i].winWeek : nullptr,
-                    generationRaced ? &previousCurrentResults[i].fableWeek : nullptr,
-                    generationRaced ? &previousCurrentResults[i].extraUsage : nullptr};
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     if (!publishedAccounts[i].showBars[w]) continue;
-                    const WindowUsage& wu = *usage[w];
-                    if (wu.pct < 0) continue;
-                    bool shouldNotify = false;
+                    // A generation-raced result's state before it: the published reading's.
+                    std::pair<int, int> raced{-1, -1};
                     if (generationRaced) {
-                        const WindowUsage& previous = *previousUsage[w];
-                        shouldNotify = previous.pct >= 0 &&
-                                       previous.pct < publishedThreshold &&
-                                       wu.pct >= publishedThreshold &&
-                                       notificationsEnabled;
-                    } else {
-                        int& st = armState[i][w];
-                        if (wu.pct >= publishedThreshold) {
-                            shouldNotify = st == 0 && notificationsEnabled;
-                            st = 1;
-                        } else {
-                            st = 0;
-                        }
+                        AdvanceQuotaNotification(raced, previousCurrentResults[i], w, publishedThreshold);
                     }
+                    const int notification = AdvanceQuotaNotification(generationRaced ? raced : armState[i][w],
+                                                                      publishedResults[i], w, publishedThreshold);
+                    bool shouldNotify = notification && notificationsEnabled;
                     // Turned off since publication (history and earlier notifications take time):
                     // nothing more shows.
                     if (shouldNotify) {
@@ -863,13 +843,15 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         // (nothing above the fetch loop catches).
                         try {
                             const I18nLocale locale = CurrentLocale();
+                            const WindowUsage& wu = *usage[w];
+                            const bool limit = notification == kQuotaLimitNotification;
                             auto [title, body] = ThresholdNotificationText(
                                 locale, publishedAccounts[i].provider, publishedResults[i], w,
                                 (w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs ?
-                                    FormatReset(locale, wu.resetUnixMs) : L"");
-                            // The flyout's projection to the limit; none for an OpenCode Go window
-                            // at its limit, as there.
-                            std::wstring projection = publishedResults[i].opencodeLimited[w] ? L"" :
+                                    FormatReset(locale, wu.resetUnixMs) : L"",
+                                limit);
+                            // The flyout's projection to the limit; none once there.
+                            std::wstring projection = limit ? L"" :
                                 NotificationProjectionText(locale, publishedAccounts[i].historyId, w, wu);
                             FireThresholdNotification(title, body, projection,
                                                       ProviderDashboardUrl(publishedAccounts[i].provider),

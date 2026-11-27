@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.27.3
+// @version         2.28.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -38,7 +38,8 @@ Supported providers and quotas:
 - **OpenCode Go:** 5-hour, weekly, and monthly usage limits
 
 Optional notifications, under the mod's own name and icon, warn when usage reaches the yellow,
-orange or red threshold you choose, and say when it is projected to reach the limit.
+orange or red threshold you choose, saying when it is projected to reach the limit, and again
+when a quota runs out.
 
 While a provider's public status page (Claude, OpenAI's Codex, GitHub Copilot, OpenCode Go)
 reports a problem, its accounts show a warning triangle, and the details flyout names the

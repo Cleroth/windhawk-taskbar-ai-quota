@@ -19,7 +19,7 @@ Each visible account gets one compact taskbar column with the quotas you choose:
 
 Ten tile styles, from stacked or vertical bars to rings, gauges, a usage graph and a quota matrix, show each account's logo or label beside its meters, with threshold colors (default, colorblind or your own) and optional pace markers. Hover a column for its details flyout: percentages, reset times, pace, when usage is projected to reach the limit, plan details, errors, and the limits without a taskbar bar. Click a column to refresh it; right-click it for settings, usage history and hiding accounts.
 
-While a provider's public status page reports a problem, its accounts show a warning triangle, and optional Windows notifications warn when a quota reaches the threshold you choose. Taskbars at the left or right of the screen (Windows 11's own taskbar position setting) get a layout that stacks down them.
+While a provider's public status page reports a problem, its accounts show a warning triangle, and optional Windows notifications warn when a quota reaches the threshold you choose, and again when it runs out. Taskbars at the left or right of the screen (Windows 11's own taskbar position setting) get a layout that stacks down them.
 
 Details: [taskbar, flyout and notifications](docs/taskbar.md).
 

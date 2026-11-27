@@ -25,7 +25,9 @@ MODEL = [
     ("fragment", "history/journal-error.h"),
     ("definition", "ApplyCreditsMax"),
     ("definition", "FormatShortDuration"),
-    # Threshold notifications' text and toast XML (fetch/notifications.h).
+    # Threshold notifications' arm state, text and toast XML (fetch/notifications.h).
+    ("constant", "kQuotaLimitNotification"),
+    ("definition", "AdvanceQuotaNotification"),
     ("definition", "ProviderDisplayName"),
     ("definition", "ThresholdNotificationText"),
     ("definition", "ThresholdToastXml"),

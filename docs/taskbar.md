@@ -149,6 +149,17 @@ reach the limit before the reset, say when, as the details flyout does. Clicking
 provider's dashboard (Antigravity has none), and a repeat for the same account and quota
 replaces the earlier one.
 
+With any level chosen, the quota notifies once more when it reaches its limit: at 100%, or when
+its provider reports it so (an OpenCode Go window marked as limited, a GitHub Copilot pooled
+budget used up, which has no percentage). A poll that passes the threshold and the limit at once
+shows only the limit's notification, as does a threshold set to 100%, and a quota at its limit
+never notifies for the threshold. It re-arms once the quota is below its limit again, and a quota
+already at its limit when the mod starts, or when its account signs in again, doesn't notify.
+
+Notifications follow successful polls: one can trail what it reports by the poll interval, or
+longer after a failed poll or a provider's rate limit, and a quota that crosses and comes back
+between two readings notifies nothing.
+
 At its first notification after starting, the mod registers its name and icon with Windows under
 `HKCU\Software\Classes\AppUserModelId\Windhawk.TaskbarAIQuota.<mod ID>`, a volatile key Windows
 drops when you sign out, the icon being `notification-icon.png` in your folder of the mod's

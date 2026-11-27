@@ -63,8 +63,9 @@ to `<target>.cpp` with a `.manifest.json`.
 - `i18n-taskbar.inc`: the meter model's localized text, measured taskbar text on synthetic measures
   (`TestWideMeasure`: CJK an em), the preview strip per language, account errors and flyout
   templates.
-- `i18n-errors.inc`: coded account errors in every form, threshold notifications' text and toast
-  XML, the sign-in templates, outage lines.
+- `i18n-errors.inc`: coded account errors in every form, threshold notifications over sequences
+  of readings (the threshold, the limit), their text and toast XML, the sign-in templates, outage
+  lines.
 - `i18n-numbers.inc`: regional number formats, integer arguments, amounts and number boxes (format
   and parse round trips, a draft across a regional change).
 - `layout-audit.inc` (shared with the history target): audits a frame for labels wider than their

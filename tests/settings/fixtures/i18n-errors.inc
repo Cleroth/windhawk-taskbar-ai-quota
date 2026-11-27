@@ -2,7 +2,8 @@
 // and providers' mod-authored data on the production catalogs: every coded account error's English
 // in both forms (as the mod wrote it before codes), coded errors in German, Japanese and Russian
 // with their English log rendering, causes nested with provider text and HTTP statuses, threshold
-// notifications' titles and bodies per quota and their toast XML (escaped once), the sign-in
+// notifications over a quota's readings (the threshold, the limit), their titles and bodies per
+// quota and their toast XML (escaped once), the sign-in
 // window's title, instructions and status lines, an outage's incident (the mod's reasons and the
 // page's own title, with the models after them) and Antigravity's Argon current limit. Expected
 // text is written out by hand from the production catalogs.
@@ -131,17 +132,80 @@ static void RunI18nErrorTests() {
                    L"unexpected response format (non-object or invalid JSON body)");
     });
 
+    Run("threshold notifications: over a quota's readings, one at the threshold and one at the limit per rise, "
+        "the limit's alone when a reading passes both; the first known reading primes; the limit as its "
+        "provider reports it", [] {
+        // A reading: its used % (below 0: none), then what its provider flags: an OpenCode Go
+        // window at its limit, a GitHub Copilot pooled budget (which has no percentage), that
+        // budget used up. The result: each reading's notification in order, '-' none, 'T' the
+        // threshold's, 'L' the limit's.
+        struct Reading {
+            double pct;
+            bool limited = false, pooled = false, exhausted = false;
+        };
+        auto notified = [](std::initializer_list<Reading> readings, int threshold = 90) {
+            std::pair<int, int> armed{-1, -1};
+            std::wstring notifications;
+            for (const Reading& reading : readings) {
+                AccountData data;
+                data.extraUsage.pct = reading.pct;
+                data.opencodeLimited[kExtraUsageBar] = reading.limited;
+                data.copilotUnlimited = reading.pooled;
+                data.copilotExhausted = reading.exhausted;
+                notifications += L"-TL"[AdvanceQuotaNotification(armed, data, kExtraUsageBar, threshold)];
+            }
+            return notifications;
+        };
+        // The first known reading primes, wherever it is.
+        CHECK_TEXT(notified({{95}}), L"-");
+        CHECK_TEXT(notified({{100}}), L"-");
+        CHECK_TEXT(notified({{-1}, {95}, {100}}), L"--L");
+        // Once each per rise, re-armed below; 99.9% is not the limit.
+        CHECK_TEXT(notified({{50}, {89.9}, {90}, {96}, {99.9}, {100}, {250}}), L"--T--L-");
+        CHECK_TEXT(notified({{50}, {95}, {100}, {5}, {95}, {100}}), L"-TL-TL");
+        CHECK_TEXT(notified({{50}, {95}, {80}, {95}}), L"-T-T");
+        CHECK_TEXT(notified({{50}, {100}, {96}, {100}}), L"-L-L");
+        // A reading past both: the limit's alone, with no threshold's after it.
+        CHECK_TEXT(notified({{50}, {100}, {100}, {95}}), L"-L--");
+        // A threshold of 100% is the limit; one of 0% is reached by the reading that primes.
+        CHECK_TEXT(notified({{99.9}, {100}}, 100), L"-L");
+        CHECK_TEXT(notified({{0}, {50}, {100}}, 0), L"--L");
+        // A reading without the quota keeps what was known.
+        CHECK_TEXT(notified({{50}, {-1}, {95}, {-1}, {100}}), L"--T-L");
+        CHECK_TEXT(notified({{95}, {-1}, {96}}), L"---");
+        // An OpenCode Go window reported at its limit, whatever its percentage: the limit's then,
+        // and the threshold's only for a rise seen while it isn't.
+        CHECK_TEXT(notified({{50}, {89, true}, {89, true}, {91}}), L"-L-T");
+        CHECK_TEXT(notified({{50}, {85, true}, {91, true}, {92}}), L"-L--");
+        CHECK_TEXT(notified({{50}, {95}, {97, true}, {98}, {99, true}}), L"-TL-L");
+        // A GitHub Copilot pooled budget: only its limit, and nothing for the threshold when a
+        // percentage first follows it.
+        const Reading pool{-1, false, true}, usedUp{-1, false, true, true};
+        CHECK_TEXT(notified({usedUp}), L"-");
+        CHECK_TEXT(notified({pool, pool, usedUp, usedUp, pool, usedUp}), L"--L--L");
+        CHECK_TEXT(notified({pool, {95}, {50}, {95}}), L"---T");
+        // Each slot follows its own window; a pooled budget is the extra-usage slot's alone.
+        AccountData data;
+        data.win5h.pct = 100;
+        data.winWeek.pct = 95;
+        data.copilotUnlimited = data.copilotExhausted = true;
+        std::pair<int, int> fiveHour{0, 0}, weekly{0, 0}, fable{0, 0};
+        CHECK(AdvanceQuotaNotification(fiveHour, data, kFiveHourBar, 90) == kQuotaLimitNotification);
+        CHECK(AdvanceQuotaNotification(weekly, data, kWeeklyBar, 90) == 1);
+        CHECK(AdvanceQuotaNotification(fable, data, kFableWeeklyBar, 90) == 0 && fable == std::pair(0, 0));
+    });
+
     Run("threshold notifications: each quota's title and the body in English as before, then German, "
-        "Russian and Japanese; percentages as %.0f", [&] {
+        "Russian and Japanese; percentages as %.0f; at the limit, titles without a percentage", [&] {
         auto text = [](const I18nLocale& locale, std::wstring_view provider, int slot, double pct,
                        ULONGLONG durationMs = 0, CopilotUnit unit = CopilotUnit::AiCredits,
-                       std::wstring resets = L"") {
+                       std::wstring resets = L"", bool limit = false) {
             AccountData data;
             std::array<WindowUsage*, kQuotaBarCount> windows = {&data.win5h, &data.winWeek, &data.fableWeek,
                                                                 &data.extraUsage};
             *windows[size_t(slot)] = {pct, 0, durationMs};
             data.copilotUnit = unit;
-            return ThresholdNotificationText(locale, std::wstring(provider), data, slot, resets);
+            return ThresholdNotificationText(locale, std::wstring(provider), data, slot, resets, limit);
         };
         auto title = [&](std::wstring_view provider, int slot, ULONGLONG durationMs = 0,
                          CopilotUnit unit = CopilotUnit::AiCredits) {
@@ -191,6 +255,42 @@ static void RunI18nErrorTests() {
                                                                                L"\u7387 80%");
         CHECK_TEXT(jaTitle, L"5 \u6642\u9593: \u4F7F\u7528\u7387 80%");
         CHECK_TEXT(jaBody, L"OpenAI - 2\u6642\u9593\u5F8C\u306B\u30EA\u30BB\u30C3\u30C8");
+
+        // At the limit: each quota's title, whatever its percentage (a pooled Copilot budget has
+        // none), over the same body.
+        auto limitTitle = [&](std::wstring_view provider, int slot, ULONGLONG durationMs = 0,
+                              CopilotUnit unit = CopilotUnit::AiCredits, double pct = 100) {
+            return text({}, provider, slot, pct, durationMs, unit, L"", true).first;
+        };
+        CHECK_TEXT(limitTitle(L"anthropic", kFiveHourBar), L"5h limit reached");
+        CHECK_TEXT(limitTitle(L"anthropic", kWeeklyBar), L"weekly limit reached");
+        CHECK_TEXT(limitTitle(L"anthropic", kFableWeeklyBar), L"Fable weekly limit reached");
+        CHECK_TEXT(limitTitle(L"anthropic", kExtraUsageBar), L"monthly extra usage limit reached");
+        CHECK_TEXT(limitTitle(L"openai", kExtraUsageBar), L"credits used up");
+        CHECK_TEXT(limitTitle(L"opencode", kExtraUsageBar, 0, CopilotUnit::AiCredits, 97), L"monthly limit reached");
+        CHECK_TEXT(limitTitle(L"copilot", kExtraUsageBar), L"AI credits used up");
+        CHECK_TEXT(limitTitle(L"copilot", kExtraUsageBar, 0, CopilotUnit::AiCredits, -1), L"AI credits used up");
+        CHECK_TEXT(limitTitle(L"copilot", kExtraUsageBar, 0, CopilotUnit::PremiumRequests),
+                   L"premium requests used up");
+        CHECK_TEXT(limitTitle(L"copilot", kExtraUsageBar, 0, CopilotUnit::ChatRequests), L"chat requests used up");
+        CHECK_TEXT(limitTitle(L"antigravity", kFiveHourBar, 3 * hour), L"Gemini 3h limit reached");
+        CHECK_TEXT(limitTitle(L"antigravity", kFiveHourBar, 0), L"Gemini current limit reached");
+        CHECK_TEXT(limitTitle(L"antigravity", kWeeklyBar), L"Gemini weekly limit reached");
+        CHECK_TEXT(limitTitle(L"antigravity", kFableWeeklyBar), L"Argon weekly limit reached");
+        auto [limitEnTitle, limitEnBody] = text({}, L"anthropic", kFiveHourBar, 100, 0, CopilotUnit::AiCredits,
+                                                L"in 2h 5m (14:05)", true);
+        CHECK_TEXT(limitEnTitle, L"5h limit reached");
+        CHECK_TEXT(limitEnBody, L"Anthropic - resets in 2h 5m (14:05)");
+        // 5 Std.: Limit erreicht; Премиум-запросы: исчерпаны; Gemini 現在の上限に達しました; 每月：已达上限.
+        CHECK_TEXT(text(de, L"anthropic", kFiveHourBar, 100, 0, CopilotUnit::AiCredits, L"", true).first,
+                   L"5\u00A0Std.: Limit erreicht");
+        CHECK_TEXT(text(ru, L"copilot", kExtraUsageBar, 100, 0, CopilotUnit::PremiumRequests, L"", true).first,
+                   L"\u041F\u0440\u0435\u043C\u0438\u0443\u043C-\u0437\u0430\u043F\u0440\u043E\u0441\u044B: \u0438"
+                   L"\u0441\u0447\u0435\u0440\u043F\u0430\u043D\u044B");
+        CHECK_TEXT(text(ja, L"antigravity", kFiveHourBar, 100, 0, CopilotUnit::AiCredits, L"", true).first,
+                   L"Gemini \u73FE\u5728\u306E\u4E0A\u9650\u306B\u9054\u3057\u307E\u3057\u305F");
+        CHECK_TEXT(text(zh, L"opencode", kExtraUsageBar, 100, 0, CopilotUnit::AiCredits, L"", true).first,
+                   L"\u6BCF\u6708\uFF1A\u5DF2\u8FBE\u4E0A\u9650");
     });
 
     Run("threshold notifications: the toast's XML escapes its text and link once, in any language", [&] {
@@ -198,7 +298,7 @@ static void RunI18nErrorTests() {
             AccountData data;
             data.win5h = {91.4, 0, 0};
             return data;
-        }(), kFiveHourBar, L"dans 2\u00A0h\u00A05\u00A0min (14:05)");
+        }(), kFiveHourBar, L"dans 2\u00A0h\u00A05\u00A0min (14:05)", false);
         // 5 h : utilisation à 91% / Anthropic – réinitialisation dans 2 h 5 min (14:05): no-break spaces
         // in the units, a narrow one before the colon.
         CHECK_TEXT(title, L"5\u00A0h\u202F: utilisation \u00E0 91%");

@@ -1,5 +1,6 @@
-// Fetch-thread threshold notifications: a toast under the mod's own name and icon, or, when the
-// toast fails, the balloon of a hidden tray icon, which Windows attributes to Explorer.
+// Fetch-thread threshold notifications, at the chosen threshold and at a quota's limit: a toast
+// under the mod's own name and icon, or, when the toast fails, the balloon of a hidden tray icon,
+// which Windows attributes to Explorer.
 
 // Fetch-thread-owned: hidden message-only window that owns the mod's tray icon.
 static HWND g_notifyWnd = nullptr;
@@ -44,14 +45,37 @@ static bool RemoveToastAppId() {
     return false;
 }
 
+// Advances a taskbar quota's notification arm state by a reading and returns what the reading
+// notifies: 0 nothing, 1 the chosen level's `threshold` reached, kQuotaLimitNotification its limit
+// reached. `armed` holds whether the quota was at or past the threshold (by its percentage), then
+// whether at its limit: 100% used, or reported so by its provider (an OpenCode Go window's
+// status; a GitHub Copilot pooled budget used up, which has no percentage). Each is -1 while
+// unknown, which primes without notifying, and keeps its value through a reading that can't tell.
+// A reading that passes both notifies the limit alone, and none notifies the threshold while at
+// the limit.
+static constexpr int kQuotaLimitNotification = 2;
+static int AdvanceQuotaNotification(std::pair<int, int>& armed, const AccountData& data, int slot, int threshold) {
+    const std::array<const WindowUsage*, kQuotaBarCount> usage = {&data.win5h, &data.winWeek, &data.fableWeek,
+                                                                  &data.extraUsage};
+    const double pct = usage[size_t(slot)]->pct;
+    const int reached = pct < 0 ? -1 : pct >= threshold;
+    const int atLimit = slot == kExtraUsageBar && data.copilotUnlimited ? data.copilotExhausted :
+                        pct < 0 ? -1 : pct >= 100 || data.opencodeLimited[size_t(slot)];
+    const int notification = armed.second == 0 && atLimit == 1 ? kQuotaLimitNotification :
+                                                                 armed.first == 0 && reached == 1 && atLimit != 1;
+    if (reached >= 0) armed.first = reached;
+    if (atLimit >= 0) armed.second = atLimit;
+    return notification;
+}
+
 // A threshold notification's title and body in `locale`: the quota's "... usage at {percent}%"
-// (the percentage rounded as %.0f), then the provider's name with `resets` (the reset's
-// FormatReset; empty: none) after it. A GitHub Copilot quota goes by its allowance's unit,
-// Antigravity's by their pools.
+// (the percentage rounded as %.0f), or with `limit` that its limit is reached or it is used up,
+// then the provider's name with `resets` (the reset's FormatReset; empty: none) after it. A
+// GitHub Copilot quota goes by its allowance's unit, Antigravity's by their pools.
 static std::pair<std::wstring, std::wstring> ThresholdNotificationText(const I18nLocale& locale,
                                                                         const std::wstring& provider,
                                                                         const AccountData& data, int slot,
-                                                                        const std::wstring& resets) {
+                                                                        const std::wstring& resets, bool limit) {
     const std::array<const WindowUsage*, kQuotaBarCount> usage = {&data.win5h, &data.winWeek, &data.fableWeek,
                                                                   &data.extraUsage};
     // Room for any double's digits: reported percentages have no upper bound.
@@ -60,7 +84,9 @@ static std::pair<std::wstring, std::wstring> ThresholdNotificationText(const I18
     const std::wstring_view percent = number;
     // Its pool's name (Antigravity's Gemini and Argon, Anthropic's Fable): brands.
     auto weekly = [&](PCWSTR name) {
-        return I18nText(locale, TrCtx(L"notification-title", L"{name} weekly usage at {percent}%"),
+        return I18nText(locale,
+                        limit ? TrCtx(L"notification-title", L"{name} weekly limit reached") :
+                                TrCtx(L"notification-title", L"{name} weekly usage at {percent}%"),
                         {{L"name", name}, {L"percent", percent}});
     };
     std::wstring title;
@@ -68,22 +94,32 @@ static std::pair<std::wstring, std::wstring> ThresholdNotificationText(const I18
         PCWSTR pool = L"Gemini";  // i18n-en
         ULONGLONG durationMs = data.win5h.windowDurationMs;
         int hours = durationMs == 3ULL * 60 * 60 * 1000 ? 3 : durationMs == 60ULL * 60 * 1000 ? 1 : 5;
-        title = durationMs ? I18nText(locale, TrCtx(L"notification-title", L"{name} {hours}h usage at {percent}%"),
-                                      {{L"name", pool}, {L"hours", hours}, {L"percent", percent}}) :
-                             I18nText(locale, TrCtx(L"notification-title", L"{name} current limit usage at {percent}%"),
-                                      {{L"name", pool}, {L"percent", percent}});
+        I18nKey key = !durationMs ? limit ? TrCtx(L"notification-title", L"{name} current limit reached") :
+                                            TrCtx(L"notification-title", L"{name} current limit usage at {percent}%") :
+                      limit       ? TrCtx(L"notification-title", L"{name} {hours}h limit reached") :
+                                    TrCtx(L"notification-title", L"{name} {hours}h usage at {percent}%");
+        title = I18nText(locale, key, {{L"name", pool}, {L"hours", hours}, {L"percent", percent}});
     } else if (provider == L"antigravity" && (slot == kWeeklyBar || slot == kFableWeeklyBar)) {
         title = weekly(slot == kWeeklyBar ? L"Gemini" : L"Argon");  // i18n-en
     } else if (provider == L"copilot") {
-        title = I18nText(locale,
-                         data.copilotUnit == CopilotUnit::PremiumRequests ?
-                             TrCtx(L"notification-title", L"premium requests usage at {percent}%") :
-                         data.copilotUnit == CopilotUnit::ChatRequests ?
-                             TrCtx(L"notification-title", L"chat requests usage at {percent}%") :
-                             TrCtx(L"notification-title", L"AI credits usage at {percent}%"),
-                         {{L"percent", percent}});
+        I18nKey key = data.copilotUnit == CopilotUnit::PremiumRequests ?
+                          limit ? TrCtx(L"notification-title", L"premium requests used up") :
+                                  TrCtx(L"notification-title", L"premium requests usage at {percent}%") :
+                      data.copilotUnit == CopilotUnit::ChatRequests ?
+                          limit ? TrCtx(L"notification-title", L"chat requests used up") :
+                                  TrCtx(L"notification-title", L"chat requests usage at {percent}%") :
+                          limit ? TrCtx(L"notification-title", L"AI credits used up") :
+                                  TrCtx(L"notification-title", L"AI credits usage at {percent}%");
+        title = I18nText(locale, key, {{L"percent", percent}});
     } else if (slot == kFableWeeklyBar) {
         title = weekly(L"Fable");  // i18n-en
+    } else if (limit) {
+        title = I18nText(locale,
+                         slot == kFiveHourBar    ? TrCtx(L"notification-title", L"5h limit reached") :
+                         slot == kWeeklyBar      ? TrCtx(L"notification-title", L"weekly limit reached") :
+                         provider == L"openai"   ? TrCtx(L"notification-title", L"credits used up") :
+                         provider == L"opencode" ? TrCtx(L"notification-title", L"monthly limit reached") :
+                                                   TrCtx(L"notification-title", L"monthly extra usage limit reached"));
     } else {
         I18nKey key = slot == kFiveHourBar    ? TrCtx(L"notification-title", L"5h usage at {percent}%") :
                       slot == kWeeklyBar      ? TrCtx(L"notification-title", L"weekly usage at {percent}%") :
